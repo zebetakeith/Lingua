@@ -9,6 +9,7 @@ export interface CharacterDef {
   hp: number;
   attack: number;
   recovery: number;
+  speed: number;
   passive: string;
   skillId: string;
   unlockHint: string;
@@ -37,41 +38,41 @@ export interface PartyAttackSummary {
 }
 
 export const SKILL_DEFS: SkillDef[] = [
-  { id: "convert_flame", name: "Flame Script", element: "flame", cost: 4, description: "Turn a few runes into flame before settling combat." },
-  { id: "steady_hand", name: "Steady Hand", element: "light", cost: 5, description: "Add extra time to this rune sprint." },
-  { id: "ward_word", name: "Ward Word", element: "tide", cost: 5, description: "Block the next monster counterattack." },
-  { id: "verdant_shift", name: "Verdant Shift", element: "leaf", cost: 6, description: "Grow leaf runes and a few hearts for a recovery turn." },
-  { id: "umbra_surge", name: "Umbra Surge", element: "shadow", cost: 7, description: "Turn runes into shadow and prime Surge." },
+  { id: "steady_hand", name: "Syntax Mark", element: "light", cost: 2, description: "Light damage and Exposed, boosting the next weakness hit." },
+  { id: "convert_flame", name: "Flame Script", element: "flame", cost: 3, description: "Flame burst; stronger after a 4+ correct study rush." },
+  { id: "ward_word", name: "Ward Word", element: "tide", cost: 2, description: "Raise a Ward that sharply reduces the next enemy hit." },
+  { id: "verdant_shift", name: "Verdant Shift", element: "leaf", cost: 3, description: "Heal the party and deal small Leaf damage." },
+  { id: "umbra_surge", name: "Umbra Surge", element: "shadow", cost: 4, description: "Heavy Shadow damage with bonus against Exposed or shielded enemies." },
 ];
 
 export const CHARACTER_DEFS: CharacterDef[] = [
-  { id: "linguist", name: "Linguist", element: "light", sprite: "/char_linguist_occult.webp", hp: 100, attack: 18, recovery: 8, passive: "Balanced stats and steady study rewards.", skillId: "steady_hand", unlockHint: "Starter character for every deck." },
-  { id: "speedreader", name: "Speedreader", element: "flame", sprite: "/char_speedreader_occult.webp", hp: 82, attack: 26, recovery: 4, passive: "Flame attacks scale with fast answers.", skillId: "convert_flame", unlockHint: "Reach Floor 5 on this deck." },
-  { id: "scholar", name: "Scholar", element: "tide", sprite: "/char_scholar_occult.webp", hp: 92, attack: 15, recovery: 13, passive: "Better control and defensive study tools.", skillId: "ward_word", unlockHint: "Answer 50 cards correctly on this deck." },
-  { id: "botanist", name: "Botanist", element: "leaf", sprite: "/char_botanist_occult.webp", hp: 96, attack: 17, recovery: 17, passive: "Recovery specialist who turns setup turns into survival.", skillId: "verdant_shift", unlockHint: "Reach Floor 8 on this deck." },
-  { id: "duskblade", name: "Duskblade", element: "shadow", sprite: "/char_duskblade_occult.webp", hp: 88, attack: 24, recovery: 5, passive: "Risky attacker who turns Focus into burst damage.", skillId: "umbra_surge", unlockHint: "Clear a boss on this deck." },
+  { id: "linguist", name: "Linguist", element: "light", sprite: "/char_linguist_occult.webp", hp: 100, attack: 18, recovery: 8, speed: 100, passive: "Balanced stats and steady study rewards.", skillId: "steady_hand", unlockHint: "Starter character for every deck." },
+  { id: "speedreader", name: "Speedreader", element: "flame", sprite: "/char_speedreader_occult.webp", hp: 82, attack: 26, recovery: 4, speed: 125, passive: "Flame attacks scale with fast answers.", skillId: "convert_flame", unlockHint: "Reach Floor 5 on this deck." },
+  { id: "scholar", name: "Scholar", element: "tide", sprite: "/char_scholar_occult.webp", hp: 92, attack: 15, recovery: 13, speed: 92, passive: "Better control and defensive study tools.", skillId: "ward_word", unlockHint: "Answer 50 cards correctly on this deck." },
+  { id: "botanist", name: "Botanist", element: "leaf", sprite: "/char_botanist_occult.webp", hp: 96, attack: 17, recovery: 17, speed: 88, passive: "Recovery specialist who turns setup turns into survival.", skillId: "verdant_shift", unlockHint: "Reach Floor 8 on this deck." },
+  { id: "duskblade", name: "Duskblade", element: "shadow", sprite: "/char_duskblade_occult.webp", hp: 88, attack: 24, recovery: 5, speed: 112, passive: "Risky attacker who turns Focus into burst damage.", skillId: "umbra_surge", unlockHint: "Clear a boss on this deck." },
 ];
 
 export const RELIC_DEFS: RelicDef[] = [
-  { id: "steady_grip", name: "Steady Grip", element: "light", rarity: "common", description: "Earn extra rune sprint time from each study burst, capped by the normal maximum." },
-  { id: "ember_primer", name: "Ember Primer", element: "flame", rarity: "uncommon", description: "A perfect study burst primes Surge for the next rune assault." },
-  { id: "heart_ward", name: "Heart Ward", element: "heart", rarity: "uncommon", description: "The first heart match each rune round adds a Ward if you do not have one." },
-  { id: "deep_focus", name: "Deep Focus", element: "shadow", rarity: "rare", description: "Correct answers charge rune skills faster." },
-  { id: "tidal_memory", name: "Tidal Memory", element: "tide", rarity: "common", description: "Wrong answers hurt less: missed study cards no longer reduce board time as harshly." },
-  { id: "leaf_bloom", name: "Leaf Bloom", element: "leaf", rarity: "rare", description: "Heart runes restore extra HP after big combo turns." },
-  { id: "combo_spark", name: "Combo Spark", element: "flame", rarity: "uncommon", description: "4+ combo rune sprints charge extra Focus." },
-  { id: "linebreaker", name: "Linebreaker", element: "light", rarity: "rare", description: "Clearing 5+ runes of one attack element boosts that element's damage." },
-  { id: "warded_notes", name: "Warded Notes", element: "tide", rarity: "uncommon", description: "A perfect study burst also raises a Ward." },
+  { id: "steady_grip", name: "Steady Grip", element: "light", rarity: "common", description: "The first correct card each study rush gives +1 AP." },
+  { id: "ember_primer", name: "Ember Primer", element: "flame", rarity: "uncommon", description: "A perfect study rush discounts the next Flame action by 1 AP." },
+  { id: "heart_ward", name: "Heart Ward", element: "heart", rarity: "uncommon", description: "The first heal each fight also grants Ward." },
+  { id: "deep_focus", name: "Deep Focus", element: "shadow", rarity: "rare", description: "Correct answers charge Focus faster." },
+  { id: "tidal_memory", name: "Tidal Memory", element: "tide", rarity: "common", description: "Wrong answers reduce less study time." },
+  { id: "leaf_bloom", name: "Leaf Bloom", element: "leaf", rarity: "rare", description: "Healing commands restore extra HP after strong study rushes." },
+  { id: "combo_spark", name: "Combo Spark", element: "flame", rarity: "uncommon", description: "4+ correct in one rush grants extra Focus." },
+  { id: "linebreaker", name: "Linebreaker", element: "light", rarity: "rare", description: "Weakness hits deal bonus damage." },
+  { id: "warded_notes", name: "Warded Notes", element: "tide", rarity: "uncommon", description: "A perfect study rush also raises a Ward." },
   { id: "hard_edge", name: "Hard Edge", element: "shadow", rarity: "common", description: "Correct hard-rated cards give extra power and Focus." },
   { id: "greenhouse", name: "Greenhouse", element: "leaf", rarity: "common", description: "Leaf matches improve heart healing." },
   { id: "shadow_bargain", name: "Shadow Bargain", element: "shadow", rarity: "rare", description: "Taking enemy damage charges Focus." },
   { id: "elemental_index", name: "Elemental Index", element: "light", rarity: "uncommon", description: "Hitting an enemy weakness charges +1 Focus when combat resolves." },
   { id: "fracture_notes", name: "Fracture Notes", element: "flame", rarity: "rare", description: "Breaking a shield spills bonus damage into HP and charges extra Focus." },
   { id: "clean_margin", name: "Clean Margin", element: "tide", rarity: "rare", description: "Breaking a shield also raises a Ward if you do not already have one." },
-  { id: "clarity_lens", name: "Clarity Lens", element: "light", rarity: "uncommon", description: "A perfect study burst converts 2 runes toward the enemy weakness." },
-  { id: "blood_quill", name: "Blood Quill", element: "shadow", rarity: "uncommon", description: "Wrong answers give +2 power, but curse an attack rune." },
-  { id: "combo_aegis", name: "Combo Aegis", element: "heart", rarity: "rare", description: "The first 4+ combo each floor raises a Ward." },
-  { id: "runic_tumbler", name: "Runic Tumbler", element: "shadow", rarity: "rare", description: "Shuffle also enhances runes in the setup it creates." },
+  { id: "clarity_lens", name: "Clarity Lens", element: "light", rarity: "uncommon", description: "A perfect study rush applies Exposed to the enemy." },
+  { id: "blood_quill", name: "Blood Quill", element: "shadow", rarity: "uncommon", description: "Wrong answers grant +1 AP but apply a fragile self-debuff." },
+  { id: "combo_aegis", name: "Combo Aegis", element: "heart", rarity: "rare", description: "4+ correct in one rush raises a Ward once per floor." },
+  { id: "runic_tumbler", name: "Runic Tumbler", element: "shadow", rarity: "rare", description: "Defending can delay one enemy action on the timeline." },
 ];
 
 export function getSkillById(id: string): SkillDef | undefined {

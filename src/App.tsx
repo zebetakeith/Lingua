@@ -54,10 +54,23 @@ const assetBackground = (path: string): CSSProperties => ({
 type GameScreen = "menu" | "classSelect" | "starterDraft" | "combat" | "reward" | "gameOver" | "meta" | "howToPlay" | "flashcards";
 type CardRating = "hard" | "medium" | "easy" | "known";
 type PowerUpType = "surge" | "ward" | "mend" | "shuffle";
-type CombatMode = "studyReady" | "study" | "boardReady" | "board" | "resolveReady" | "cinematic";
+type CombatMode = "studyReady" | "study" | "commandReady" | "command" | "enemyAction" | "boardReady" | "board" | "resolveReady" | "cinematic";
 type EnemyAnim = "hit" | "attack" | null;
 type PlayerAnim = "hit" | "heal" | null;
 type CombatActionEffectType = "shuffle" | "surge" | "ward" | "mend" | "skill";
+type TurnActorKind = "party" | "enemy";
+type PlayerActionId = "attack" | "defend" | "skill";
+
+interface TurnQueueEntry {
+  id: string;
+  kind: TurnActorKind;
+  refId: string;
+  name: string;
+  element: TileKind;
+  speed: number;
+  actionValue: number;
+  avatar: string;
+}
 
 interface CardProgress {
   box: number;
@@ -157,6 +170,18 @@ interface CombatState {
   actionEffect: CombatActionEffect | null;
   skillCharge: number;
   powerPoints: number;
+  actionPoints: number;
+  actionPointsEarnedThisRush: number;
+  actionPointsSpentThisWindow: number;
+  actionPointCarryCap: number;
+  turnQueue: TurnQueueEntry[];
+  activeActorId: string | null;
+  exposedTurns: number;
+  healedOrDefendedThisWindow: boolean;
+  apPenaltyNextRush: number;
+  nextStudyShuffle: boolean;
+  flameDiscountNext: boolean;
+  fragileDebuff: number;
   boardMessage: string;
   studyQuestionsTotal: number;
   studyQuestionsLeft: number;
@@ -218,7 +243,7 @@ interface CombatCinematic extends CombatCinematicStats {
   roomCleared: boolean;
   wardBlocked: boolean;
   log: string[];
-  nextMode: "studyReady" | "board" | "boardReady";
+  nextMode: CombatMode;
   nextMessage: string;
   rewardAfter: boolean;
   gameOverAfter: boolean;
@@ -334,6 +359,9 @@ const MATCH_POP_MS = 360;
 const RUNE_FALL_MS = 560;
 const CASCADE_PAUSE_MS = 120;
 const INLINE_COMBAT_BASE_MS = 2600;
+const MAX_STUDY_AP_PER_CARD = 5;
+const PLAYER_ACTION_DELAY = 100;
+const ENEMY_ACTION_DELAY = 92;
 
 const TILE_DEFS: Record<TileKind, { label: string; sigil: string; color: string; dark: string; glow: string }> = {
   flame: { label: "Flame", sigil: "Ignis", color: "#D66B4D", dark: "#461A13", glow: "rgba(214,107,77,0.5)" },
@@ -739,6 +767,12 @@ function getPowerPointsForCard(card: VocabWord, saveData: SaveData): number {
   return CARD_POWER_POINTS[getRatingFromBox(getCardProgress(card, saveData).box)];
 }
 
+function getApForCorrectCard(card: VocabWord, saveData: SaveData): number {
+  const base = getPowerPointsForCard(card, saveData);
+  const difficultyBonus = card.difficulty >= 4 ? 1 : 0;
+  return Math.min(MAX_STUDY_AP_PER_CARD, base + difficultyBonus);
+}
+
 function updateCardProgressFromAnswer(saveData: SaveData, card: VocabWord, isCorrect: boolean): SaveData {
   const now = Date.now();
   const current = getCardProgress(card, saveData);
@@ -964,28 +998,6 @@ function getWrongStudyPenalty(state: CombatState): number {
   return state.runRelics.includes("tidal_memory") ? 0.8 : STUDY_WRONG_TIME_PENALTY;
 }
 
-function getBoardTimeGainForCorrectCard(card: VocabWord, saveData: SaveData): number {
-  const rating = getActiveDeck(saveData).cardRatings?.[card.id];
-  const ratingBonus =
-    rating === "hard" ? 0.45 :
-    rating === "medium" ? 0.25 :
-    rating === "easy" ? 0.1 :
-    0;
-  const difficultyBonus = Math.min(0.45, Math.max(0, card.difficulty - 1) * 0.08);
-
-  return Math.round((0.42 + ratingBonus + difficultyBonus) * 10) / 10;
-}
-
-function getBoardTimeFromStudy(state: CombatState): number {
-  const answered = Math.max(0, state.studyQuestionsTotal);
-  const accuracyRatio = answered > 0 ? state.studyCorrectRound / answered : 0;
-  const accuracyBonus = answered > 0 ? accuracyRatio * 0.65 : 0;
-  const relicBonus = state.runRelics.includes("steady_grip") ? 0.8 : 0;
-  const totalTime = MIN_BOARD_TIME + state.studyBoardTimeBonus + accuracyBonus + relicBonus;
-
-  return Math.round(Math.max(MIN_BOARD_TIME, Math.min(MAX_BOARD_TIME, totalTime)) * 10) / 10;
-}
-
 function formatBoardTime(seconds: number): string {
   return `${Math.max(0, seconds).toFixed(1)}s`;
 }
@@ -999,9 +1011,103 @@ function formatTileLabels(kinds: TileKind[]): string {
   return kinds.map(kind => TILE_DEFS[kind].label).join(", ");
 }
 
+function getEnemySpeed(enemy: EnemyInstance): number {
+  const frequency = getEnemyAttackFrequency(enemy);
+  const base =
+    frequency <= 1 ? 118 :
+    frequency === 2 ? 96 :
+    78;
+  return enemy.def.isBoss ? base + 8 : base;
+}
+
+function getActionDelay(speed: number, base: number): number {
+  return Math.max(42, Math.round((base * 100) / Math.max(35, speed)));
+}
+
+function sortTurnQueue(queue: TurnQueueEntry[]): TurnQueueEntry[] {
+  return [...queue].sort((a, b) => a.actionValue - b.actionValue || b.speed - a.speed || a.name.localeCompare(b.name));
+}
+
+function buildTurnQueue(party: CharacterDef[], enemies: EnemyInstance[]): TurnQueueEntry[] {
+  const partyEntries = party.map((member, index) => ({
+    id: `party-${member.id}`,
+    kind: "party" as const,
+    refId: member.id,
+    name: member.name,
+    element: member.element,
+    speed: member.speed,
+    actionValue: index * 8,
+    avatar: member.sprite,
+  }));
+
+  const enemyEntries = enemies
+    .filter(enemy => !enemy.isDead)
+    .map((enemy, index) => {
+      const speed = getEnemySpeed(enemy);
+      return {
+        id: `enemy-${enemy.def.id}-${index}`,
+        kind: "enemy" as const,
+        refId: enemy.def.id,
+        name: enemy.def.name,
+        element: enemy.def.element,
+        speed,
+        actionValue: 42 + index * 18,
+        avatar: enemy.def.sprite,
+      };
+    });
+
+  return sortTurnQueue([...partyEntries, ...enemyEntries]);
+}
+
+function advanceTimelineAfterAction(queue: TurnQueueEntry[], actorId: string, extraDelay = 0): TurnQueueEntry[] {
+  return sortTurnQueue(queue.map(entry => {
+    if (entry.id !== actorId) return entry;
+    const baseDelay = entry.kind === "enemy" ? ENEMY_ACTION_DELAY : PLAYER_ACTION_DELAY;
+    return {
+      ...entry,
+      actionValue: entry.actionValue + getActionDelay(entry.speed, baseDelay) + extraDelay,
+    };
+  }));
+}
+
+function delayPartyMember(queue: TurnQueueEntry[], amount = 45): TurnQueueEntry[] {
+  const partyEntries = queue.filter(entry => entry.kind === "party");
+  if (partyEntries.length === 0) return queue;
+  const target = partyEntries[Math.floor(Math.random() * partyEntries.length)];
+  return sortTurnQueue(queue.map(entry => entry.id === target.id ? { ...entry, actionValue: entry.actionValue + amount } : entry));
+}
+
+function removeEnemyFromQueue(queue: TurnQueueEntry[], enemy: EnemyInstance): TurnQueueEntry[] {
+  return sortTurnQueue(queue.filter(entry => !(entry.kind === "enemy" && entry.refId === enemy.def.id)));
+}
+
+function getCurrentActor(state: CombatState): TurnQueueEntry | null {
+  return state.turnQueue[0] || null;
+}
+
+function getActorCharacter(actor: TurnQueueEntry | null, party: CharacterDef[]): CharacterDef | null {
+  if (!actor || actor.kind !== "party") return null;
+  return party.find(member => member.id === actor.refId) || null;
+}
+
+function getPlayerActionCost(member: CharacterDef, action: PlayerActionId, state?: CombatState | null): number {
+  if (action === "attack" || action === "defend") return 1;
+  const skill = getSkillById(member.skillId);
+  let cost = skill?.cost || 2;
+  if (state?.flameDiscountNext && member.element === "flame") {
+    cost = Math.max(1, cost - 1);
+  }
+  return cost;
+}
+
+function getActionLabel(member: CharacterDef, action: PlayerActionId): string {
+  if (action === "attack") return "Attack";
+  if (action === "defend") return "Defend";
+  return getSkillById(member.skillId)?.name || "Skill";
+}
+
 function getEnemyCountdownLabel(enemy: EnemyInstance): string {
-  if (enemy.attackCharge <= 1) return "Attacks next";
-  return `Attacks in ${enemy.attackCharge}`;
+  return `Speed ${getEnemySpeed(enemy)}`;
 }
 
 function getCinematicAttackKinds(cinematic?: CombatCinematic | null): TileKind[] {
@@ -1094,16 +1200,16 @@ function getEnemyPuzzleHint(enemy?: EnemyInstance | null): { label: string; text
   if (enemy.shield > 0) {
     return {
       label: "Shield puzzle",
-      text: `Break with ${formatTileLabels(enemy.def.weakTo)} runes.`,
+      text: `Break with ${formatTileLabels(enemy.def.weakTo)} commands.`,
       tone: "warn",
     };
   }
 
   if (enemy.def.special === "low_combo_punish") {
-    return { label: "Combo puzzle", text: "Make 3+ combos before it attacks.", tone: "bad" };
+    return { label: "AP check", text: "Spend 3+ AP before it acts.", tone: "bad" };
   }
   if (enemy.def.special === "healing_check") {
-    return { label: "Healing puzzle", text: "Match Hearts before the counter.", tone: "good" };
+    return { label: "Healing check", text: "Heal or defend before its turn.", tone: "good" };
   }
   if (enemy.def.special === "self_heal") {
     return { label: "Burst puzzle", text: "Finish it quickly or it heals.", tone: "warn" };
@@ -1112,7 +1218,7 @@ function getEnemyPuzzleHint(enemy?: EnemyInstance | null): { label: string; text
     return { label: "Disruptor", text: "Ward or shield break prevents the worst hit.", tone: "bad" };
   }
   if (enemy.def.special === "randomize_positions" || enemy.def.special === "shuffle_answers") {
-    return { label: "Board puzzle", text: "Spend setup before it scrambles runes.", tone: "warn" };
+    return { label: "Timeline puzzle", text: "Act before it disrupts commands or study.", tone: "warn" };
   }
   if (enemy.def.special === "three_phase" || enemy.def.special === "enrage_at_50") {
     return { label: "Boss puzzle", text: "Hold burst for phase shifts.", tone: "bad" };
@@ -1120,7 +1226,7 @@ function getEnemyPuzzleHint(enemy?: EnemyInstance | null): { label: string; text
 
   return {
     label: "Element puzzle",
-    text: `Aim for ${formatTileLabels(enemy.def.weakTo)} damage.`,
+    text: `Aim for ${formatTileLabels(enemy.def.weakTo)} commands.`,
     tone: "neutral",
   };
 }
@@ -1132,7 +1238,7 @@ function getRewardCardInsight(card: VocabWord, combatState?: CombatState | null)
     return {
       tag: relics.includes("hard_edge") ? "Hard Edge pick" : "Risk pick",
       text: relics.includes("hard_edge")
-        ? "Mark Hard for extra power and Focus while you learn it."
+        ? "Mark Hard for extra AP and Focus while you learn it."
         : "Harder study, better long-term deck growth and slower scaling.",
     };
   }
@@ -1147,7 +1253,7 @@ function getRewardCardInsight(card: VocabWord, combatState?: CombatState | null)
   if (relics.includes("clarity_lens") || relics.includes("ember_primer")) {
     return {
       tag: "Streak fuel",
-      text: "Easier to perfect, so it helps trigger study-to-board relics.",
+      text: "Easier to perfect, so it helps trigger study-to-command relics.",
     };
   }
 
@@ -1162,16 +1268,16 @@ function getRelicChoiceReason(relic: RelicDef, combatState?: CombatState | null)
   const hasShield = Boolean(enemy && enemy.shield > 0);
   const special = enemy?.def.special;
 
-  if (relic.id === "clarity_lens") return { tag: "Study streak build", text: "Perfect bursts become immediate weakness setup." };
-  if (relic.id === "blood_quill") return { tag: "Risk economy", text: "Misses still buy tools, but the board gets cursed." };
-  if (relic.id === "combo_aegis") return { tag: "Combo defense", text: special === "low_combo_punish" ? "Directly answers combo punishers." : "Turns big boards into safety." };
-  if (relic.id === "runic_tumbler") return { tag: "Shuffle build", text: "Makes Shuffle a setup-and-damage button." };
+  if (relic.id === "clarity_lens") return { tag: "Study streak build", text: "Perfect rushes Expose the enemy for a stronger weakness hit." };
+  if (relic.id === "blood_quill") return { tag: "Risk economy", text: "Misses still make AP, but the next enemy hit hurts more." };
+  if (relic.id === "combo_aegis") return { tag: "Rush defense", text: special === "low_combo_punish" ? "Protects strong AP windows." : "Turns excellent study into safety." };
+  if (relic.id === "runic_tumbler") return { tag: "Timeline control", text: "Defend can delay enemy pressure." };
   if (relic.id === "fracture_notes" || relic.id === "clean_margin") return { tag: hasShield ? "Great now" : "Shield answer", text: "Best against shielded enemies and bosses." };
   if (relic.id === "heart_ward" || relic.id === "leaf_bloom" || relic.id === "greenhouse") return { tag: "Survival", text: special === "healing_check" ? "Strong into healing tests." : "Improves recovery turns." };
-  if (relic.id === "elemental_index" || relic.id === "linebreaker") return { tag: "Weakness damage", text: enemy ? `Pairs with ${formatTileLabels(enemy.def.weakTo)} routing.` : "Rewards element planning." };
+  if (relic.id === "elemental_index" || relic.id === "linebreaker") return { tag: "Weakness damage", text: enemy ? `Pairs with ${formatTileLabels(enemy.def.weakTo)} commands.` : "Rewards element planning." };
   if (relic.id === "hard_edge") return { tag: "Learning pressure", text: "Makes hard-rated cards worth fighting through." };
-  if (relic.id === "tidal_memory") return { tag: "Mistake buffer", text: "Bad study rounds lose less board time." };
-  if (relic.id === "combo_spark") return { tag: "Combo engine", text: "Big cascades charge more skills." };
+  if (relic.id === "tidal_memory") return { tag: "Mistake buffer", text: "Wrong answers remove less study time." };
+  if (relic.id === "combo_spark") return { tag: "Rush engine", text: "4+ correct study rushes charge more Focus." };
 
   return { tag: "Run modifier", text: "Changes how this deck fights for the rest of the run." };
 }
@@ -1226,6 +1332,60 @@ function createEmptyCinematicStats(): CombatCinematicStats {
     resistedHits: [],
     comboCount: 0,
     matchedCount: 0,
+  };
+}
+
+function createDirectActionStats(
+  kind: TileKind,
+  rawDamage: number,
+  heal = 0,
+  attackerName?: string,
+  runeWeight = 3
+): CombatCinematicStats {
+  const stats = createEmptyCinematicStats();
+  stats.elements = kind === "heart" ? [] : [kind];
+  stats.runeCounts[kind] = runeWeight;
+  stats.elementDamage[kind] = Math.max(0, rawDamage);
+  stats.attackers = attackerName ? [attackerName] : [];
+  stats.rawDamage = Math.max(0, rawDamage);
+  stats.damage = Math.max(0, rawDamage);
+  stats.heal = Math.max(0, heal);
+  stats.comboCount = 1;
+  stats.matchedCount = runeWeight;
+  return stats;
+}
+
+function createActionCinematic(
+  stats: CombatCinematicStats,
+  enemy: EnemyInstance,
+  details: CombatCinematicDetails,
+  nextMode: CombatMode,
+  nextMessage: string,
+  rewardAfter = false,
+  gameOverAfter = false
+): CombatCinematic {
+  return {
+    id: cinematicIdCounter++,
+    ...stats,
+    enemyName: enemy.def.name,
+    enemySprite: enemy.def.sprite,
+    enemyIsBoss: enemy.def.isBoss,
+    enemyIntent: details.enemyIntent,
+    enemyHpBefore: details.enemyHpBefore,
+    enemyHpAfter: details.enemyHpAfter,
+    shieldBefore: details.shieldBefore,
+    shieldAfter: details.shieldAfter,
+    shieldBroken: details.shieldBroken,
+    playerHpBefore: details.playerHpBefore,
+    playerHpAfter: details.playerHpAfter,
+    enemyActionLabel: details.enemyActionLabel,
+    roomCleared: details.roomCleared,
+    wardBlocked: details.wardBlocked,
+    log: details.log,
+    nextMode,
+    nextMessage,
+    rewardAfter,
+    gameOverAfter,
   };
 }
 
@@ -1743,7 +1903,8 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
   const hpMult = getHpMultiplier(difficultyFloor);
   const timerMax = getQuestionTimerForFloor(difficultyFloor);
   const deck = startingDeck && startingDeck.length > 0 ? startingDeck : createStarterDeck(saveData);
-  const runPlayerMaxHp = getPartyMaxHp(getRunParty(saveData), playerMaxHp);
+  const runParty = getRunParty(saveData);
+  const runPlayerMaxHp = getPartyMaxHp(runParty, playerMaxHp);
   const encounterBoard = createEncounterBoard(encounter);
   
   const enemies: EnemyInstance[] = enemyDefs.map(def => createEnemyInstance(def, hpMult, encounter));
@@ -1795,8 +1956,20 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     actionEffect: null,
     skillCharge: 0,
     powerPoints: 0,
+    actionPoints: 0,
+    actionPointsEarnedThisRush: 0,
+    actionPointsSpentThisWindow: 0,
+    actionPointCarryCap: 0,
+    turnQueue: buildTurnQueue(runParty, enemies),
+    activeActorId: null,
+    exposedTurns: 0,
+    healedOrDefendedThisWindow: false,
+    apPenaltyNextRush: 0,
+    nextStudyShuffle: false,
+    flameDiscountNext: false,
+    fragileDebuff: 0,
     boardMessage: encounter.modifierLabel === "Standard"
-      ? "Study first, then spend power points on boosts for the rune board."
+      ? "Study first, then spend AP on party commands."
       : `${encounter.modifierLabel}: ${encounter.modifierDescription}`,
     studyQuestionsTotal: 0,
     studyQuestionsLeft: 0,
@@ -2037,9 +2210,10 @@ export default function App() {
   // ─── Core Combat Functions ────────────────────────────
   const drawNextStudyCard = (state: CombatState, saveData: SaveData = save) => {
     const word = drawWordFromDeck(state.deck, saveData, state.currentWord?.id);
+    const options = generateDistractors(word, getAllCards(saveData));
     return {
       currentWord: word,
-      options: generateDistractors(word, getAllCards(saveData)),
+      options: state.nextStudyShuffle ? shuffleCards(options) : options,
       studyFeedback: null,
     };
   };
@@ -2058,6 +2232,10 @@ export default function App() {
       timerMax,
       timerLeft: timerMax,
       activeBuffs: combat.activeBuffs.filter(buff => buff.type !== "timer_extend" && buff.type !== "timer_slow"),
+      actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints),
+      actionPointsEarnedThisRush: 0,
+      actionPointsSpentThisWindow: 0,
+      nextStudyShuffle: false,
       studyQuestionsTotal: 0,
       studyQuestionsLeft: 0,
       studyCorrectRound: 0,
@@ -2074,7 +2252,7 @@ export default function App() {
       dragTileStatus: null,
       pendingCinematic: null,
       cinematic: null,
-      boardMessage: `Study rush started. Answer as many cards as you can${hasTimerSlow ? ". Enemy chill shortened the timer" : ""}.`,
+      boardMessage: `Study rush started. Correct cards earn AP${hasTimerSlow ? ". Enemy chill shortened the timer" : ""}${combat.nextStudyShuffle ? ". Answers were scrambled" : ""}.`,
     });
   };
 
@@ -2085,77 +2263,57 @@ export default function App() {
       ...state,
       deck: refillDeck(state.deck, nextSave),
     };
-
-    const earnedBoardTime = getBoardTimeFromStudy(adjustedState);
     const perfectStudy = adjustedState.studyCorrectRound >= 3 && adjustedState.studyWrongRound === 0;
     let nextBuffs = adjustedState.activeBuffs;
-    let nextBoard = adjustedState.board;
-    let studyChangedTileIds: number[] = [];
     let studyStatusMessage = "";
     const studyNotices: CombatNotice[] = [];
     const currentEnemy = adjustedState.enemies[adjustedState.currentEnemyIndex];
-    const weakKind = getPreferredWeakKind(currentEnemy);
 
-    if (perfectStudy && weakKind && adjustedState.runRelics.includes("clarity_lens")) {
-      const conversion = convertRandomRunes(nextBoard, weakKind, 2);
-      const enhancement = setRandomRuneStatus(conversion.board, "enhanced", 1, { kind: weakKind });
-      nextBoard = enhancement.board;
-      studyChangedTileIds = Array.from(new Set([...studyChangedTileIds, ...conversion.changedIds, ...enhancement.changedIds]));
-      studyStatusMessage += conversion.changedIds.length > 0
-        ? ` Clarity Lens shifted ${conversion.changedIds.length} rune${conversion.changedIds.length === 1 ? "" : "s"} to ${TILE_DEFS[weakKind].label}.`
-        : "";
-      if (conversion.changedIds.length > 0) {
-        studyNotices.push(createCombatNotice("Relic: Clarity Lens", `${conversion.changedIds.length} rune${conversion.changedIds.length === 1 ? "" : "s"} shifted to ${TILE_DEFS[weakKind].label}.`, "relic"));
-      }
-    }
+    let exposedTurns = adjustedState.exposedTurns;
+    let flameDiscountNext = adjustedState.flameDiscountNext;
 
-    if (perfectStudy && weakKind) {
-      const enhancement = setRandomRuneStatus(nextBoard, "enhanced", currentEnemy?.def.isBoss ? 2 : 1, { kind: weakKind });
-      nextBoard = enhancement.board;
-      studyChangedTileIds = Array.from(new Set([...studyChangedTileIds, ...enhancement.changedIds]));
-      studyStatusMessage += enhancement.changedIds.length > 0
-        ? ` Enhanced ${enhancement.changedIds.length} ${TILE_DEFS[weakKind].label} rune${enhancement.changedIds.length === 1 ? "" : "s"} for the enemy weakness.`
-        : "";
-      studyNotices.push(createCombatNotice("Perfect Study", `Enemy weakness runes enhanced for ${TILE_DEFS[weakKind].label}.`, "good"));
+    if (perfectStudy && currentEnemy && adjustedState.runRelics.includes("clarity_lens")) {
+      exposedTurns = Math.max(exposedTurns, 1);
+      studyStatusMessage += " Clarity Lens exposed the enemy.";
+      studyNotices.push(createCombatNotice("Relic: Clarity Lens", "Perfect study applied Exposed.", "relic"));
     }
 
     if (perfectStudy && adjustedState.runRelics.includes("ember_primer")) {
-      nextBuffs = [...nextBuffs, { type: "board_surge", remaining: 1 }];
-      const enhancement = setRandomRuneStatus(nextBoard, "enhanced", 3, { kind: "flame" });
-      nextBoard = enhancement.board;
-      studyChangedTileIds = Array.from(new Set([...studyChangedTileIds, ...enhancement.changedIds]));
-      studyStatusMessage += enhancement.changedIds.length > 0 ? ` Ember Primer enhanced ${enhancement.changedIds.length} Flame rune${enhancement.changedIds.length === 1 ? "" : "s"}.` : "";
-      studyNotices.push(createCombatNotice("Relic: Ember Primer", "Perfect study primed Surge for the board.", "relic"));
+      flameDiscountNext = true;
+      studyStatusMessage += " Ember Primer discounted the next Flame action.";
+      studyNotices.push(createCombatNotice("Relic: Ember Primer", "Next Flame command costs 1 less AP.", "relic"));
     }
+
     if (perfectStudy && adjustedState.runRelics.includes("warded_notes") && !nextBuffs.some(buff => buff.type === "ward")) {
       nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }];
       studyNotices.push(createCombatNotice("Relic: Warded Notes", "Perfect study raised a Ward.", "relic"));
     }
+    if (adjustedState.runRelics.includes("combo_aegis") && adjustedState.studyCorrectRound >= 4 && !nextBuffs.some(buff => buff.type === "combo_aegis_used")) {
+      nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }, { type: "combo_aegis_used", remaining: 1 }];
+      studyNotices.push(createCombatNotice("Relic: Combo Aegis", "4+ correct raised a Ward.", "relic"));
+    }
 
     setCombat({
       ...adjustedState,
-      mode: "boardReady",
-      board: nextBoard,
+      mode: "commandReady",
       studyQuestionsLeft: 0,
       selectedTileIndex: null,
       runeMoved: false,
       isResolvingRunes: false,
       matchedTileIds: [],
       newTileIds: [],
-      lastMovedTileIds: studyChangedTileIds,
+      lastMovedTileIds: [],
       dragPointerId: null,
       dragTileId: null,
       dragTileKind: null,
       dragTileStatus: null,
-      boardMovesMax: 1,
-      boardMovesLeft: 1,
-      boardTimeMax: earnedBoardTime,
-      boardTimeLeft: earnedBoardTime,
       activeBuffs: nextBuffs,
+      exposedTurns,
+      flameDiscountNext,
       pendingCinematic: null,
       cinematic: null,
       eventNotices: appendCombatNotices(adjustedState.eventNotices, studyNotices),
-      boardMessage: `Study rush done: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${formatBoardTime(earnedBoardTime)} of rune sprint time${perfectStudy && adjustedState.runRelics.includes("ember_primer") ? " and primed Surge" : ""}${perfectStudy && adjustedState.runRelics.includes("warded_notes") ? " with a Ward" : ""}.${studyStatusMessage}`,
+      boardMessage: `Study rush done: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${adjustedState.actionPointsEarnedThisRush} AP and ${adjustedState.skillCharge}/12 Focus is ready.${studyStatusMessage}`,
     });
   };
 
@@ -2215,31 +2373,36 @@ export default function App() {
     const speedBonus = Math.max(0, (state.timerMax - timeTaken) / state.timerMax);
     const cardRating = getActiveDeck(save).cardRatings?.[state.currentWord.id];
     const hardEdgeBonus = state.runRelics.includes("hard_edge") && cardRating === "hard" ? 1 : 0;
-    const earnedPowerPoints = getPowerPointsForCard(state.currentWord, save) + hardEdgeBonus;
-    const earnedBoardTime = getBoardTimeGainForCorrectCard(state.currentWord, save);
+    const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
+    const earnedAp = Math.max(0, getApForCorrectCard(state.currentWord, save) + hardEdgeBonus + steadyGripBonus - state.apPenaltyNextRush);
     const nextSave = updateCardProgressFromAnswer(save, state.currentWord, true);
     const nextDeck = refillDeck(state.deck, nextSave);
     const answered = state.studyQuestionsTotal + 1;
     const nextScore = state.score + 20 + Math.floor(speedBonus * 20);
     const learnedMessage = getActiveDeck(nextSave).cardRatings?.[state.currentWord.id] === "known" ? " Mastered and removed from study." : "";
-    const answerNotices = hardEdgeBonus > 0
-      ? [createCombatNotice("Relic: Hard Edge", "Hard card answered: +1 power and +1 Focus.", "relic")]
-      : [];
+    const answerNotices: CombatNotice[] = [
+      ...(hardEdgeBonus > 0 ? [createCombatNotice("Relic: Hard Edge", "Hard card answered: +1 AP and +1 Focus.", "relic")] : []),
+      ...(steadyGripBonus > 0 ? [createCombatNotice("Relic: Steady Grip", "First correct answer this rush gave +1 AP.", "relic")] : []),
+      ...(state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? [createCombatNotice("Relic: Combo Spark", "4 correct in one rush: +2 Focus.", "relic")] : []),
+    ];
+    const comboSparkFocus = state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? 2 : 0;
     setSave(nextSave);
 
     const nextState = {
       ...state,
       deck: nextDeck,
-      powerPoints: state.powerPoints + earnedPowerPoints,
+      powerPoints: state.powerPoints + earnedAp,
+      actionPoints: state.actionPoints + earnedAp,
+      actionPointsEarnedThisRush: state.actionPointsEarnedThisRush + earnedAp,
+      apPenaltyNextRush: 0,
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
       studyCorrectRound: state.studyCorrectRound + 1,
-      studyBoardTimeBonus: Math.min(MAX_BOARD_TIME - MIN_BOARD_TIME, Math.round((state.studyBoardTimeBonus + earnedBoardTime) * 10) / 10),
       correctCount: state.correctCount + 1,
-      skillCharge: Math.min(12, state.skillCharge + (state.runRelics.includes("deep_focus") ? 2 : 1) + hardEdgeBonus),
+      skillCharge: Math.min(12, state.skillCharge + (state.runRelics.includes("deep_focus") ? 2 : 1) + hardEdgeBonus + comboSparkFocus),
       score: nextScore,
       eventNotices: appendCombatNotices(state.eventNotices, answerNotices),
-      boardMessage: `+${earnedPowerPoints} power point${earnedPowerPoints === 1 ? "" : "s"} and +${earnedBoardTime.toFixed(1)}s rune time${hardEdgeBonus ? " from Hard Edge" : ""}.${learnedMessage}`,
+      boardMessage: `+${earnedAp} AP${hardEdgeBonus ? " from Hard Edge" : ""}${steadyGripBonus ? " with Steady Grip" : ""}. Focus charged.${learnedMessage}`,
       flashColor: "rgba(46,204,113,0.18)",
     };
 
@@ -2256,15 +2419,13 @@ export default function App() {
     const bloodQuill = state.runRelics.includes("blood_quill");
     const penalty = getWrongStudyPenalty(state);
     const nextTimerLeft = Math.max(0, Math.round((state.timerLeft - penalty) * 10) / 10);
-    const bloodCurse = bloodQuill
-      ? setRandomRuneStatus(state.board, "cursed", 1, { excludeKinds: ["heart"] })
-      : { board: state.board, changedIds: [] };
     const answered = state.studyQuestionsTotal + 1;
     const nextState = {
       ...state,
       deck: refillDeck(state.deck, nextSave),
-      board: bloodCurse.board,
-      powerPoints: state.powerPoints + (bloodQuill ? 2 : 0),
+      powerPoints: state.powerPoints + (bloodQuill ? 1 : 0),
+      actionPoints: state.actionPoints + (bloodQuill ? 1 : 0),
+      actionPointsEarnedThisRush: state.actionPointsEarnedThisRush + (bloodQuill ? 1 : 0),
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
       studyWrongRound: state.studyWrongRound + 1,
@@ -2276,12 +2437,12 @@ export default function App() {
         correct: missedWord.word,
         definition: missedWord.definition,
       } : null,
-      lastMovedTileIds: bloodCurse.changedIds,
+      fragileDebuff: state.fragileDebuff + (bloodQuill ? 1 : 0),
       eventNotices: bloodQuill
-        ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Blood Quill", "+2 power gained, but an attack rune was cursed.", "relic")])
+        ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Blood Quill", "+1 AP gained, but the next enemy hit hurts more.", "relic")])
         : state.eventNotices,
       boardMessage: bloodQuill
-        ? `Missed card. -${penalty.toFixed(1)}s study time. Blood Quill gave +2 power and cursed ${bloodCurse.changedIds.length || 0} rune${bloodCurse.changedIds.length === 1 ? "" : "s"}.`
+        ? `Missed card. -${penalty.toFixed(1)}s study time. Blood Quill gave +1 AP and made you fragile.`
         : `Missed card. -${penalty.toFixed(1)}s study time.`,
       flashColor: "rgba(255,71,87,0.2)",
     };
@@ -2870,6 +3031,519 @@ export default function App() {
     finalizeRuneRound(latestCombat, latestCombat.pendingCinematic || createEmptyCinematicStats());
   };
 
+  const beginCommandPhase = () => {
+    if (!combat || combat.mode !== "commandReady" || combat.phase !== "answering" || combat.isPaused) return;
+    if (combat.actionPoints <= 0) {
+      resolveEnemyActionFromState(combat);
+      return;
+    }
+
+    const currentActor = getCurrentActor(combat);
+    if (currentActor?.kind === "enemy") {
+      resolveEnemyActionFromState(combat);
+      return;
+    }
+
+    setCombat({
+      ...combat,
+      mode: "command",
+      activeActorId: currentActor?.id || null,
+      cinematic: null,
+      boardMessage: `${combat.actionPoints} AP ready. Spend it before the enemy acts.`,
+    });
+  };
+
+  const finishRoomAfterCommand = (state: CombatState) => {
+    window.setTimeout(() => {
+      const latestCombat = combatRef.current;
+      if (!latestCombat || latestCombat.floor !== state.floor || latestCombat.phase !== "transition") return;
+      setScreen("reward");
+    }, 950);
+  };
+
+  const resolveEnemyActionFromState = (baseState: CombatState) => {
+    const enemy = baseState.enemies[baseState.currentEnemyIndex];
+    if (!enemy || enemy.isDead) return;
+
+    const enemyIntentBefore = getEnemyIntent(enemy);
+    const playerHpBefore = baseState.playerHp;
+    let nextEnemies = [...baseState.enemies];
+    let nextBuffs = [...baseState.activeBuffs];
+    let incomingDamage = enemy.currentDamage;
+    let wardBlocked = false;
+    const combatNotices: CombatNotice[] = [];
+    const resolutionNotes: string[] = [];
+    let nextSkillCharge = baseState.skillCharge;
+    let nextStudyShuffle = baseState.nextStudyShuffle;
+    let apPenaltyNextRush = baseState.apPenaltyNextRush;
+    let nextQueue = [...baseState.turnQueue];
+    let specialLabel = "";
+
+    if (enemy.def.special === "low_combo_punish" && baseState.actionPointsSpentThisWindow < 3) {
+      const penaltyDamage = Math.max(4, Math.floor(enemy.currentDamage * 0.45));
+      incomingDamage += penaltyDamage;
+      specialLabel = "Low AP spend punished";
+      resolutionNotes.push(`${enemy.def.name} punished spending fewer than 3 AP for +${penaltyDamage} damage.`);
+    }
+
+    if (enemy.def.special === "healing_check" && !baseState.healedOrDefendedThisWindow) {
+      const penaltyDamage = Math.max(5, Math.floor(enemy.currentDamage * 0.35));
+      incomingDamage += penaltyDamage;
+      specialLabel = "Healing check failed";
+      resolutionNotes.push(`${enemy.def.name} punished the party for not healing or defending.`);
+    }
+
+    if (baseState.fragileDebuff > 0) {
+      const fragileDamage = baseState.fragileDebuff * 3;
+      incomingDamage += fragileDamage;
+      resolutionNotes.push(`Fragile added ${fragileDamage} damage.`);
+    }
+
+    const wardIndex = nextBuffs.findIndex(buff => buff.type === "ward");
+    const guardIndex = nextBuffs.findIndex(buff => buff.type === "guard");
+    if (wardIndex >= 0) {
+      nextBuffs = nextBuffs.filter((_, index) => index !== wardIndex);
+      incomingDamage = 0;
+      wardBlocked = true;
+      combatNotices.push(createCombatNotice("Ward Block", `${enemy.def.name}'s action was blocked.`, "good"));
+    } else if (guardIndex >= 0) {
+      nextBuffs = nextBuffs.filter((_, index) => index !== guardIndex);
+      incomingDamage = Math.max(1, Math.floor(incomingDamage * 0.45));
+      combatNotices.push(createCombatNotice("Defended", `Incoming damage reduced to ${incomingDamage}.`, "good"));
+    }
+
+    let nextPlayerHp = Math.max(0, baseState.playerHp - incomingDamage);
+    let enemyActionLabel = wardBlocked
+      ? `Ward blocked ${enemy.def.name}'s action.`
+      : `${enemy.def.name} struck for ${incomingDamage}.`;
+
+    if (!wardBlocked) {
+      combatNotices.push(createCombatNotice("Enemy Action", enemyActionLabel, incomingDamage > 0 ? "bad" : "neutral"));
+    }
+
+    if (!wardBlocked) {
+      if (enemy.def.special === "shuffle_answers") {
+        nextStudyShuffle = true;
+        specialLabel = "Answers scrambled";
+        resolutionNotes.push("Next study rush answer order will be scrambled.");
+      } else if (enemy.def.special === "freeze_timer") {
+        nextBuffs.push({ type: "timer_slow", remaining: 1 });
+        specialLabel = "Timer chilled";
+        resolutionNotes.push("Next study rush timer is shortened.");
+      } else if (enemy.def.special === "timer_drain") {
+        nextSkillCharge = Math.max(0, nextSkillCharge - 3);
+        apPenaltyNextRush = 1;
+        specialLabel = "Focus drained";
+        resolutionNotes.push("Focus drained and the first correct card next rush earns 1 less AP.");
+      } else if (enemy.def.special === "randomize_positions") {
+        nextQueue = delayPartyMember(nextQueue, 55);
+        specialLabel = "Timeline disrupted";
+        resolutionNotes.push("A random party member was delayed on the timeline.");
+      } else if (enemy.def.special === "self_heal") {
+        const healAmount = Math.max(6, Math.floor(enemy.maxHp * 0.12));
+        nextEnemies[baseState.currentEnemyIndex] = {
+          ...nextEnemies[baseState.currentEnemyIndex],
+          hp: Math.min(enemy.maxHp, nextEnemies[baseState.currentEnemyIndex].hp + healAmount),
+        };
+        specialLabel = "Self repair";
+        resolutionNotes.push(`${enemy.def.name} restored ${healAmount} HP.`);
+      } else if (enemy.def.special === "three_phase") {
+        nextBuffs.push({ type: "timer_slow", remaining: 1 });
+        apPenaltyNextRush = Math.max(apPenaltyNextRush, 1);
+        specialLabel = "Boss protocol";
+        resolutionNotes.push("Boss protocol chilled study and reduced next AP gain.");
+      }
+    }
+
+    const enemyActor = getCurrentActor(baseState)?.kind === "enemy"
+      ? getCurrentActor(baseState)
+      : baseState.turnQueue.find(entry => entry.kind === "enemy" && entry.refId === enemy.def.id);
+    if (enemyActor) {
+      nextQueue = advanceTimelineAfterAction(nextQueue, enemyActor.id, enemy.def.special === "sequential" ? -18 : 0);
+    }
+
+    const isGameOver = nextPlayerHp <= 0;
+    const stats = createEmptyCinematicStats();
+    stats.enemyDamage = incomingDamage;
+    const combatLog = buildCombatLog(
+      stats,
+      enemy,
+      enemy.hp,
+      nextEnemies[baseState.currentEnemyIndex]?.hp ?? enemy.hp,
+      playerHpBefore,
+      nextPlayerHp,
+      enemyActionLabel,
+      resolutionNotes
+    );
+    const cinematic = createActionCinematic(
+      stats,
+      enemy,
+      {
+        enemyIntent: enemyIntentBefore,
+        enemyHpBefore: enemy.hp,
+        enemyHpAfter: nextEnemies[baseState.currentEnemyIndex]?.hp ?? enemy.hp,
+        shieldBefore: enemy.shield,
+        shieldAfter: enemy.shield,
+        shieldBroken: false,
+        playerHpBefore,
+        playerHpAfter: nextPlayerHp,
+        enemyActionLabel,
+        roomCleared: false,
+        wardBlocked,
+        log: combatLog,
+      },
+      isGameOver ? "enemyAction" : "studyReady",
+      isGameOver ? "You were defeated." : "Enemy acted. Study rush coming up.",
+      false,
+      isGameOver
+    );
+
+    const nextState: CombatState = {
+      ...baseState,
+      mode: "enemyAction",
+      phase: "transition",
+      enemies: nextEnemies,
+      playerHp: nextPlayerHp,
+      turnQueue: nextQueue,
+      actionPoints: Math.min(baseState.actionPointCarryCap, baseState.actionPoints),
+      actionPointsEarnedThisRush: 0,
+      actionPointsSpentThisWindow: 0,
+      healedOrDefendedThisWindow: false,
+      apPenaltyNextRush,
+      nextStudyShuffle,
+      skillCharge: nextSkillCharge,
+      activeBuffs: nextBuffs,
+      fragileDebuff: 0,
+      cinematic,
+      cinematicStepIndex: 0,
+      combatLog,
+      eventNotices: appendCombatNotices(baseState.eventNotices, [
+        ...combatNotices,
+        ...(specialLabel ? [createCombatNotice("Enemy Special", specialLabel, "warn")] : []),
+      ]),
+      damageNumbers: incomingDamage > 0 ? [
+        ...baseState.damageNumbers,
+        {
+          id: damageIdCounter++,
+          value: incomingDamage,
+          x: 22 + Math.random() * 12,
+          y: 68,
+          color: "#FF4757",
+          isCrit: false,
+        },
+      ] : baseState.damageNumbers,
+      enemyAnim: "attack",
+      playerAnim: incomingDamage > 0 ? "hit" : null,
+      screenShake: incomingDamage > 0 ? 6 : 0,
+      flashColor: incomingDamage > 0 ? "rgba(255,71,87,0.18)" : "rgba(69,169,255,0.12)",
+      boardMessage: isGameOver ? "You were defeated." : "Enemy acted. Study rush coming up.",
+    };
+
+    setCombat(nextState);
+
+    window.setTimeout(() => {
+      const latestCombat = combatRef.current;
+      if (!latestCombat || latestCombat.cinematic?.id !== cinematic.id) return;
+      if (isGameOver) {
+        const orbsEarned = latestCombat.floor * 10 + latestCombat.correctCount * 2 + latestCombat.maxCombo * 5;
+        setSave(prev => updateRunStats(prev, latestCombat, orbsEarned));
+        setScreen("gameOver");
+        return;
+      }
+
+      setCombat(prev => prev && prev.cinematic?.id === cinematic.id ? {
+        ...prev,
+        mode: "studyReady",
+        phase: "answering",
+        cinematic: null,
+        cinematicStepIndex: 0,
+        enemyAnim: null,
+        playerAnim: null,
+        activeActorId: null,
+        boardMessage: "Study rush ready. Earn AP for the next command window.",
+      } : prev);
+    }, 1150);
+  };
+
+  const handlePlayerCommand = (action: PlayerActionId) => {
+    if (!combat || combat.mode !== "command" || combat.phase !== "answering" || combat.isPaused) return;
+    const actor = getCurrentActor(combat);
+    const party = getRunParty(save);
+    const member = getActorCharacter(actor, party);
+    const enemy = combat.enemies[combat.currentEnemyIndex];
+    if (!actor || !member || !enemy || enemy.isDead) return;
+
+    const baseCost = getPlayerActionCost(member, action, combat);
+    if (combat.actionPoints < baseCost) return;
+
+    const playerHpBefore = combat.playerHp;
+    const enemyHpBefore = enemy.hp;
+    const shieldBefore = enemy.shield;
+    let rawDamage = 0;
+    let healAmount = 0;
+    let kind = member.element;
+    let nextBuffs = [...combat.activeBuffs];
+    let nextSkillCharge = combat.skillCharge;
+    let nextExposedTurns = combat.exposedTurns;
+    let nextFlameDiscount = combat.flameDiscountNext && !(member.element === "flame" && action === "skill");
+    let healedOrDefended = combat.healedOrDefendedThisWindow;
+    let actionDelay = 0;
+    const actionNotices: CombatNotice[] = [];
+    const actionLabel = getActionLabel(member, action);
+
+    if (action === "attack") {
+      rawDamage = Math.max(5, member.attack + Math.floor(combat.difficultyFloor * 1.15));
+    } else if (action === "defend") {
+      nextBuffs = [...nextBuffs, { type: "guard", remaining: 1 }];
+      nextSkillCharge = Math.min(12, nextSkillCharge + 1);
+      healedOrDefended = true;
+      if (combat.runRelics.includes("runic_tumbler")) {
+        actionDelay = -14;
+        actionNotices.push(createCombatNotice("Relic: Runic Tumbler", "Defend nudged the timeline in your favor.", "relic"));
+      }
+    } else if (member.skillId === "steady_hand") {
+      rawDamage = Math.floor(member.attack * 1.15) + Math.floor(combat.difficultyFloor * 1.2);
+      nextExposedTurns = Math.max(nextExposedTurns, 1);
+      actionNotices.push(createCombatNotice("Exposed", "The next weakness hit will strike harder.", "good"));
+    } else if (member.skillId === "convert_flame") {
+      kind = "flame";
+      rawDamage = Math.floor(member.attack * 1.55) + (combat.studyCorrectRound >= 4 ? 14 : 0) + Math.floor(combat.difficultyFloor * 1.25);
+    } else if (member.skillId === "ward_word") {
+      kind = "tide";
+      nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }];
+      healedOrDefended = true;
+    } else if (member.skillId === "verdant_shift") {
+      kind = "leaf";
+      rawDamage = Math.floor(member.attack * 0.75) + Math.floor(combat.difficultyFloor * 0.8);
+      healAmount = Math.min(combat.playerMaxHp - combat.playerHp, Math.floor(member.recovery * 1.4) + 16 + (combat.runRelics.includes("leaf_bloom") && combat.studyCorrectRound >= 4 ? 8 : 0));
+      healedOrDefended = healAmount > 0 || healedOrDefended;
+      if (combat.runRelics.includes("heart_ward") && !nextBuffs.some(buff => buff.type === "heart_ward_used")) {
+        nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }, { type: "heart_ward_used", remaining: 1 }];
+        actionNotices.push(createCombatNotice("Relic: Heart Ward", "First heal also raised a Ward.", "relic"));
+      }
+    } else if (member.skillId === "umbra_surge") {
+      kind = "shadow";
+      rawDamage = Math.floor(member.attack * 2.05) + Math.floor(combat.difficultyFloor * 1.35);
+      if (combat.exposedTurns > 0 || enemy.shield > 0) {
+        rawDamage += 14;
+      }
+    }
+
+    if (rawDamage > 0 && enemy.def.weakTo.includes(kind) && combat.exposedTurns > 0) {
+      rawDamage = Math.floor(rawDamage * 1.35);
+      nextExposedTurns = Math.max(0, nextExposedTurns - 1);
+      actionNotices.push(createCombatNotice("Exposed Triggered", "Weakness damage amplified.", "good"));
+    }
+
+    if (rawDamage > 0 && enemy.def.weakTo.includes(kind) && combat.runRelics.includes("linebreaker")) {
+      rawDamage = Math.floor(rawDamage * 1.18);
+      actionNotices.push(createCombatNotice("Relic: Linebreaker", "Weakness hit boosted.", "relic"));
+    }
+
+    const stats = createDirectActionStats(kind, rawDamage, healAmount, rawDamage > 0 ? member.name : undefined, action === "skill" ? 5 : action === "attack" ? 3 : 0);
+    const defense = resolveEnemyDefense(enemy, stats, combat.runRelics);
+    stats.rawDamage = defense.rawDamage;
+    stats.damage = defense.hpDamage;
+    stats.shieldDamage = defense.shieldDamage;
+    stats.shieldBroken = defense.shieldBroken;
+    stats.elementDamage = defense.adjustedByElement;
+    stats.weaknessHits = defense.weaknessHits;
+    stats.resistedHits = defense.resistedHits;
+    stats.heal = healAmount;
+
+    let nextEnemies = [...combat.enemies];
+    let enemyHpAfter = enemy.hp;
+    let currentEnemyIndex = combat.currentEnemyIndex;
+    let nextQueue = advanceTimelineAfterAction(combat.turnQueue, actor.id, actionDelay);
+    let phaseBanner = combat.showPhaseBanner;
+
+    if (defense.shieldDamage > 0 || defense.hpDamage > 0) {
+      enemyHpAfter = Math.max(0, enemy.hp - defense.hpDamage);
+      nextEnemies[combat.currentEnemyIndex] = {
+        ...enemy,
+        hp: enemyHpAfter,
+        shield: defense.shieldAfter,
+      };
+
+      if (defense.shieldBroken) {
+        nextSkillCharge = Math.min(12, nextSkillCharge + (combat.runRelics.includes("fracture_notes") ? 3 : 2));
+        phaseBanner = "SHIELD BROKEN";
+        actionNotices.push(createCombatNotice("Shield Break", "Counter delayed and Focus charged.", "good"));
+      }
+
+      if (enemyHpAfter > 0) {
+        const hpPct = enemyHpAfter / enemy.maxHp;
+        if (enemy.def.phases && enemy.phase < enemy.def.phases.length) {
+          const nextPhase = enemy.def.phases[enemy.phase];
+          if (hpPct <= nextPhase.threshold) {
+            nextEnemies[combat.currentEnemyIndex] = {
+              ...nextEnemies[combat.currentEnemyIndex],
+              phase: enemy.phase + 1,
+              currentDamage: Math.floor(enemy.currentDamage * nextPhase.damageMult),
+            };
+            phaseBanner = `PHASE ${enemy.phase + 1}`;
+          }
+        }
+        if (enemy.def.special === "enrage_at_50" && hpPct <= 0.5 && enemy.phase === 1) {
+          nextEnemies[combat.currentEnemyIndex] = {
+            ...nextEnemies[combat.currentEnemyIndex],
+            phase: 2,
+            currentDamage: Math.floor(enemy.currentDamage * 1.5),
+          };
+          phaseBanner = "ENRAGED";
+        }
+      }
+    }
+
+    const nextPlayerHp = Math.min(combat.playerMaxHp, combat.playerHp + healAmount);
+    if (enemyHpAfter <= 0 && (defense.hpDamage > 0 || rawDamage > 0)) {
+      nextEnemies[combat.currentEnemyIndex] = { ...nextEnemies[combat.currentEnemyIndex], isDead: true, hp: 0 };
+      nextQueue = removeEnemyFromQueue(nextQueue, enemy);
+    }
+
+    const allDead = nextEnemies.every(nextEnemy => nextEnemy.isDead);
+    if (!allDead && enemyHpAfter <= 0) {
+      const nextIndex = nextEnemies.findIndex((nextEnemy, index) => index > combat.currentEnemyIndex && !nextEnemy.isDead);
+      if (nextIndex !== -1) {
+        currentEnemyIndex = nextIndex;
+      }
+    }
+
+    const nextActionPoints = combat.actionPoints - baseCost;
+    const nextSpent = combat.actionPointsSpentThisWindow + baseCost;
+    const combatLog = buildCombatLog(
+      stats,
+      enemy,
+      enemyHpBefore,
+      enemyHpAfter,
+      playerHpBefore,
+      nextPlayerHp,
+      allDead ? `${enemy.def.name} fell.` : `${member.name} used ${actionLabel}.`,
+      [
+        defense.weaknessHits.length > 0 ? "Weakness hit amplified the command." : "",
+        defense.resistedHits.length > 0 ? "The enemy resisted part of the hit." : "",
+      ].filter(Boolean)
+    );
+
+    const rewardChoices = allDead ? createRewardChoices(save, combat.deck, combat.difficultyFloor) : combat.rewardChoices;
+    const relicChoices = allDead && combat.encounter.offersRelic ? createRelicChoices(combat.runRelics, combat.encounter) : combat.relicChoices;
+    const cinematic = createActionCinematic(
+      stats,
+      enemy,
+      {
+        enemyIntent: getEnemyIntent(enemy),
+        enemyHpBefore,
+        enemyHpAfter,
+        shieldBefore,
+        shieldAfter: defense.shieldAfter,
+        shieldBroken: defense.shieldBroken,
+        playerHpBefore,
+        playerHpAfter: nextPlayerHp,
+        enemyActionLabel: allDead ? `${enemy.def.name} fell.` : `${member.name} used ${actionLabel}.`,
+        roomCleared: allDead,
+        wardBlocked: false,
+        log: combatLog,
+      },
+      allDead ? "command" : "command",
+      allDead ? "Room cleared. Choose a reward." : "Command resolved.",
+      allDead,
+      false
+    );
+
+    const nextState: CombatState = {
+      ...combat,
+      mode: "command",
+      phase: "transition",
+      enemies: nextEnemies,
+      currentEnemyIndex,
+      playerHp: nextPlayerHp,
+      actionPoints: nextActionPoints,
+      actionPointsSpentThisWindow: nextSpent,
+      turnQueue: nextQueue,
+      activeActorId: getCurrentActor({ ...combat, turnQueue: nextQueue })?.id || null,
+      exposedTurns: nextExposedTurns,
+      healedOrDefendedThisWindow: healedOrDefended,
+      flameDiscountNext: nextFlameDiscount,
+      activeBuffs: nextBuffs,
+      skillCharge: nextSkillCharge,
+      rewardChoices,
+      relicChoices,
+      cinematic,
+      cinematicStepIndex: 0,
+      combatLog,
+      eventNotices: appendCombatNotices(combat.eventNotices, actionNotices),
+      damageNumbers: [
+        ...combat.damageNumbers,
+        ...(defense.hpDamage + defense.shieldDamage > 0 ? [{
+          id: damageIdCounter++,
+          value: defense.hpDamage + defense.shieldDamage,
+          x: 58 + Math.random() * 12,
+          y: 32,
+          color: defense.weaknessHits.length > 0 ? "#FFE66D" : TILE_DEFS[kind].color,
+          isCrit: defense.weaknessHits.length > 0,
+        }] : []),
+        ...(healAmount > 0 ? [{
+          id: damageIdCounter++,
+          value: healAmount,
+          x: 22 + Math.random() * 12,
+          y: 66,
+          color: TILE_DEFS.heart.color,
+          isCrit: false,
+        }] : []),
+      ],
+      actionEffect: createCombatActionEffect(action === "defend" || member.skillId === "ward_word" && action === "skill" ? "ward" : "skill", actionLabel, TILE_DEFS[kind].color, {
+        kind,
+        detail: action === "defend" ? "Next hit reduced" : baseCost === 1 ? "1 AP" : `${baseCost} AP`,
+        casterName: member.name,
+        casterSprite: member.sprite,
+      }),
+      enemyAnim: defense.hpDamage + defense.shieldDamage > 0 ? "hit" : null,
+      playerAnim: healAmount > 0 ? "heal" : null,
+      flashColor: healAmount > 0 ? "rgba(46,204,113,0.14)" : defense.hpDamage + defense.shieldDamage > 0 ? TILE_DEFS[kind].glow : "rgba(69,169,255,0.12)",
+      showPhaseBanner: phaseBanner,
+      combo: Math.max(combat.combo, combat.studyCorrectRound),
+      maxCombo: Math.max(combat.maxCombo, combat.studyCorrectRound),
+      score: combat.score + defense.hpDamage + defense.shieldDamage + healAmount + baseCost * 6,
+      boardMessage: allDead
+        ? "Room cleared. Choose a reward."
+        : nextActionPoints <= 0
+          ? "AP spent. Enemy action incoming."
+          : getCurrentActor({ ...combat, turnQueue: nextQueue })?.kind === "enemy"
+            ? "Enemy reached the front of the timeline."
+            : `${nextActionPoints} AP remains.`,
+    };
+
+    setCombat(nextState);
+
+    if (allDead) {
+      finishRoomAfterCommand({ ...nextState, phase: "transition" });
+      return;
+    }
+
+    const nextActor = getCurrentActor(nextState);
+    const shouldEnemyAct = nextActionPoints <= 0 || nextActor?.kind === "enemy";
+    window.setTimeout(() => {
+      if (shouldEnemyAct) {
+        resolveEnemyActionFromState(nextState);
+      } else {
+        setCombat(prev => prev && prev.cinematic?.id === cinematic.id ? {
+          ...prev,
+          phase: "answering",
+          cinematic: null,
+          cinematicStepIndex: 0,
+          enemyAnim: null,
+          playerAnim: null,
+          boardMessage: `${prev.actionPoints} AP remains. ${getCurrentActor(prev)?.name || "Next actor"} is ready.`,
+        } : prev);
+      }
+    }, shouldEnemyAct ? 950 : 650);
+  };
+
+  const endCommandWindow = () => {
+    if (!combat || combat.mode !== "command" || combat.phase !== "answering") return;
+    resolveEnemyActionFromState(combat);
+  };
+
   const commitResolvedBoardMove = (state: CombatState, result: MatchResult) => {
     const hasSurge = state.activeBuffs.some(b => b.type === "board_surge");
     const nextBuffs = state.activeBuffs.filter(b => b.type !== "board_surge");
@@ -3371,7 +4045,7 @@ export default function App() {
   };
 
   const handleAbility = () => {
-    if (!combat || combat.abilityUsed || combat.abilityCooldown > 0 || combat.mode === "study" || combat.mode === "board" || combat.mode === "resolveReady" || combat.mode === "cinematic") return;
+    if (!combat || combat.abilityUsed || combat.abilityCooldown > 0 || combat.mode === "study" || combat.mode === "commandReady" || combat.mode === "command" || combat.mode === "enemyAction" || combat.mode === "board" || combat.mode === "resolveReady" || combat.mode === "cinematic") return;
     
     const cls = getClassById(save.selectedClass);
     if (!cls) return;
@@ -3519,6 +4193,7 @@ export default function App() {
     
     const word = drawWordFromDeck(nextDeck, nextSave, combat.currentWord?.id);
     const options = generateDistractors(word, getAllCards(nextSave));
+    const nextRunParty = getRunParty(nextSave);
     
     setCombat({
       ...combat,
@@ -3558,8 +4233,21 @@ export default function App() {
       eventNotices: encounter.modifierLabel === "Standard"
         ? []
         : [createCombatNotice(encounter.title, encounter.modifierDescription, encounter.isBoss ? "bad" : "warn")],
+      powerPoints: 0,
+      actionPoints: 0,
+      actionPointsEarnedThisRush: 0,
+      actionPointsSpentThisWindow: 0,
+      actionPointCarryCap: combat.actionPointCarryCap || 0,
+      turnQueue: buildTurnQueue(nextRunParty, enemies),
+      activeActorId: null,
+      exposedTurns: 0,
+      healedOrDefendedThisWindow: false,
+      apPenaltyNextRush: 0,
+      nextStudyShuffle: false,
+      flameDiscountNext: false,
+      fragileDebuff: 0,
       boardMessage: encounter.modifierLabel === "Standard"
-        ? `${encounter.title}. Study first, then spend your earned time on the board.`
+        ? `${encounter.title}. Study first, then spend AP on party commands.`
         : `${encounter.title}: ${encounter.modifierDescription}`,
       studyQuestionsTotal: 0,
       studyQuestionsLeft: 0,
@@ -3791,8 +4479,11 @@ export default function App() {
   const isRuneBoardLive = combat?.mode === "board" && combat.phase === "answering" && !combat.isPaused && !combat.isResolvingRunes;
   const canUsePowerUps = !!combat && combat.phase === "answering" && combat.mode === "boardReady" && !combat.isResolvingRunes;
   const canUseRuneSkills = !!combat && combat.phase === "answering" && combat.mode === "boardReady" && !combat.isPaused && !combat.isResolvingRunes;
-  const currentCardPower = combat?.currentWord ? getPowerPointsForCard(combat.currentWord, save) : 0;
-  const currentCardRuneTime = combat?.currentWord ? getBoardTimeGainForCorrectCard(combat.currentWord, save) : 0;
+  const currentCardPower = combat?.currentWord ? getApForCorrectCard(combat.currentWord, save) : 0;
+  const activeTurnActor = combat ? getCurrentActor(combat) : null;
+  const activeCommandCharacter = getActorCharacter(activeTurnActor, runParty);
+  const activeCommandSkill = activeCommandCharacter ? getSkillById(activeCommandCharacter.skillId) : null;
+  const apCombatMode = Boolean(combat && ["studyReady", "study", "commandReady", "command", "enemyAction"].includes(combat.mode));
   const activeCinematic = combat?.cinematic;
   const preparedPreview = combat?.pendingCinematic && currentEnemy && !currentEnemy.isDead
     ? resolveEnemyDefense(currentEnemy, combat.pendingCinematic, combat.runRelics)
@@ -4590,8 +5281,7 @@ export default function App() {
             <div className="w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
               <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Welcome to the Dungeon!</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-4 sm:text-sm">
-                Answer study bursts to earn board time and power, buy boosts, then route one rune fast
-                before the sprint timer hits zero.
+                Answer study bursts to earn AP, then spend it on party commands before the enemy reaches you.
               </p>
               <button
                 onClick={() => setShowTutorial(false)}
@@ -4662,7 +5352,7 @@ export default function App() {
               >
                 <Flame className="w-4 h-4 text-orange-400" />
                 <span className="font-bold text-sm" style={{ color: combat.combo >= 10 ? "#F39C12" : "#E94560" }}>
-                  COMBO x{combat.combo}
+                  RUSH x{combat.combo}
                 </span>
               </div>
             )}
@@ -4681,6 +5371,33 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {combat.turnQueue.length > 0 && (
+          <div className="relative z-20 mx-auto mb-1 flex w-[min(96vw,760px)] items-center gap-1.5 overflow-hidden rounded-lg border border-white/10 bg-black/34 px-2 py-1.5 shadow-xl backdrop-blur-md sm:mb-2 sm:gap-2 sm:px-3">
+            <span className="mr-1 hidden text-[10px] font-black uppercase tracking-wide text-gray-400 sm:inline">Timeline</span>
+            {combat.turnQueue.slice(0, 7).map((entry, index) => {
+              const tile = TILE_DEFS[entry.element];
+              const isActive = index === 0;
+              return (
+                <div
+                  key={`${entry.id}-${index}`}
+                  className={`flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-1 transition-all sm:gap-1.5 sm:px-2 ${
+                    isActive ? "bg-white/12 text-white" : "bg-white/5 text-gray-300"
+                  }`}
+                  style={{
+                    borderColor: isActive ? `${tile.color}88` : "rgba(255,255,255,0.1)",
+                    boxShadow: isActive ? `0 0 16px ${tile.glow}` : undefined,
+                  }}
+                  title={`${entry.name} - Speed ${entry.speed}`}
+                >
+                  <img src={assetUrl(entry.avatar)} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" />
+                  <span className="truncate text-[10px] font-bold sm:text-xs">{isActive ? "Now: " : ""}{entry.name}</span>
+                  <span className="hidden rounded bg-black/35 px-1 text-[9px] font-black text-gray-300 sm:inline">{Math.max(0, Math.round(entry.actionValue))}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
         
         {/* Enemy Area - Top 40% */}
         <div className="combat-battlefield relative z-20 flex h-[25dvh] min-h-[164px] flex-col items-center justify-start px-3 sm:h-[24dvh] sm:min-h-[132px] md:max-h-[180px] lg:h-[22dvh]">
@@ -5109,7 +5826,7 @@ export default function App() {
         
         {/* Puzzle Combat Area */}
         <div className="combat-puzzle-area relative z-10 h-[calc(75dvh-52px)] min-h-0 px-2 pb-2 md:h-[calc(74dvh-52px)] md:px-4 md:pb-4 lg:h-[calc(72dvh-52px)]">
-          <div className="combat-layout-grid mx-auto grid h-full max-w-5xl grid-cols-1 grid-rows-[minmax(0,1fr)_78px] gap-2 sm:grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(280px,360px)_minmax(360px,1fr)] md:grid-rows-1 md:gap-3 xl:max-w-[1080px]">
+          <div className="combat-layout-grid mx-auto grid h-full max-w-5xl grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(158px,auto)] gap-2 sm:grid-rows-[minmax(0,1fr)_auto] md:grid-cols-[minmax(280px,360px)_minmax(360px,1fr)] md:grid-rows-1 md:gap-3 xl:max-w-[1080px]">
             {showLegacyCinematicScreen && combat.mode === "cinematic" && activeCinematic ? (
               <section className="relative min-h-0 overflow-hidden rounded-lg border border-[#E94560]/40 bg-[#071225]/95 p-3 shadow-2xl md:col-span-2 sm:p-4">
                 <div className="absolute inset-0 opacity-25" style={{ background: `radial-gradient(circle at 50% 38%, ${cinematicPrimaryTile.glow}, transparent 52%)` }} />
@@ -5286,6 +6003,205 @@ export default function App() {
                   </div>
                 </div>
               </section>
+            ) : apCombatMode ? (
+              <>
+                <section className="hidden min-h-0 flex-col overflow-hidden rounded-lg border border-cyan-300/25 bg-[#071225]/88 p-2 shadow-2xl sm:p-4 md:flex">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-white">
+                        <Sword className="h-4 w-4 text-cyan-200" />
+                        <span className="font-bold">Party Command</span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-400 sm:text-xs">{combat.boardMessage}</p>
+                    </div>
+                    <div className="shrink-0 rounded-md border border-yellow-300/35 bg-yellow-300/12 px-2 py-1 text-center">
+                      <div className="text-[9px] font-black uppercase tracking-wide text-yellow-100/70">AP</div>
+                      <div className="text-lg font-black text-yellow-100">{combat.actionPoints}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid min-h-0 flex-1 gap-2 overflow-auto pr-1">
+                    {runParty.slice(0, 5).map(member => {
+                      const tile = TILE_DEFS[member.element];
+                      const actorEntry = combat.turnQueue.find(entry => entry.kind === "party" && entry.refId === member.id);
+                      const isNow = activeCommandCharacter?.id === member.id && combat.mode === "command";
+                      return (
+                        <div
+                          key={`command-party-${member.id}`}
+                          className={`flex items-center gap-2 rounded-md border bg-black/22 px-2 py-1.5 ${isNow ? "ring-1 ring-white/45" : ""}`}
+                          style={{ borderColor: isNow ? `${tile.color}99` : `${tile.color}44`, boxShadow: isNow ? `0 0 16px ${tile.glow}` : undefined }}
+                        >
+                          <img src={assetUrl(member.sprite)} alt="" className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-sm font-bold text-white">{member.name}</span>
+                              <span className="text-[10px] font-bold" style={{ color: tile.color }}>{TILE_DEFS[member.element].label}</span>
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-400">
+                              <span>SPD {member.speed}</span>
+                              <span>ATK {member.attack}</span>
+                              <span>REC {member.recovery}</span>
+                              <span className="ml-auto">{actorEntry ? Math.max(0, Math.round(actorEntry.actionValue)) : "--"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <div className="rounded-md bg-black/25 p-2">
+                      <div className="text-gray-500">Focus</div>
+                      <div className="font-bold text-cyan-100">{combat.skillCharge}/12</div>
+                    </div>
+                    <div className="rounded-md bg-black/25 p-2">
+                      <div className="text-gray-500">Rush</div>
+                      <div className="font-bold text-green-200">{combat.studyCorrectRound}/{combat.studyQuestionsTotal}</div>
+                    </div>
+                    <div className="rounded-md bg-black/25 p-2">
+                      <div className="text-gray-500">Spent</div>
+                      <div className="font-bold text-yellow-100">{combat.actionPointsSpentThisWindow}</div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="flex min-h-0 flex-col justify-between overflow-hidden rounded-lg border border-[#0F3460] bg-[#16213E]/88 p-2 shadow-2xl sm:p-4">
+                  <div className="min-h-0">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-white">
+                          <BookOpen className="h-4 w-4 text-cyan-300" />
+                          <span className="font-bold">
+                            {combat.mode === "studyReady" ? "Study Rush"
+                              : combat.mode === "study" ? "Flashcards"
+                                : combat.mode === "commandReady" ? "Commands Ready"
+                                  : combat.mode === "enemyAction" ? "Enemy Action"
+                                    : "Choose Action"}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 sm:text-xs">
+                          {combat.mode === "studyReady" && "Answer cards to build AP for this turn."}
+                          {combat.mode === "study" && `${studyAnswered} answered.`}
+                          {combat.mode === "commandReady" && `${combat.actionPointsEarnedThisRush} AP earned. Inspect intent, then command the party.`}
+                          {combat.mode === "command" && activeCommandCharacter && `${activeCommandCharacter.name} is acting now.`}
+                          {combat.mode === "enemyAction" && "The enemy is resolving its intent."}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-md bg-black/30 px-2 py-1 text-xs font-bold text-cyan-100">
+                        {combat.deck.length} cards
+                      </span>
+                    </div>
+
+                    {combat.mode === "studyReady" && (
+                      <button
+                        onClick={beginStudyRound}
+                        disabled={combat.phase !== "answering" || combat.isPaused}
+                        className="flex w-full items-center justify-center gap-2 rounded-md bg-cyan-600 py-3 font-bold text-white transition-all hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                      >
+                        <BookOpen className="h-4 w-4" />
+                        Start Study Rush
+                      </button>
+                    )}
+
+                    {combat.mode === "commandReady" && (
+                      <button
+                        onClick={beginCommandPhase}
+                        disabled={combat.phase !== "answering" || combat.isPaused}
+                        className="flex w-full items-center justify-center gap-2 rounded-md bg-[#E94560] py-3 font-bold text-white transition-all hover:bg-[#ff5b72] disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                      >
+                        <Sword className="h-4 w-4" />
+                        Open Commands
+                      </button>
+                    )}
+
+                    {combat.mode === "command" && activeCommandCharacter && (
+                      <div className="space-y-2">
+                        <div
+                          className="rounded-md border bg-black/25 p-2"
+                          style={{ borderColor: `${TILE_DEFS[activeCommandCharacter.element].color}66` }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <img src={assetUrl(activeCommandCharacter.sprite)} alt="" className="h-10 w-10 object-contain" />
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-bold text-white">{activeCommandCharacter.name}</div>
+                              <div className="text-[11px] font-semibold text-gray-400">{activeCommandSkill?.name || "Skill"} - {activeCommandSkill?.description || activeCommandCharacter.passive}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["attack", "defend", "skill"] as PlayerActionId[]).map(action => {
+                            const cost = getPlayerActionCost(activeCommandCharacter, action, combat);
+                            const label = getActionLabel(activeCommandCharacter, action);
+                            const canUse = combat.phase === "answering" && combat.actionPoints >= cost;
+                            const icon = action === "defend" ? <Shield className="h-4 w-4" /> : action === "skill" ? <Sparkles className="h-4 w-4" /> : <Sword className="h-4 w-4" />;
+                            return (
+                              <button
+                                key={action}
+                                type="button"
+                                onClick={() => handlePlayerCommand(action)}
+                                disabled={!canUse}
+                                className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-2 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-20 sm:text-sm"
+                              >
+                                {icon}
+                                <span>{label}</span>
+                                <span className="rounded bg-yellow-300/15 px-1.5 py-0.5 text-[10px] text-yellow-100">{cost} AP</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={endCommandWindow}
+                          disabled={combat.phase !== "answering"}
+                          className="flex w-full items-center justify-center rounded-md border border-white/10 bg-white/6 py-2 text-xs font-bold text-gray-200 transition-all hover:bg-white/10 disabled:opacity-45"
+                        >
+                          End Window
+                        </button>
+                      </div>
+                    )}
+
+                    {(combat.mode === "study" || combat.mode === "enemyAction") && (
+                      <div className="rounded-md border border-white/10 bg-black/25 px-3 py-2 text-sm text-gray-200">
+                        {combat.mode === "study" ? `${studyAnswered} answered` : "Resolving on the battlefield"}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 sm:gap-4">
+                    <img src={assetUrl(selectedClass?.sprite)} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
+                    <div className="flex-1">
+                      <div className="mb-1 flex justify-between text-xs">
+                        <span className="flex items-center gap-1 text-gray-300">
+                          <Heart className="h-3 w-3 text-red-400" />
+                          HP
+                        </span>
+                        <span className={`font-bold ${combat.playerHp / combat.playerMaxHp < 0.25 ? "text-red-400 animate-pulse" : "text-gray-300"}`}>
+                          {combat.playerHp}/{combat.playerMaxHp}
+                        </span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full border border-gray-600 bg-gray-800 sm:h-4">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${(combat.playerHp / combat.playerMaxHp) * 100}%`,
+                            background: combat.playerHp / combat.playerMaxHp > 0.5
+                              ? "linear-gradient(90deg, #2ECC71, #27AE60)"
+                              : combat.playerHp / combat.playerMaxHp > 0.25
+                                ? "linear-gradient(90deg, #F39C12, #E67E22)"
+                                : "linear-gradient(90deg, #FF4757, #C0392B)",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-gray-500">Accuracy</div>
+                      <div className="text-xs font-bold text-white sm:text-sm">{accuracy}%</div>
+                    </div>
+                  </div>
+                </section>
+              </>
             ) : (
               <>
             <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[#0F3460] bg-[#071225]/90 p-1.5 shadow-2xl sm:p-4">
@@ -5800,6 +6716,45 @@ export default function App() {
           </div>
         )}
 
+        {!showTutorial && !combat.isPaused && combat.mode === "commandReady" && (
+          <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-[#050816]/94 via-[#050816]/34 to-transparent px-3 pb-3 pt-24 sm:inset-0 sm:items-center sm:bg-[#050816]/88 sm:py-4">
+            <div className="max-h-[44dvh] w-full max-w-md overflow-auto rounded-t-lg border border-[#E94560]/40 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
+              <div className="mx-auto mb-3 hidden h-12 w-12 items-center justify-center rounded-full border border-[#E94560]/50 bg-[#E94560]/12 text-pink-200 sm:mb-4 sm:flex sm:h-14 sm:w-14">
+                <Sword className="h-6 w-6 sm:h-7 sm:w-7" />
+              </div>
+              <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Commands Ready</h3>
+              <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
+                {formatStudyRushResult(combat.studyCorrectRound, combat.studyQuestionsTotal)}. You earned {combat.actionPointsEarnedThisRush} AP. Spend it now; unspent AP disappears after the enemy acts.
+              </p>
+              <div className="mb-3 grid grid-cols-4 gap-1.5 text-xs sm:mb-5 sm:gap-2 sm:text-sm">
+                <div className="rounded-md bg-black/25 p-2 sm:p-3">
+                  <div className="text-xs text-gray-500">Correct</div>
+                  <div className="font-bold text-green-300">{combat.studyCorrectRound}</div>
+                </div>
+                <div className="rounded-md bg-black/25 p-2 sm:p-3">
+                  <div className="text-xs text-gray-500">Missed</div>
+                  <div className="font-bold text-red-300">{combat.studyWrongRound}</div>
+                </div>
+                <div className="rounded-md bg-black/25 p-2 sm:p-3">
+                  <div className="text-xs text-gray-500">AP</div>
+                  <div className="font-bold text-yellow-100">{combat.actionPoints}</div>
+                </div>
+                <div className="rounded-md bg-black/25 p-2 sm:p-3">
+                  <div className="text-xs text-gray-500">Focus</div>
+                  <div className="font-bold text-purple-200">{combat.skillCharge}</div>
+                </div>
+              </div>
+              <button
+                onClick={beginCommandPhase}
+                className="flex w-full items-center justify-center gap-2 rounded-md bg-[#E94560] py-3 font-bold text-white transition-all hover:bg-[#ff5b72]"
+              >
+                <Check className="h-4 w-4" />
+                Ready
+              </button>
+            </div>
+          </div>
+        )}
+
         {!showTutorial && !combat.isPaused && combat.mode === "boardReady" && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-[#050816]/94 via-[#050816]/34 to-transparent px-3 pb-3 pt-24 sm:inset-0 sm:items-center sm:bg-[#050816]/88 sm:py-4">
             <div className="max-h-[52dvh] w-full max-w-md overflow-auto rounded-t-lg border border-[#E94560]/40 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
@@ -5952,10 +6907,7 @@ export default function App() {
                     {combat.studyCorrectRound} correct
                   </span>
                   <span className="rounded-md bg-yellow-400/15 px-2 py-1.5 text-xs font-bold text-yellow-200 sm:px-3 sm:py-2 sm:text-sm">
-                    +{currentCardPower} PP
-                  </span>
-                  <span className="rounded-md bg-pink-400/15 px-2 py-1.5 text-xs font-bold text-pink-100 sm:px-3 sm:py-2 sm:text-sm">
-                    +{currentCardRuneTime.toFixed(1)}s
+                    +{currentCardPower} AP
                   </span>
                 </div>
               </div>
@@ -6062,7 +7014,7 @@ export default function App() {
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-orange-400">x{combat.maxCombo}</div>
-              <div className="text-xs text-gray-500">Max Combo</div>
+              <div className="text-xs text-gray-500">Best Rush</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-yellow-400">+{orbsEarned}</div>
