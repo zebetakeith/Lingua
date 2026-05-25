@@ -38,6 +38,18 @@ import {
   type TileKind,
 } from "./game/runes";
 
+const assetUrl = (path?: string | null) => {
+  if (!path) return "";
+  if (/^(?:[a-z]+:)?\/\//i.test(path) || path.startsWith("data:") || path.startsWith("blob:")) {
+    return path;
+  }
+  return `${import.meta.env.BASE_URL}${path.replace(/^\/+/, "")}`;
+};
+
+const assetBackground = (path: string): CSSProperties => ({
+  backgroundImage: `url("${assetUrl(path)}")`,
+});
+
 // ─── Types ───────────────────────────────────────────────
 type GameScreen = "menu" | "classSelect" | "starterDraft" | "combat" | "reward" | "gameOver" | "meta" | "howToPlay" | "flashcards";
 type CardRating = "hard" | "medium" | "easy" | "known";
@@ -3836,7 +3848,7 @@ export default function App() {
       <div className="relative w-full h-screen overflow-hidden">
         <div 
           className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url(/bg_menu_relic.svg)" }}
+          style={assetBackground("/bg_menu_relic.svg")}
         />
         <div className="absolute inset-0 bg-black/40" />
         
@@ -3928,7 +3940,7 @@ export default function App() {
           {/* Stats bar */}
           <div className="absolute bottom-6 flex items-center gap-6 text-sm text-gray-400">
             <div className="flex items-center gap-2">
-              <img src="/wisdom_orb_relic.svg" alt="" className="w-5 h-5" />
+              <img src={assetUrl("/wisdom_orb_relic.svg")} alt="" className="w-5 h-5" />
               <span>{save.wisdomOrbs}</span>
             </div>
             <div className="flex items-center gap-2">
@@ -3957,7 +3969,7 @@ export default function App() {
   if (screen === "howToPlay") {
     return (
       <div className="relative h-screen w-full overflow-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: "url(/bg_combat_relic.svg)" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={assetBackground("/bg_combat_relic.svg")} />
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6 sm:px-6">
           <div className="w-full max-w-3xl rounded-lg border border-[#0F3460] bg-[#16213E]/90 p-5 backdrop-blur-sm sm:p-8">
             <h2 className="text-3xl font-bold text-white mb-6 text-center" style={{ fontFamily: "Cinzel, Georgia, serif" }}>How to Play</h2>
@@ -4033,7 +4045,7 @@ export default function App() {
 
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: "url(/bg_menu_relic.svg)" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={assetBackground("/bg_menu_relic.svg")} />
         
         <div className="relative z-10 h-full flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#0F3460]">
@@ -4265,7 +4277,7 @@ export default function App() {
 
     return (
       <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: "url(/bg_menu_relic.svg)" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-25" style={assetBackground("/bg_menu_relic.svg")} />
         <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col px-4 py-5 sm:py-8">
           <div className="mb-5 flex items-center justify-between gap-3">
             <button
@@ -4293,7 +4305,7 @@ export default function App() {
           <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
             <div className="rounded-lg border border-[#0F3460] bg-[#16213E]/90 p-4">
               <div className="mb-3 flex items-center gap-3">
-                <img src={selectedDraftClass?.sprite} alt="" className="h-14 w-14 object-contain" />
+                <img src={assetUrl(selectedDraftClass?.sprite)} alt="" className="h-14 w-14 object-contain" />
                 <div>
                   <div className="font-bold text-white">{selectedDraftClass?.name}</div>
                   <div className="text-xs text-gray-500">{starterDraftDeck.length}/{RUN_START_CARD_TARGET} chosen</div>
@@ -4376,7 +4388,7 @@ export default function App() {
   if (screen === "classSelect") {
     return (
       <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: "url(/bg_menu_relic.svg)" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={assetBackground("/bg_menu_relic.svg")} />
         <div className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-start px-4 py-6 sm:justify-center">
           <h2 className="mb-5 text-2xl font-bold text-white sm:mb-8 sm:text-3xl" style={{ fontFamily: "Cinzel, Georgia, serif", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
             Choose Your Class
@@ -4409,7 +4421,7 @@ export default function App() {
                   )}
                   
                   <div className="flex h-32 items-center justify-center bg-gradient-to-b from-[#0F3460]/50 to-transparent sm:h-48">
-                    <img src={cls.sprite} alt={cls.name} className="h-28 object-contain drop-shadow-lg sm:h-40" />
+                    <img src={assetUrl(cls.sprite)} alt={cls.name} className="h-28 object-contain drop-shadow-lg sm:h-40" />
                   </div>
                   
                   <div className="p-4 sm:p-5">
@@ -4465,7 +4477,7 @@ export default function App() {
         {/* Background */}
         <div 
           className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: "url(/bg_combat_relic.svg)" }}
+          style={assetBackground("/bg_combat_relic.svg")}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#1A1A2E]/70 via-[#1A1A2E]/50 to-[#1A1A2E]/80" />
         
@@ -4512,7 +4524,7 @@ export default function App() {
           >
             <div className="action-cast-card">
               {combat.actionEffect.casterSprite ? (
-                <img src={combat.actionEffect.casterSprite} alt="" className="h-9 w-9 object-contain" />
+                <img src={assetUrl(combat.actionEffect.casterSprite)} alt="" className="h-9 w-9 object-contain" />
               ) : combat.actionEffect.type === "shuffle" ? (
                 <RotateCcw className="h-5 w-5" />
               ) : combat.actionEffect.type === "ward" ? (
@@ -4700,7 +4712,7 @@ export default function App() {
                         } as CSSProperties}
                       >
                         <img
-                          src={member.sprite}
+                          src={assetUrl(member.sprite)}
                           alt={member.name}
                           className="h-20 w-20 object-contain sm:h-16 sm:w-16 md:h-20 md:w-20"
                         />
@@ -4735,7 +4747,7 @@ export default function App() {
                     <span>{currentEnemyIntentShort}</span>
                   </div>
                   <img
-                    src={currentEnemy.def.sprite}
+                    src={assetUrl(currentEnemy.def.sprite)}
                     alt={currentEnemy.def.name}
                     className="h-36 w-36 object-contain sm:h-32 sm:w-32 md:h-40 md:w-40"
                     style={{
@@ -4792,7 +4804,7 @@ export default function App() {
                               animationDelay: `${index * 100}ms`,
                             }}
                           >
-                            {caster && <img src={caster.sprite} alt="" />}
+                            {caster && <img src={assetUrl(caster.sprite)} alt="" />}
                             <RuneGlyph kind={kind} />
                           </div>
                           <div
@@ -5127,7 +5139,7 @@ export default function App() {
 
                   <div className="relative grid min-h-0 flex-1 grid-cols-[1fr_0.95fr_1fr] items-center gap-2">
                     <div className={`justify-self-center text-center ${cinematicPlayerClass}`}>
-                      <img src={selectedClass?.sprite} alt="Player" className="mx-auto h-16 object-contain drop-shadow-2xl sm:h-20 md:h-24" />
+                      <img src={assetUrl(selectedClass?.sprite)} alt="Player" className="mx-auto h-16 object-contain drop-shadow-2xl sm:h-20 md:h-24" />
                       <div className="mt-1 text-[11px] font-bold text-gray-200 sm:text-xs">
                         HP {activeCinematic.playerHpBefore} {"->"} {activeCinematic.playerHpAfter}
                       </div>
@@ -5164,7 +5176,7 @@ export default function App() {
 
                     <div className={`justify-self-center text-center ${cinematicEnemyClass}`}>
                       <img
-                        src={activeCinematic.enemySprite}
+                        src={assetUrl(activeCinematic.enemySprite)}
                         alt={activeCinematic.enemyName}
                         className="mx-auto h-16 object-contain drop-shadow-2xl sm:h-20 md:h-24"
                         style={{
@@ -5639,7 +5651,7 @@ export default function App() {
                       title={skill ? `${skill.name}: ${skill.description}` : member.passive}
                     >
                       <div className="flex items-center gap-2">
-                        <img src={member.sprite} alt="" className="h-7 w-7 object-contain" />
+                        <img src={assetUrl(member.sprite)} alt="" className="h-7 w-7 object-contain" />
                         <div className="min-w-0">
                           <div className="truncate text-xs font-bold text-white">{member.name}</div>
                           <div className="truncate text-[10px]" style={{ color: tile.color }}>{skill?.name || "Passive"}</div>
@@ -5697,7 +5709,7 @@ export default function App() {
 
               <div className="flex items-center gap-2 sm:gap-4">
                 <div className={`relative transition-all duration-300 ${combat.playerAnim === "hit" ? "player-hit" : combat.playerAnim === "heal" ? "player-heal" : ""}`}>
-                  <img src={selectedClass?.sprite} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
+                  <img src={assetUrl(selectedClass?.sprite)} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
                   {combat.activeBuffs.length > 0 && (
                     <div className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-yellow-400 animate-pulse" />
                   )}
@@ -6032,7 +6044,7 @@ export default function App() {
     
     return (
       <div className="relative h-screen w-full overflow-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: "url(/bg_combat_relic.svg)" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={assetBackground("/bg_combat_relic.svg")} />
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6">
           <h2 
             className="text-4xl font-bold mb-2"
@@ -6206,7 +6218,7 @@ export default function App() {
     
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: "url(/bg_combat_relic.svg)" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={assetBackground("/bg_combat_relic.svg")} />
         <div className="absolute inset-0 bg-gradient-to-b from-red-900/20 to-[#1A1A2E]" />
         
         <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
@@ -6244,7 +6256,7 @@ export default function App() {
             </div>
             
             <div className="mt-4 pt-4 border-t border-[#0F3460] flex items-center justify-center gap-2">
-              <img src="/wisdom_orb_relic.svg" alt="" className="w-6 h-6" />
+              <img src={assetUrl("/wisdom_orb_relic.svg")} alt="" className="w-6 h-6" />
               <span className="text-yellow-400 font-bold text-lg">+{orbsEarned} Wisdom Orbs</span>
             </div>
           </div>
@@ -6255,7 +6267,7 @@ export default function App() {
             const cls = getClassById(check.classId);
             return (
               <div key={check.classId} className="bg-purple-500/20 border border-purple-500 rounded-xl p-4 mb-4 max-w-md w-full flex items-center gap-4">
-                <img src={cls?.sprite} alt="" className="w-12 h-12 object-contain" />
+                <img src={assetUrl(cls?.sprite)} alt="" className="w-12 h-12 object-contain" />
                 <div>
                   <p className="text-purple-400 font-bold">New Class Unlocked!</p>
                   <p className="text-white">{cls?.name} is now available</p>
@@ -6300,7 +6312,7 @@ export default function App() {
   if (screen === "meta") {
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage: "url(/bg_menu_relic.svg)" }} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={assetBackground("/bg_menu_relic.svg")} />
         
         <div className="relative z-10 h-full flex flex-col">
           {/* Header */}
@@ -6314,7 +6326,7 @@ export default function App() {
             </button>
             <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "Cinzel, Georgia, serif" }}>Deck Upgrades</h2>
             <div className="flex items-center gap-2">
-              <img src="/wisdom_orb_relic.svg" alt="" className="w-6 h-6" />
+              <img src={assetUrl("/wisdom_orb_relic.svg")} alt="" className="w-6 h-6" />
               <span className="text-yellow-400 font-bold">{save.wisdomOrbs}</span>
             </div>
           </div>
@@ -6339,7 +6351,7 @@ export default function App() {
                     }`}
                   >
                     <div className="flex items-center gap-3 mb-3">
-                      <img src={cls.sprite} alt="" className="w-12 h-12 object-contain" />
+                      <img src={assetUrl(cls.sprite)} alt="" className="w-12 h-12 object-contain" />
                       <div>
                         <h4 className="text-white font-bold">{cls.name}</h4>
                         <p className="text-gray-500 text-xs">{cls.passiveDescription}</p>
@@ -6402,7 +6414,7 @@ export default function App() {
                     style={{ borderColor: isUnlocked ? `${tile.color}88` : "rgba(75,85,99,0.8)" }}
                   >
                     <div className="mb-2 flex items-center gap-2">
-                      <img src={character.sprite} alt="" className="h-10 w-10 object-contain" />
+                      <img src={assetUrl(character.sprite)} alt="" className="h-10 w-10 object-contain" />
                       <div className="min-w-0">
                         <div className="truncate text-sm font-bold text-white">{character.name}</div>
                         <div className="truncate text-xs" style={{ color: tile.color }}>{TILE_DEFS[character.element].label}</div>
