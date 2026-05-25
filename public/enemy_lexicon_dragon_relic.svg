@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Lexicon dragon relic enemy">
+  <defs><radialGradient id="g" cx="50%" cy="48%" r="60%"><stop offset="0" stop-color="#b96346" stop-opacity=".5"/><stop offset=".52" stop-color="#7b6a9d" stop-opacity=".22"/><stop offset="1" stop-color="#0e1016" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="250" r="188" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="250" r="164" stroke-opacity=".25" stroke-width="3"/>
+    <circle cx="256" cy="250" r="102" stroke-opacity=".18" stroke-width="2"/>
+    <path d="M256 28v456M80 250h352" stroke-opacity=".34" stroke-width="2"/>
+    <path d="M256 86c-56 48-78 92-64 132 12 34 44 44 64 82 20-38 52-48 64-82 14-40-8-84-64-132z" fill="#151119" fill-opacity=".84" stroke-width="5"/>
+    <path d="M168 198C120 210 88 244 68 300c58-18 104-8 138 30M344 198c48 12 80 46 100 102-58-18-104-8-138 30" stroke-width="5"/>
+    <path d="M210 348c28 46 58 72 92 96M302 348c-28 46-58 72-92 96" stroke-width="4"/>
+    <path d="M256 130c-24 34-18 70 0 104 18-34 24-70 0-104z" stroke="#b96346" stroke-width="7"/>
+    <path d="M222 226l34 24 34-24M208 278c32 18 64 18 96 0M198 316c42 22 74 22 116 0" stroke="#c2ad72" stroke-width="4"/>
+    <path d="M190 112l-54-54M322 112l54-54M172 386l-72 54M340 386l72 54" stroke-opacity=".5" stroke-width="3"/>
+  </g>
+  <g fill="#b96346" opacity=".6"><circle cx="124" cy="212" r="5"/><circle cx="388" cy="212" r="5"/><rect x="250" y="64" width="12" height="12" transform="rotate(45 256 70)"/></g>
+</svg>

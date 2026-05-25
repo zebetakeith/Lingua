@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Archive wisp relic enemy">
+  <defs><radialGradient id="g" cx="50%" cy="48%" r="58%"><stop offset="0" stop-color="#c2ad72" stop-opacity=".48"/><stop offset="1" stop-color="#11131a" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="246" r="176" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="246" r="150" stroke-opacity=".26" stroke-width="3"/>
+    <path d="M256 48v416M106 246h300" stroke-opacity=".34" stroke-width="2"/>
+    <path d="M174 178c42-28 72-24 82 8 10-32 40-36 82-8v168c-42-28-72-24-82 8-10-32-40-36-82-8z" fill="#12141a" fill-opacity=".78" stroke-width="5"/>
+    <path d="M206 224h100M206 258h100M206 292h100" stroke="#c2ad72" stroke-width="4"/>
+    <path d="M142 148c46-48 82-56 114-24 32-32 68-24 114 24M142 382c46 48 82 56 114 24 32 32 68 24 114-24" stroke-opacity=".52" stroke-width="3"/>
+    <path d="M256 94l18 34-18 34-18-34zM126 246l-28-28M386 246l28-28" stroke-width="3"/>
+  </g>
+  <g fill="#c2ad72" opacity=".58"><circle cx="156" cy="148" r="4"/><circle cx="356" cy="148" r="4"/><rect x="250" y="430" width="12" height="12" transform="rotate(45 256 436)"/></g>
+</svg>

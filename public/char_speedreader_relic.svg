@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Speedreader relic character">
+  <defs><radialGradient id="g" cx="50%" cy="44%" r="58%"><stop offset="0" stop-color="#b96346" stop-opacity=".5"/><stop offset="1" stop-color="#12141d" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="246" r="178" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="246" r="150" stroke-opacity=".25" stroke-width="3"/>
+    <path d="M256 42v428M138 246h236" stroke-opacity=".38" stroke-width="2"/>
+    <path d="M258 120c-62 68-68 146-18 236l18 32 18-32c50-90 44-168-18-236z" fill="#16131a" fill-opacity=".76" stroke-width="5"/>
+    <path d="M256 138c-22 48 18 72-14 112-22 27-14 64 14 90 28-26 36-63 14-90-32-40 8-64-14-112z" stroke="#b96346" stroke-width="6"/>
+    <path d="M184 226l-86 44 80 24M328 226l86 44-80 24" stroke-width="4"/>
+    <path d="M190 174l-54-54M322 174l54-54M196 374l-46 58M316 374l46 58" stroke-opacity=".5" stroke-width="3"/>
+    <path d="M214 238l84-84M218 278l98-98M226 318l76-76" stroke="#b96346" stroke-opacity=".72" stroke-width="3"/>
+  </g>
+  <g fill="#b96346" opacity=".56"><circle cx="164" cy="154" r="4"/><circle cx="348" cy="154" r="4"/><rect x="250" y="78" width="12" height="12" transform="rotate(45 256 84)"/></g>
+</svg>

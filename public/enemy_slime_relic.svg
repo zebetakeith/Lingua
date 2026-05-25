@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Memory slime relic enemy">
+  <defs><radialGradient id="g" cx="50%" cy="52%" r="55%"><stop offset="0" stop-color="#6fa6b2" stop-opacity=".55"/><stop offset="1" stop-color="#0d151d" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="258" r="172" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="258" r="150" stroke-opacity=".25" stroke-width="3"/>
+    <path d="M256 70v372M112 258h288" stroke-opacity=".32" stroke-width="2"/>
+    <path d="M146 318c4-92 48-150 110-150s106 58 110 150c2 50-32 76-72 52-18 38-58 38-76 0-40 24-74-2-72-52z" fill="#0e1820" fill-opacity=".82" stroke-width="5"/>
+    <path d="M206 280c16-16 32-16 48 0M258 280c16-16 32-16 48 0M214 324c30 20 54 20 84 0" stroke="#6fa6b2" stroke-width="5"/>
+    <path d="M180 372c-4 34-18 52-42 62M332 372c4 34 18 52 42 62M256 168c-24-34-22-62 0-92 22 30 24 58 0 92z" stroke-opacity=".54" stroke-width="3"/>
+  </g>
+  <g fill="#6fa6b2" opacity=".58"><circle cx="174" cy="182" r="5"/><circle cx="338" cy="182" r="5"/><circle cx="256" cy="438" r="4"/></g>
+</svg>

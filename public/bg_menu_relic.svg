@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Fallen machine cathedral menu backdrop">
+  <defs>
+    <radialGradient id="a" cx="50%" cy="44%" r="70%">
+      <stop offset="0" stop-color="#273247"/>
+      <stop offset=".48" stop-color="#111827"/>
+      <stop offset="1" stop-color="#07090f"/>
+    </radialGradient>
+    <linearGradient id="b" x1="0" x2="1">
+      <stop offset="0" stop-color="#6fa6b2" stop-opacity=".08"/>
+      <stop offset=".5" stop-color="#c2ad72" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#7b6a9d" stop-opacity=".08"/>
+    </linearGradient>
+    <filter id="n">
+      <feTurbulence baseFrequency=".78" numOctaves="3" seed="12" type="fractalNoise"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="table" tableValues="0 .18"/></feComponentTransfer>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#a)"/>
+  <rect width="1600" height="900" fill="url(#b)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M800 842V128" stroke-opacity=".34" stroke-width="2"/>
+    <path d="M230 842V360C230 188 388 72 800 72s570 116 570 288v482" stroke-opacity=".12" stroke-width="5"/>
+    <path d="M326 842V414c0-132 126-224 474-224s474 92 474 224v428" stroke-opacity=".16" stroke-width="3"/>
+    <path d="M470 842V470c0-90 82-154 330-154s330 64 330 154v372" stroke-opacity=".2" stroke-width="2"/>
+    <circle cx="800" cy="384" r="206" stroke-opacity=".16" stroke-width="2"/>
+    <circle cx="800" cy="384" r="148" stroke-opacity=".2" stroke-width="1.4"/>
+    <circle cx="800" cy="384" r="72" stroke-opacity=".24" stroke-width="1.2"/>
+    <path d="M800 132l34 64-34 64-34-64zM800 510l26 48-26 48-26-48z" stroke-opacity=".38" stroke-width="2"/>
+    <path d="M568 612h464M610 654h380M650 696h300" stroke-opacity=".12" stroke-width="2"/>
+  </g>
+  <g fill="#d8d1bc" opacity=".32">
+    <circle cx="392" cy="247" r="3"/><circle cx="1208" cy="247" r="3"/><circle cx="800" cy="86" r="3"/>
+    <rect x="490" y="292" width="7" height="7" transform="rotate(45 493.5 295.5)"/>
+    <rect x="1103" y="292" width="7" height="7" transform="rotate(45 1106.5 295.5)"/>
+    <rect x="795" y="666" width="10" height="10" transform="rotate(45 800 671)"/>
+  </g>
+  <g stroke="#6fa6b2" stroke-opacity=".22" stroke-width="1">
+    <path d="M286 258h58m-29-29v58M1256 258h58m-29-29v58M694 214h212M716 232h168"/>
+    <path d="M330 762h160m620 0h160M358 790h104m676 0h104"/>
+  </g>
+  <rect width="1600" height="900" filter="url(#n)" opacity=".55"/>
+</svg>

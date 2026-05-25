@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Duskblade relic character">
+  <defs><radialGradient id="g" cx="50%" cy="44%" r="58%"><stop offset="0" stop-color="#7b6a9d" stop-opacity=".5"/><stop offset="1" stop-color="#12141d" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="246" r="178" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="246" r="150" stroke-opacity=".26" stroke-width="3"/>
+    <path d="M256 42v428M120 246h272" stroke-opacity=".36" stroke-width="2"/>
+    <path d="M256 112c-58 54-82 116-70 186 8 50 36 84 70 110 34-26 62-60 70-110 12-70-12-132-70-186z" fill="#11101a" fill-opacity=".82" stroke-width="5"/>
+    <path d="M256 154c-32 32-34 82 0 116 34-34 32-84 0-116z" stroke="#7b6a9d" stroke-width="6"/>
+    <path d="M208 356l96-204M304 356l-96-204M178 216l-92 92M334 216l92 92" stroke-width="4"/>
+    <path d="M198 118c42-34 74-34 116 0M198 412c42-30 74-30 116 0" stroke-opacity=".52" stroke-width="3"/>
+    <path d="M256 80l18 34-18 34-18-34zM142 366h56M314 366h56" stroke="#7b6a9d" stroke-opacity=".72" stroke-width="3"/>
+  </g>
+  <g fill="#7b6a9d" opacity=".62"><circle cx="154" cy="154" r="4"/><circle cx="358" cy="154" r="4"/><rect x="250" y="434" width="12" height="12" transform="rotate(45 256 440)"/></g>
+</svg>

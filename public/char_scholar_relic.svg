@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Scholar relic character">
+  <defs><radialGradient id="g" cx="50%" cy="44%" r="58%"><stop offset="0" stop-color="#6fa6b2" stop-opacity=".48"/><stop offset="1" stop-color="#12141d" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="246" r="178" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="246" r="152" stroke-opacity=".28" stroke-width="3"/>
+    <circle cx="256" cy="246" r="72" stroke-opacity=".24" stroke-width="2"/>
+    <path d="M256 42v428M108 246h296" stroke-opacity=".38" stroke-width="2"/>
+    <path d="M256 118c-48 46-72 96-72 150 0 62 30 108 72 136 42-28 72-74 72-136 0-54-24-104-72-150z" fill="#101823" fill-opacity=".78" stroke-width="5"/>
+    <path d="M206 232c32-22 68-22 100 0M206 268c32 22 68 22 100 0M218 304c24 18 52 18 76 0" stroke="#6fa6b2" stroke-width="5"/>
+    <path d="M176 170c36-24 64-18 80 18 16-36 44-42 80-18M174 382c40-26 66-22 82 4 16-26 42-30 82-4" stroke-width="3"/>
+    <path d="M256 84l20 36-20 36-20-36zM130 322c38-4 74 4 108 24M382 322c-38-4-74 4-108 24" stroke-opacity=".52" stroke-width="3"/>
+  </g>
+  <g fill="#6fa6b2" opacity=".58"><circle cx="126" cy="246" r="4"/><circle cx="386" cy="246" r="4"/><rect x="250" y="430" width="12" height="12" transform="rotate(45 256 436)"/></g>
+</svg>

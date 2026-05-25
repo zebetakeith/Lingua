@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Shadow core relic enemy">
+  <defs><radialGradient id="g" cx="50%" cy="48%" r="58%"><stop offset="0" stop-color="#7b6a9d" stop-opacity=".52"/><stop offset="1" stop-color="#090910" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="250" r="178" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="250" r="152" stroke-opacity=".25" stroke-width="3"/>
+    <circle cx="256" cy="250" r="86" stroke-opacity=".2" stroke-width="2"/>
+    <path d="M256 40v432M104 250h304" stroke-opacity=".34" stroke-width="2"/>
+    <path d="M256 102c-62 50-82 96-62 144 16 40 62 60 62 148 0-88 46-108 62-148 20-48 0-94-62-144z" fill="#0d0c13" fill-opacity=".86" stroke-width="5"/>
+    <path d="M256 174c-34 28-34 72 0 100 34-28 34-72 0-100z" stroke="#7b6a9d" stroke-width="7"/>
+    <path d="M160 250c46-26 78-22 96 0 18-22 50-26 96 0M146 320c62-18 94-4 110 42 16-46 48-60 110-42" stroke-width="4"/>
+    <path d="M190 136l-58-58M322 136l58-58M190 410l-58 58M322 410l58 58" stroke-opacity=".48" stroke-width="3"/>
+  </g>
+  <g fill="#7b6a9d" opacity=".62"><circle cx="144" cy="250" r="4"/><circle cx="368" cy="250" r="4"/><rect x="250" y="74" width="12" height="12" transform="rotate(45 256 80)"/></g>
+</svg>

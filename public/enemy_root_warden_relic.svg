@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Root warden relic enemy">
+  <defs><radialGradient id="g" cx="50%" cy="48%" r="58%"><stop offset="0" stop-color="#7f925b" stop-opacity=".5"/><stop offset="1" stop-color="#101610" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="250" r="178" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="250" r="152" stroke-opacity=".25" stroke-width="3"/>
+    <path d="M256 54v408M106 250h300" stroke-opacity=".32" stroke-width="2"/>
+    <path d="M256 116c-58 36-94 94-94 160 0 74 46 120 94 146 48-26 94-72 94-146 0-66-36-124-94-160z" fill="#121a14" fill-opacity=".82" stroke-width="6"/>
+    <path d="M256 136v232M256 220c-42-28-76-22-112 18M256 238c42-28 76-22 112 18M256 306c-42 2-74 18-96 58M256 320c42 2 74 18 96 58" stroke="#7f925b" stroke-width="6"/>
+    <path d="M196 184h120M206 246h100M216 288h80" stroke-width="3"/>
+    <path d="M150 178l-54-64M362 178l54-64M180 424l-76 44M332 424l76 44" stroke-opacity=".48" stroke-width="4"/>
+  </g>
+  <g fill="#7f925b" opacity=".58"><circle cx="170" cy="156" r="5"/><circle cx="342" cy="156" r="5"/><rect x="250" y="74" width="12" height="12" transform="rotate(45 256 80)"/></g>
+</svg>

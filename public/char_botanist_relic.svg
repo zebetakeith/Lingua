@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Botanist relic character">
+  <defs><radialGradient id="g" cx="50%" cy="44%" r="58%"><stop offset="0" stop-color="#7f925b" stop-opacity=".48"/><stop offset="1" stop-color="#12141d" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="246" r="178" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="246" r="152" stroke-opacity=".28" stroke-width="3"/>
+    <path d="M256 42v428M132 246h248" stroke-opacity=".38" stroke-width="2"/>
+    <path d="M256 130c-50 40-74 88-74 146 0 68 38 112 74 132 36-20 74-64 74-132 0-58-24-106-74-146z" fill="#121a14" fill-opacity=".78" stroke-width="5"/>
+    <path d="M256 146v220M256 220c-38-18-70-4-94 42M256 238c38-18 70-4 94 42M256 292c-34-6-60 8-78 44M256 306c34-6 60 8 78 44" stroke="#7f925b" stroke-width="5"/>
+    <path d="M196 174c34-42 70-42 120 0M190 392c42-34 90-34 132 0" stroke-width="3"/>
+    <path d="M158 170l-42-56M354 170l42-56M170 418l-40 48M342 418l40 48" stroke-opacity=".48" stroke-width="3"/>
+  </g>
+  <g fill="#7f925b" opacity=".58"><circle cx="156" cy="146" r="4"/><circle cx="356" cy="146" r="4"/><rect x="250" y="82" width="12" height="12" transform="rotate(45 256 88)"/></g>
+</svg>

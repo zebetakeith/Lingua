@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Ruined ritual interface combat backdrop">
+  <defs>
+    <radialGradient id="a" cx="50%" cy="36%" r="78%">
+      <stop offset="0" stop-color="#263348"/>
+      <stop offset=".45" stop-color="#111828"/>
+      <stop offset="1" stop-color="#06080d"/>
+    </radialGradient>
+    <filter id="n">
+      <feTurbulence baseFrequency=".62" numOctaves="4" seed="22" type="fractalNoise"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="table" tableValues="0 .14"/></feComponentTransfer>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#a)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#d8d1bc" stroke-opacity=".15">
+      <path d="M94 768h1412M154 712h1292M210 658h1180" stroke-width="3"/>
+      <path d="M174 660V256h220v404M1206 660V256h220v404" stroke-width="4"/>
+      <path d="M218 258c0-86 44-130 66-154 22 24 66 68 66 154M1250 258c0-86 44-130 66-154 22 24 66 68 66 154" stroke-width="2"/>
+      <path d="M414 660V302h160v358M1026 660V302h160v358" stroke-width="2"/>
+      <path d="M502 660V140M1098 660V140M800 690V84" stroke-width="2"/>
+    </g>
+    <g stroke="#6fa6b2" stroke-opacity=".2">
+      <circle cx="800" cy="394" r="238" stroke-width="2"/>
+      <circle cx="800" cy="394" r="168" stroke-width="1.4"/>
+      <path d="M562 394h476M800 156v476M686 198l228 392M914 198L686 590" stroke-width="1"/>
+    </g>
+    <g stroke="#c2ad72" stroke-opacity=".2">
+      <path d="M736 238l64-112 64 112-64 112zM760 548l40-70 40 70-40 70z" stroke-width="2"/>
+      <path d="M452 594h80m536 0h80M472 616h40m576 0h40" stroke-width="1.6"/>
+    </g>
+    <g stroke="#7b6a9d" stroke-opacity=".16" stroke-width="1">
+      <path d="M340 384c88-34 178-34 266 0M994 384c88-34 178-34 266 0"/>
+      <path d="M360 426c76-24 154-24 230 0M1010 426c76-24 154-24 230 0"/>
+    </g>
+  </g>
+  <g fill="#d8d1bc" opacity=".22">
+    <rect x="244" y="350" width="6" height="6" transform="rotate(45 247 353)"/>
+    <rect x="1350" y="350" width="6" height="6" transform="rotate(45 1353 353)"/>
+    <rect x="797" y="722" width="8" height="8" transform="rotate(45 801 726)"/>
+    <circle cx="800" cy="126" r="3"/><circle cx="502" cy="142" r="2.5"/><circle cx="1098" cy="142" r="2.5"/>
+  </g>
+  <rect width="1600" height="900" filter="url(#n)" opacity=".58"/>
+</svg>

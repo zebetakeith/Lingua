@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Linguist relic character">
+  <defs><radialGradient id="g" cx="50%" cy="44%" r="58%"><stop offset="0" stop-color="#c2ad72" stop-opacity=".52"/><stop offset="1" stop-color="#12141d" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="246" r="178" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="246" r="154" stroke-opacity=".28" stroke-width="3"/>
+    <circle cx="256" cy="246" r="104" stroke-opacity=".24" stroke-width="2"/>
+    <path d="M256 42v428M194 84l62 90 62-90M174 404h164" stroke-opacity=".44" stroke-width="3"/>
+    <path d="M256 154c-42 18-70 58-70 105 0 76 39 132 70 154 31-22 70-78 70-154 0-47-28-87-70-105z" fill="#11141d" fill-opacity=".72" stroke-width="5"/>
+    <path d="M213 254h86M218 282h76M224 310h64" stroke="#c2ad72" stroke-width="4"/>
+    <path d="M170 190c34-12 60-4 86 26 26-30 52-38 86-26M166 358c42-24 68-22 90 0 22-22 48-24 90 0" stroke-width="3"/>
+    <path d="M126 212l-44 122 112-62M386 212l44 122-112-62" stroke-opacity=".54" stroke-width="4"/>
+    <path d="M148 184l-30-68M364 184l30-68M256 106l18-32-18-32-18 32z" stroke-opacity=".5" stroke-width="3"/>
+  </g>
+  <g fill="#d8d1bc" opacity=".44"><circle cx="156" cy="138" r="4"/><circle cx="356" cy="138" r="4"/><rect x="250" y="432" width="12" height="12" transform="rotate(45 256 438)"/></g>
+</svg>

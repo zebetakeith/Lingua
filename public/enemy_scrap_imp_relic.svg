@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Scrap imp relic enemy">
+  <defs><radialGradient id="g" cx="50%" cy="48%" r="58%"><stop offset="0" stop-color="#b96346" stop-opacity=".48"/><stop offset="1" stop-color="#0e1118" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="256" cy="248" r="172" fill="url(#g)"/>
+  <g fill="none" stroke="#d8d1bc" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="256" cy="248" r="146" stroke-opacity=".24" stroke-width="3"/>
+    <path d="M256 62v392M118 248h276" stroke-opacity=".32" stroke-width="2"/>
+    <path d="M196 176l-54-66 86 34M316 176l54-66-86 34" stroke-width="5"/>
+    <path d="M256 144c-54 34-84 86-76 148 8 64 42 104 76 126 34-22 68-62 76-126 8-62-22-114-76-148z" fill="#171216" fill-opacity=".82" stroke-width="5"/>
+    <path d="M212 252l34 22M300 252l-34 22M218 328c30-14 46-14 76 0" stroke="#b96346" stroke-width="5"/>
+    <path d="M156 320l-72 42M356 320l72 42M196 408l-40 48M316 408l40 48" stroke-opacity=".5" stroke-width="4"/>
+    <path d="M224 188h64M236 208h40" stroke-width="3"/>
+  </g>
+  <g fill="#b96346" opacity=".6"><circle cx="190" cy="138" r="4"/><circle cx="322" cy="138" r="4"/><rect x="250" y="72" width="12" height="12" transform="rotate(45 256 78)"/></g>
+</svg>
