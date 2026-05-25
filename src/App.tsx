@@ -4,7 +4,15 @@ import VOCABULARY, { getRandomWord, generateDistractors, type VocabWord } from "
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
 import { CLASSES, getClassById } from "./data/classes";
 import { getEncounterForFloor, type EncounterInfo } from "./game/encounters";
-import { getEnemyAttackFrequency, getEnemyIntent, getEnemyIntentDetail, getEnemySpecialText } from "./game/enemyRules";
+import {
+  getEnemyActionPlan,
+  getEnemyApForTurn,
+  getEnemyAttackFrequency,
+  getEnemyIntent,
+  getEnemyIntentDetail,
+  getEnemySpecialText,
+  type EnemyPlanContext,
+} from "./game/enemyRules";
 import {
   CHARACTER_DEFS,
   RELIC_DEFS,
@@ -1133,10 +1141,13 @@ function getActionLabel(member: CharacterDef, action: PlayerActionId): string {
   return getSkillById(member.skillId)?.name || "Skill";
 }
 
-function getEnemyApForTurn(enemy: EnemyInstance): number {
-  if (enemy.def.isBoss) return 3;
-  if (enemy.def.special) return 2;
-  return 1;
+function getEnemyPlanContext(state: CombatState): EnemyPlanContext {
+  return {
+    actionPointsSpentThisWindow: state.actionPointsSpentThisWindow,
+    healedOrDefendedThisWindow: state.healedOrDefendedThisWindow,
+    nextStudyShuffle: state.nextStudyShuffle,
+    skillCharge: state.skillCharge,
+  };
 }
 
 function getEnemyCountdownLabel(enemy: EnemyInstance): string {
@@ -1171,20 +1182,34 @@ function getBattlefieldSource(kind: TileKind, party: CharacterDef[], fallbackInd
   };
 }
 
-function getEnemyIntentShortLabel(enemy?: EnemyInstance | null): string {
+function getEnemyIntentShortLabel(enemy?: EnemyInstance | null, context?: EnemyPlanContext): string {
   if (!enemy) return "";
-  if (enemy.attackCharge <= 1) return `${enemy.currentDamage}`;
   if (enemy.shield > 0) return `SHIELD ${enemy.shield}`;
-  const special = getEnemySpecialText(enemy.def.special);
-  return special ? special : `${enemy.attackCharge}`;
+  const plan = getEnemyActionPlan(enemy, context);
+  const specialAction = plan.find(action => action.id !== "strike");
+  if (specialAction) {
+    if (specialAction.id === "scramble_answers") return "SCRAMBLE";
+    if (specialAction.id === "chill_timer") return "CHILL";
+    if (specialAction.id === "drain_focus") return "DRAIN";
+    if (specialAction.id === "delay_actor") return "DELAY";
+    if (specialAction.id === "self_repair") return "REPAIR";
+    if (specialAction.id === "exploit_hesitation") return "AP CHECK";
+    if (specialAction.id === "punish_neglect") return "HEAL CHECK";
+    if (specialAction.id === "boss_protocol") return "PROTOCOL";
+    if (specialAction.id === "boss_pressure") return "PRESSURE";
+    return specialAction.name.toUpperCase();
+  }
+  const totalDamage = plan.reduce((total, action) => total + action.damage, 0);
+  return totalDamage > 0 ? `${totalDamage}` : "READY";
 }
 
-function getEnemyIntentIcon(enemy?: EnemyInstance | null): "attack" | "shield" | "special" | "timer" {
+function getEnemyIntentIcon(enemy?: EnemyInstance | null, context?: EnemyPlanContext): "attack" | "shield" | "special" | "timer" {
   if (!enemy) return "timer";
-  if (enemy.attackCharge <= 1) return "attack";
   if (enemy.shield > 0) return "shield";
-  if (enemy.def.special) return "special";
-  return "timer";
+  const plan = getEnemyActionPlan(enemy, context);
+  if (plan.some(action => action.id === "chill_timer" || action.id === "drain_focus")) return "timer";
+  if (plan.some(action => action.id !== "strike")) return "special";
+  return "attack";
 }
 
 function getRuneStatusTitle(status?: RuneStatus | null): string {
@@ -3113,11 +3138,13 @@ export default function App() {
     const enemy = baseState.enemies[baseState.currentEnemyIndex];
     if (!enemy || enemy.isDead) return;
 
-    const enemyIntentBefore = getEnemyIntent(enemy);
+    const enemyPlanContext = getEnemyPlanContext(baseState);
+    const actionPlan = getEnemyActionPlan(enemy, enemyPlanContext);
+    const enemyIntentBefore = getEnemyIntent(enemy, enemyPlanContext);
     const playerHpBefore = baseState.playerHp;
     let nextEnemies = [...baseState.enemies];
     let nextBuffs = [...baseState.activeBuffs];
-    let incomingDamage = enemy.currentDamage;
+    let incomingDamage = actionPlan.reduce((total, action) => total + action.damage, 0);
     let wardBlocked = false;
     const combatNotices: CombatNotice[] = [];
     const resolutionNotes: string[] = [];
@@ -3125,25 +3152,9 @@ export default function App() {
     let nextStudyShuffle = baseState.nextStudyShuffle;
     let apPenaltyNextRush = baseState.apPenaltyNextRush;
     let nextQueue = [...baseState.turnQueue];
-    let specialLabel = "";
     const enemyApBudget = getEnemyApForTurn(enemy);
-    let enemyApSpent = Math.min(1, enemyApBudget);
-
-    if (enemy.def.special === "low_combo_punish" && baseState.actionPointsSpentThisWindow < 3 && enemyApSpent < enemyApBudget) {
-      const penaltyDamage = Math.max(4, Math.floor(enemy.currentDamage * 0.45));
-      incomingDamage += penaltyDamage;
-      enemyApSpent += 1;
-      specialLabel = "Low AP spend punished";
-      resolutionNotes.push(`${enemy.def.name} punished spending fewer than 3 AP for +${penaltyDamage} damage.`);
-    }
-
-    if (enemy.def.special === "healing_check" && !baseState.healedOrDefendedThisWindow && enemyApSpent < enemyApBudget) {
-      const penaltyDamage = Math.max(5, Math.floor(enemy.currentDamage * 0.35));
-      incomingDamage += penaltyDamage;
-      enemyApSpent += 1;
-      specialLabel = "Healing check failed";
-      resolutionNotes.push(`${enemy.def.name} punished the party for not healing or defending.`);
-    }
+    const enemyApSpent = Math.max(1, Math.min(enemyApBudget, actionPlan.reduce((total, action) => total + action.apCost, 0)));
+    const enemyActionName = actionPlan.map(action => action.name).join(" + ") || "Wait";
 
     if (baseState.fragileDebuff > 0) {
       const fragileDamage = baseState.fragileDebuff * 3;
@@ -3164,51 +3175,43 @@ export default function App() {
       combatNotices.push(createCombatNotice("Defended", `Incoming damage reduced to ${incomingDamage}.`, "good"));
     }
 
-    if (!wardBlocked && enemyApSpent < enemyApBudget) {
-      if (enemy.def.special === "shuffle_answers") {
-        nextStudyShuffle = true;
-        enemyApSpent += 1;
-        specialLabel = "Answers scrambled";
-        resolutionNotes.push("Next study rush answer order will be scrambled.");
-      } else if (enemy.def.special === "freeze_timer") {
-        nextBuffs.push({ type: "timer_slow", remaining: 1 });
-        enemyApSpent += 1;
-        specialLabel = "Timer chilled";
-        resolutionNotes.push("Next study rush timer is shortened.");
-      } else if (enemy.def.special === "timer_drain") {
-        nextSkillCharge = Math.max(0, nextSkillCharge - 3);
-        apPenaltyNextRush = 1;
-        enemyApSpent += 1;
-        specialLabel = "Focus drained";
-        resolutionNotes.push("Focus drained and the first correct card next rush earns 1 less AP.");
-      } else if (enemy.def.special === "randomize_positions") {
-        nextQueue = delayPartyMember(nextQueue, 55);
-        enemyApSpent += 1;
-        specialLabel = "Timeline disrupted";
-        resolutionNotes.push("A random party member was delayed on the timeline.");
-      } else if (enemy.def.special === "self_heal") {
-        const healAmount = Math.max(6, Math.floor(enemy.maxHp * 0.12));
-        nextEnemies[baseState.currentEnemyIndex] = {
-          ...nextEnemies[baseState.currentEnemyIndex],
-          hp: Math.min(enemy.maxHp, nextEnemies[baseState.currentEnemyIndex].hp + healAmount),
-        };
-        enemyApSpent += 1;
-        specialLabel = "Self repair";
-        resolutionNotes.push(`${enemy.def.name} restored ${healAmount} HP.`);
-      } else if (enemy.def.special === "three_phase") {
-        nextBuffs.push({ type: "timer_slow", remaining: 1 });
-        apPenaltyNextRush = Math.max(apPenaltyNextRush, 1);
-        enemyApSpent += 1;
-        specialLabel = "Boss protocol";
-        resolutionNotes.push("Boss protocol chilled study and reduced next AP gain.");
+    if (!wardBlocked) {
+      for (const action of actionPlan) {
+        if (action.id === "scramble_answers") {
+          if (nextStudyShuffle) continue;
+          nextStudyShuffle = true;
+          resolutionNotes.push("Next study rush answer order will be scrambled.");
+        } else if (action.id === "chill_timer") {
+          nextBuffs.push({ type: "timer_slow", remaining: 1 });
+          resolutionNotes.push("Next study rush timer is shortened.");
+        } else if (action.id === "drain_focus") {
+          nextSkillCharge = Math.max(0, nextSkillCharge - 3);
+          apPenaltyNextRush = 1;
+          resolutionNotes.push("Focus drained and the first correct card next rush earns 1 less AP.");
+        } else if (action.id === "delay_actor") {
+          nextQueue = delayPartyMember(nextQueue, 55);
+          resolutionNotes.push("A random party member was delayed on the timeline.");
+        } else if (action.id === "self_repair") {
+          const missingHp = Math.max(0, enemy.maxHp - nextEnemies[baseState.currentEnemyIndex].hp);
+          const healAmount = Math.min(missingHp, Math.max(6, Math.floor(enemy.maxHp * 0.12)));
+          if (healAmount <= 0) continue;
+          nextEnemies[baseState.currentEnemyIndex] = {
+            ...nextEnemies[baseState.currentEnemyIndex],
+            hp: Math.min(enemy.maxHp, nextEnemies[baseState.currentEnemyIndex].hp + healAmount),
+          };
+          resolutionNotes.push(`${enemy.def.name} restored ${healAmount} HP.`);
+        } else if (action.id === "exploit_hesitation") {
+          resolutionNotes.push(`${enemy.def.name} punished spending fewer than 3 AP.`);
+        } else if (action.id === "punish_neglect") {
+          resolutionNotes.push(`${enemy.def.name} punished the party for not healing or defending.`);
+        } else if (action.id === "boss_protocol") {
+          nextBuffs.push({ type: "timer_slow", remaining: 1 });
+          apPenaltyNextRush = Math.max(apPenaltyNextRush, 1);
+          resolutionNotes.push("Boss protocol chilled study and reduced next AP gain.");
+        } else if (action.id === "boss_pressure") {
+          resolutionNotes.push(`${enemy.def.name} spent extra AP on pressure.`);
+        }
       }
-    }
-
-    if (!wardBlocked && enemy.def.isBoss && enemyApSpent < enemyApBudget) {
-      const pressureDamage = Math.max(3, Math.floor(enemy.currentDamage * 0.25));
-      incomingDamage += pressureDamage;
-      enemyApSpent += 1;
-      resolutionNotes.push(`${enemy.def.name} spent extra AP on pressure for +${pressureDamage} damage.`);
     }
 
     const nextPlayerHp = Math.max(0, baseState.playerHp - incomingDamage);
@@ -3218,8 +3221,8 @@ export default function App() {
       combatNotices.push(createCombatNotice("Relic: Shadow Bargain", "Taking damage charged +2 Focus.", "relic"));
     }
     const enemyActionLabel = wardBlocked
-      ? `Ward blocked ${enemy.def.name}'s action.`
-      : `${enemy.def.name} struck for ${incomingDamage}.`;
+      ? `Ward blocked ${enemy.def.name}'s ${enemyActionName}.`
+      : `${enemy.def.name} used ${enemyActionName} for ${incomingDamage}.`;
 
     if (!wardBlocked) {
       combatNotices.push(createCombatNotice("Enemy Action", enemyActionLabel, incomingDamage > 0 ? "bad" : "neutral"));
@@ -3292,7 +3295,6 @@ export default function App() {
       eventNotices: appendCombatNotices(baseState.eventNotices, [
         createCombatNotice("Enemy AP", `${enemy.def.name} spent ${enemyApSpent}/${enemyApBudget} AP.`, "neutral"),
         ...combatNotices,
-        ...(specialLabel ? [createCombatNotice("Enemy Special", specialLabel, "warn")] : []),
       ]),
       damageNumbers: incomingDamage > 0 ? [
         ...baseState.damageNumbers,
@@ -3309,7 +3311,7 @@ export default function App() {
       playerAnim: incomingDamage > 0 ? "hit" : null,
       screenShake: incomingDamage > 0 ? 6 : 0,
       flashColor: incomingDamage > 0 ? "rgba(255,71,87,0.18)" : "rgba(69,169,255,0.12)",
-      boardMessage: isGameOver ? "You were defeated." : `${enemy.def.name} spent ${enemyApSpent}/${enemyApBudget} AP. Study rush coming up.`,
+      boardMessage: isGameOver ? "You were defeated." : `${enemy.def.name} used ${enemyActionName}. Study rush coming up.`,
     };
 
     setCombat(nextState);
@@ -3507,7 +3509,7 @@ export default function App() {
       stats,
       enemy,
       {
-        enemyIntent: getEnemyIntent(enemy),
+        enemyIntent: getEnemyIntent(enemy, getEnemyPlanContext(combat)),
         enemyHpBefore,
         enemyHpAfter,
         shieldBefore,
@@ -4567,10 +4569,11 @@ export default function App() {
 
   // ─── Render Helpers ───────────────────────────────────
   const currentEnemy = combat?.enemies[combat.currentEnemyIndex];
-  const currentEnemyIntent = currentEnemy ? getEnemyIntentDetail(currentEnemy) : null;
+  const currentEnemyPlanContext = combat ? getEnemyPlanContext(combat) : undefined;
+  const currentEnemyIntent = currentEnemy ? getEnemyIntentDetail(currentEnemy, currentEnemyPlanContext) : null;
   const currentEnemyPuzzle = getEnemyPuzzleHint(currentEnemy);
-  const currentEnemyIntentIcon = getEnemyIntentIcon(currentEnemy);
-  const currentEnemyIntentShort = getEnemyIntentShortLabel(currentEnemy);
+  const currentEnemyIntentIcon = getEnemyIntentIcon(currentEnemy, currentEnemyPlanContext);
+  const currentEnemyIntentShort = getEnemyIntentShortLabel(currentEnemy, currentEnemyPlanContext);
   const timerPct = combat ? (combat.timerLeft / combat.timerMax) * 100 : 0;
   const timerColor = timerPct > 60 ? "#2ECC71" : timerPct > 30 ? "#F39C12" : "#FF4757";
   const activeDeck = getActiveDeck(save);
@@ -5796,8 +5799,27 @@ export default function App() {
                   <span className="rounded bg-black/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide">
                     {currentEnemyIntent?.severity === "high" ? "Incoming" : currentEnemyIntent?.severity === "medium" ? "Tactic" : "Intent"}
                   </span>
-                  <span>{currentEnemyIntent?.label || getEnemyIntent(currentEnemy)}</span>
+                  <span>{currentEnemyIntent?.label || getEnemyIntent(currentEnemy, currentEnemyPlanContext)}</span>
                 </div>
+                {currentEnemyIntent?.actions && currentEnemyIntent.actions.length > 0 && (
+                  <div className="mt-1 flex flex-wrap justify-center gap-1">
+                    {currentEnemyIntent.actions.map(action => (
+                      <span
+                        key={action.id}
+                        title={action.description}
+                        className={`rounded border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${
+                          action.severity === "high"
+                            ? "border-red-300/35 bg-red-300/10 text-red-100"
+                            : action.severity === "medium"
+                              ? "border-yellow-300/30 bg-yellow-300/10 text-yellow-100"
+                              : "border-blue-200/20 bg-blue-200/10 text-blue-100"
+                        }`}
+                      >
+                        {action.name} {action.apCost}AP
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {currentEnemyIntent?.counterplay && (
                   <div className="mt-0.5 text-[10px] font-medium leading-tight text-gray-300">
                     {currentEnemyIntent.counterplay}
