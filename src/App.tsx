@@ -174,6 +174,8 @@ interface CombatState {
   actionPointsEarnedThisRush: number;
   actionPointsSpentThisWindow: number;
   actionPointCarryCap: number;
+  enemyActionPoints: number;
+  enemyActionPointsSpentThisTurn: number;
   turnQueue: TurnQueueEntry[];
   activeActorId: string | null;
   exposedTurns: number;
@@ -360,8 +362,8 @@ const RUNE_FALL_MS = 560;
 const CASCADE_PAUSE_MS = 120;
 const INLINE_COMBAT_BASE_MS = 2600;
 const MAX_STUDY_AP_PER_CARD = 5;
-const PLAYER_ACTION_DELAY = 100;
-const ENEMY_ACTION_DELAY = 92;
+const PLAYER_ACTION_DELAY = 20;
+const ENEMY_ACTION_DELAY = 70;
 
 const TILE_DEFS: Record<TileKind, { label: string; sigil: string; color: string; dark: string; glow: string }> = {
   flame: { label: "Flame", sigil: "Ignis", color: "#D66B4D", dark: "#461A13", glow: "rgba(214,107,77,0.5)" },
@@ -1020,8 +1022,8 @@ function getEnemySpeed(enemy: EnemyInstance): number {
   return enemy.def.isBoss ? base + 8 : base;
 }
 
-function getActionDelay(speed: number, base: number): number {
-  return Math.max(42, Math.round((base * 100) / Math.max(35, speed)));
+function getTimelineActionDelay(speed: number, base: number, actionCost = 1): number {
+  return Math.max(12, Math.round((base * Math.max(1, actionCost) * 100) / Math.max(35, speed)));
 }
 
 function sortTurnQueue(queue: TurnQueueEntry[]): TurnQueueEntry[] {
@@ -1051,7 +1053,7 @@ function buildTurnQueue(party: CharacterDef[], enemies: EnemyInstance[]): TurnQu
         name: enemy.def.name,
         element: enemy.def.element,
         speed,
-        actionValue: 42 + index * 18,
+        actionValue: 58 + index * 18,
         avatar: enemy.def.sprite,
       };
     });
@@ -1059,13 +1061,13 @@ function buildTurnQueue(party: CharacterDef[], enemies: EnemyInstance[]): TurnQu
   return sortTurnQueue([...partyEntries, ...enemyEntries]);
 }
 
-function advanceTimelineAfterAction(queue: TurnQueueEntry[], actorId: string, extraDelay = 0): TurnQueueEntry[] {
+function advanceTimelineByCost(queue: TurnQueueEntry[], actorId: string, actionCost = 1, extraDelay = 0): TurnQueueEntry[] {
   return sortTurnQueue(queue.map(entry => {
     if (entry.id !== actorId) return entry;
     const baseDelay = entry.kind === "enemy" ? ENEMY_ACTION_DELAY : PLAYER_ACTION_DELAY;
     return {
       ...entry,
-      actionValue: entry.actionValue + getActionDelay(entry.speed, baseDelay) + extraDelay,
+      actionValue: entry.actionValue + getTimelineActionDelay(entry.speed, baseDelay, actionCost) + extraDelay,
     };
   }));
 }
@@ -1104,6 +1106,12 @@ function getActionLabel(member: CharacterDef, action: PlayerActionId): string {
   if (action === "attack") return "Attack";
   if (action === "defend") return "Defend";
   return getSkillById(member.skillId)?.name || "Skill";
+}
+
+function getEnemyApForTurn(enemy: EnemyInstance): number {
+  if (enemy.def.isBoss) return 3;
+  if (enemy.def.special) return 2;
+  return 1;
 }
 
 function getEnemyCountdownLabel(enemy: EnemyInstance): string {
@@ -1960,6 +1968,8 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     actionPointsEarnedThisRush: 0,
     actionPointsSpentThisWindow: 0,
     actionPointCarryCap: 0,
+    enemyActionPoints: 0,
+    enemyActionPointsSpentThisTurn: 0,
     turnQueue: buildTurnQueue(runParty, enemies),
     activeActorId: null,
     exposedTurns: 0,
@@ -3033,14 +3043,19 @@ export default function App() {
 
   const beginCommandPhase = () => {
     if (!combat || combat.mode !== "commandReady" || combat.phase !== "answering" || combat.isPaused) return;
-    if (combat.actionPoints <= 0) {
+    const currentActor = getCurrentActor(combat);
+    if (currentActor?.kind === "enemy") {
       resolveEnemyActionFromState(combat);
       return;
     }
 
-    const currentActor = getCurrentActor(combat);
-    if (currentActor?.kind === "enemy") {
-      resolveEnemyActionFromState(combat);
+    if (combat.actionPoints <= 0) {
+      setCombat({
+        ...combat,
+        mode: "studyReady",
+        activeActorId: currentActor?.id || null,
+        boardMessage: "No AP earned. Study again before the enemy reaches the front.",
+      });
       return;
     }
 
@@ -3078,17 +3093,21 @@ export default function App() {
     let apPenaltyNextRush = baseState.apPenaltyNextRush;
     let nextQueue = [...baseState.turnQueue];
     let specialLabel = "";
+    const enemyApBudget = getEnemyApForTurn(enemy);
+    let enemyApSpent = Math.min(1, enemyApBudget);
 
-    if (enemy.def.special === "low_combo_punish" && baseState.actionPointsSpentThisWindow < 3) {
+    if (enemy.def.special === "low_combo_punish" && baseState.actionPointsSpentThisWindow < 3 && enemyApSpent < enemyApBudget) {
       const penaltyDamage = Math.max(4, Math.floor(enemy.currentDamage * 0.45));
       incomingDamage += penaltyDamage;
+      enemyApSpent += 1;
       specialLabel = "Low AP spend punished";
       resolutionNotes.push(`${enemy.def.name} punished spending fewer than 3 AP for +${penaltyDamage} damage.`);
     }
 
-    if (enemy.def.special === "healing_check" && !baseState.healedOrDefendedThisWindow) {
+    if (enemy.def.special === "healing_check" && !baseState.healedOrDefendedThisWindow && enemyApSpent < enemyApBudget) {
       const penaltyDamage = Math.max(5, Math.floor(enemy.currentDamage * 0.35));
       incomingDamage += penaltyDamage;
+      enemyApSpent += 1;
       specialLabel = "Healing check failed";
       resolutionNotes.push(`${enemy.def.name} punished the party for not healing or defending.`);
     }
@@ -3112,31 +3131,26 @@ export default function App() {
       combatNotices.push(createCombatNotice("Defended", `Incoming damage reduced to ${incomingDamage}.`, "good"));
     }
 
-    let nextPlayerHp = Math.max(0, baseState.playerHp - incomingDamage);
-    let enemyActionLabel = wardBlocked
-      ? `Ward blocked ${enemy.def.name}'s action.`
-      : `${enemy.def.name} struck for ${incomingDamage}.`;
-
-    if (!wardBlocked) {
-      combatNotices.push(createCombatNotice("Enemy Action", enemyActionLabel, incomingDamage > 0 ? "bad" : "neutral"));
-    }
-
-    if (!wardBlocked) {
+    if (!wardBlocked && enemyApSpent < enemyApBudget) {
       if (enemy.def.special === "shuffle_answers") {
         nextStudyShuffle = true;
+        enemyApSpent += 1;
         specialLabel = "Answers scrambled";
         resolutionNotes.push("Next study rush answer order will be scrambled.");
       } else if (enemy.def.special === "freeze_timer") {
         nextBuffs.push({ type: "timer_slow", remaining: 1 });
+        enemyApSpent += 1;
         specialLabel = "Timer chilled";
         resolutionNotes.push("Next study rush timer is shortened.");
       } else if (enemy.def.special === "timer_drain") {
         nextSkillCharge = Math.max(0, nextSkillCharge - 3);
         apPenaltyNextRush = 1;
+        enemyApSpent += 1;
         specialLabel = "Focus drained";
         resolutionNotes.push("Focus drained and the first correct card next rush earns 1 less AP.");
       } else if (enemy.def.special === "randomize_positions") {
         nextQueue = delayPartyMember(nextQueue, 55);
+        enemyApSpent += 1;
         specialLabel = "Timeline disrupted";
         resolutionNotes.push("A random party member was delayed on the timeline.");
       } else if (enemy.def.special === "self_heal") {
@@ -3145,21 +3159,39 @@ export default function App() {
           ...nextEnemies[baseState.currentEnemyIndex],
           hp: Math.min(enemy.maxHp, nextEnemies[baseState.currentEnemyIndex].hp + healAmount),
         };
+        enemyApSpent += 1;
         specialLabel = "Self repair";
         resolutionNotes.push(`${enemy.def.name} restored ${healAmount} HP.`);
       } else if (enemy.def.special === "three_phase") {
         nextBuffs.push({ type: "timer_slow", remaining: 1 });
         apPenaltyNextRush = Math.max(apPenaltyNextRush, 1);
+        enemyApSpent += 1;
         specialLabel = "Boss protocol";
         resolutionNotes.push("Boss protocol chilled study and reduced next AP gain.");
       }
+    }
+
+    if (!wardBlocked && enemy.def.isBoss && enemyApSpent < enemyApBudget) {
+      const pressureDamage = Math.max(3, Math.floor(enemy.currentDamage * 0.25));
+      incomingDamage += pressureDamage;
+      enemyApSpent += 1;
+      resolutionNotes.push(`${enemy.def.name} spent extra AP on pressure for +${pressureDamage} damage.`);
+    }
+
+    const nextPlayerHp = Math.max(0, baseState.playerHp - incomingDamage);
+    const enemyActionLabel = wardBlocked
+      ? `Ward blocked ${enemy.def.name}'s action.`
+      : `${enemy.def.name} struck for ${incomingDamage}.`;
+
+    if (!wardBlocked) {
+      combatNotices.push(createCombatNotice("Enemy Action", enemyActionLabel, incomingDamage > 0 ? "bad" : "neutral"));
     }
 
     const enemyActor = getCurrentActor(baseState)?.kind === "enemy"
       ? getCurrentActor(baseState)
       : baseState.turnQueue.find(entry => entry.kind === "enemy" && entry.refId === enemy.def.id);
     if (enemyActor) {
-      nextQueue = advanceTimelineAfterAction(nextQueue, enemyActor.id, enemy.def.special === "sequential" ? -18 : 0);
+      nextQueue = advanceTimelineByCost(nextQueue, enemyActor.id, Math.max(1, enemyApSpent), enemy.def.special === "sequential" ? -18 : 0);
     }
 
     const isGameOver = nextPlayerHp <= 0;
@@ -3173,7 +3205,7 @@ export default function App() {
       playerHpBefore,
       nextPlayerHp,
       enemyActionLabel,
-      resolutionNotes
+      [`Enemy AP: ${enemyApSpent}/${enemyApBudget}.`, ...resolutionNotes]
     );
     const cinematic = createActionCinematic(
       stats,
@@ -3208,6 +3240,8 @@ export default function App() {
       actionPoints: Math.min(baseState.actionPointCarryCap, baseState.actionPoints),
       actionPointsEarnedThisRush: 0,
       actionPointsSpentThisWindow: 0,
+      enemyActionPoints: enemyApBudget,
+      enemyActionPointsSpentThisTurn: enemyApSpent,
       healedOrDefendedThisWindow: false,
       apPenaltyNextRush,
       nextStudyShuffle,
@@ -3218,6 +3252,7 @@ export default function App() {
       cinematicStepIndex: 0,
       combatLog,
       eventNotices: appendCombatNotices(baseState.eventNotices, [
+        createCombatNotice("Enemy AP", `${enemy.def.name} spent ${enemyApSpent}/${enemyApBudget} AP.`, "neutral"),
         ...combatNotices,
         ...(specialLabel ? [createCombatNotice("Enemy Special", specialLabel, "warn")] : []),
       ]),
@@ -3236,7 +3271,7 @@ export default function App() {
       playerAnim: incomingDamage > 0 ? "hit" : null,
       screenShake: incomingDamage > 0 ? 6 : 0,
       flashColor: incomingDamage > 0 ? "rgba(255,71,87,0.18)" : "rgba(69,169,255,0.12)",
-      boardMessage: isGameOver ? "You were defeated." : "Enemy acted. Study rush coming up.",
+      boardMessage: isGameOver ? "You were defeated." : `${enemy.def.name} spent ${enemyApSpent}/${enemyApBudget} AP. Study rush coming up.`,
     };
 
     setCombat(nextState);
@@ -3354,7 +3389,7 @@ export default function App() {
     let nextEnemies = [...combat.enemies];
     let enemyHpAfter = enemy.hp;
     let currentEnemyIndex = combat.currentEnemyIndex;
-    let nextQueue = advanceTimelineAfterAction(combat.turnQueue, actor.id, actionDelay);
+    let nextQueue = advanceTimelineByCost(combat.turnQueue, actor.id, baseCost, actionDelay);
     let phaseBanner = combat.showPhaseBanner;
 
     if (defense.shieldDamage > 0 || defense.hpDamage > 0) {
@@ -3506,10 +3541,10 @@ export default function App() {
       score: combat.score + defense.hpDamage + defense.shieldDamage + healAmount + baseCost * 6,
       boardMessage: allDead
         ? "Room cleared. Choose a reward."
-        : nextActionPoints <= 0
-          ? "AP spent. Enemy action incoming."
-          : getCurrentActor({ ...combat, turnQueue: nextQueue })?.kind === "enemy"
-            ? "Enemy reached the front of the timeline."
+        : getCurrentActor({ ...combat, turnQueue: nextQueue })?.kind === "enemy"
+          ? "Enemy reached the front of the timeline."
+          : nextActionPoints <= 0
+            ? "AP spent. Study again before the enemy reaches the front."
             : `${nextActionPoints} AP remains.`,
     };
 
@@ -3521,10 +3556,25 @@ export default function App() {
     }
 
     const nextActor = getCurrentActor(nextState);
-    const shouldEnemyAct = nextActionPoints <= 0 || nextActor?.kind === "enemy";
+    const enemyIsNext = nextActor?.kind === "enemy";
+    const apExhausted = nextActionPoints <= 0;
     window.setTimeout(() => {
-      if (shouldEnemyAct) {
+      if (enemyIsNext) {
         resolveEnemyActionFromState(nextState);
+      } else if (apExhausted) {
+        setCombat(prev => prev && prev.cinematic?.id === cinematic.id ? {
+          ...prev,
+          mode: "studyReady",
+          phase: "answering",
+          cinematic: null,
+          cinematicStepIndex: 0,
+          enemyAnim: null,
+          playerAnim: null,
+          activeActorId: getCurrentActor(prev)?.id || null,
+          actionPoints: Math.min(prev.actionPointCarryCap, prev.actionPoints),
+          actionPointsEarnedThisRush: 0,
+          boardMessage: "AP spent. Study again before the enemy reaches the front.",
+        } : prev);
       } else {
         setCombat(prev => prev && prev.cinematic?.id === cinematic.id ? {
           ...prev,
@@ -3536,12 +3586,24 @@ export default function App() {
           boardMessage: `${prev.actionPoints} AP remains. ${getCurrentActor(prev)?.name || "Next actor"} is ready.`,
         } : prev);
       }
-    }, shouldEnemyAct ? 950 : 650);
+    }, enemyIsNext ? 950 : 650);
   };
 
   const endCommandWindow = () => {
     if (!combat || combat.mode !== "command" || combat.phase !== "answering") return;
-    resolveEnemyActionFromState(combat);
+    if (getCurrentActor(combat)?.kind === "enemy") {
+      resolveEnemyActionFromState(combat);
+      return;
+    }
+
+    setCombat({
+      ...combat,
+      mode: "studyReady",
+      activeActorId: getCurrentActor(combat)?.id || null,
+      actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints),
+      actionPointsEarnedThisRush: 0,
+      boardMessage: "Command window ended. Study again before the enemy reaches the front.",
+    });
   };
 
   const commitResolvedBoardMove = (state: CombatState, result: MatchResult) => {
@@ -4238,6 +4300,8 @@ export default function App() {
       actionPointsEarnedThisRush: 0,
       actionPointsSpentThisWindow: 0,
       actionPointCarryCap: combat.actionPointCarryCap || 0,
+      enemyActionPoints: 0,
+      enemyActionPointsSpentThisTurn: 0,
       turnQueue: buildTurnQueue(nextRunParty, enemies),
       activeActorId: null,
       exposedTurns: 0,
@@ -4532,6 +4596,11 @@ export default function App() {
   const hasWard = combat?.activeBuffs.some(b => b.type === "ward") || false;
   const enhancedRuneCount = combat?.board.filter(tile => tile.status === "enhanced").length || 0;
   const cursedRuneCount = combat?.board.filter(tile => tile.status === "cursed").length || 0;
+  const enemyApBudget = currentEnemy ? getEnemyApForTurn(currentEnemy) : 0;
+  const enemyApSpentDisplay = combat?.mode === "enemyAction" ? combat.enemyActionPointsSpentThisTurn : 0;
+  const enemyApBudgetDisplay = combat?.mode === "enemyAction" && combat.enemyActionPoints > 0
+    ? combat.enemyActionPoints
+    : enemyApBudget;
 
   // ─── RENDER: Main Menu ────────────────────────────────
   if (screen === "menu") {
@@ -6049,7 +6118,7 @@ export default function App() {
                     })}
                   </div>
 
-                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                  <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
                     <div className="rounded-md bg-black/25 p-2">
                       <div className="text-gray-500">Focus</div>
                       <div className="font-bold text-cyan-100">{combat.skillCharge}/12</div>
@@ -6061,6 +6130,10 @@ export default function App() {
                     <div className="rounded-md bg-black/25 p-2">
                       <div className="text-gray-500">Spent</div>
                       <div className="font-bold text-yellow-100">{combat.actionPointsSpentThisWindow}</div>
+                    </div>
+                    <div className="rounded-md bg-black/25 p-2">
+                      <div className="text-gray-500">Enemy AP</div>
+                      <div className="font-bold text-red-100">{enemyApSpentDisplay}/{enemyApBudgetDisplay}</div>
                     </div>
                   </div>
                 </section>
@@ -6093,25 +6166,15 @@ export default function App() {
                     </div>
 
                     {combat.mode === "studyReady" && (
-                      <button
-                        onClick={beginStudyRound}
-                        disabled={combat.phase !== "answering" || combat.isPaused}
-                        className="flex w-full items-center justify-center gap-2 rounded-md bg-cyan-600 py-3 font-bold text-white transition-all hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-                      >
-                        <BookOpen className="h-4 w-4" />
-                        Start Study Rush
-                      </button>
+                      <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-50">
+                        Tap Ready below to start the timed study rush.
+                      </div>
                     )}
 
                     {combat.mode === "commandReady" && (
-                      <button
-                        onClick={beginCommandPhase}
-                        disabled={combat.phase !== "answering" || combat.isPaused}
-                        className="flex w-full items-center justify-center gap-2 rounded-md bg-[#E94560] py-3 font-bold text-white transition-all hover:bg-[#ff5b72] disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-                      >
-                        <Sword className="h-4 w-4" />
-                        Open Commands
-                      </button>
+                      <div className="rounded-md border border-[#E94560]/35 bg-[#E94560]/12 px-3 py-2 text-sm font-semibold text-pink-50">
+                        Tap Ready below to spend AP. Actions move the timeline; fast actors may act again before the enemy.
+                      </div>
                     )}
 
                     {combat.mode === "command" && activeCommandCharacter && (
