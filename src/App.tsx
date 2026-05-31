@@ -180,6 +180,7 @@ interface CombatState {
   powerPoints: number;
   actionPoints: number;
   actionPointsEarnedThisRush: number;
+  studyApGoal: number;
   actionPointsSpentThisWindow: number;
   actionPointCarryCap: number;
   enemyActionPoints: number;
@@ -360,7 +361,6 @@ const STARTER_DECK_SIZE = RUN_START_CARD_TARGET;
 const REWARD_CARD_COUNT = 3;
 const RELIC_CHOICE_COUNT = 3;
 const QUESTION_TIMER_BONUS = 8;
-const STUDY_WRONG_TIME_PENALTY = 1.5;
 const MIN_BOARD_MOVES = 3;
 const MIN_BOARD_TIME = 3;
 const MAX_BOARD_TIME = 8.5;
@@ -788,7 +788,7 @@ function getFocusBonusForCorrectCard(card: VocabWord): number {
 }
 
 function getStudyRushApCap(_state?: CombatState | null): number {
-  return STUDY_RUSH_AP_CAP;
+  return _state?.studyApGoal || STUDY_RUSH_AP_CAP;
 }
 
 function getRemainingStudyRushAp(state: CombatState): number {
@@ -1029,10 +1029,6 @@ function getQuestionTimerForFloor(floor: number): number {
   return getTimerForFloor(floor) + QUESTION_TIMER_BONUS;
 }
 
-function getWrongStudyPenalty(state: CombatState): number {
-  return state.runRelics.includes("tidal_memory") ? 0.8 : STUDY_WRONG_TIME_PENALTY;
-}
-
 function formatBoardTime(seconds: number): string {
   return `${Math.max(0, seconds).toFixed(1)}s`;
 }
@@ -1189,7 +1185,7 @@ function getEnemyIntentShortLabel(enemy?: EnemyInstance | null, context?: EnemyP
   const specialAction = plan.find(action => action.id !== "strike");
   if (specialAction) {
     if (specialAction.id === "scramble_answers") return "SCRAMBLE";
-    if (specialAction.id === "chill_timer") return "CHILL";
+    if (specialAction.id === "study_tax") return "STUDY TAX";
     if (specialAction.id === "drain_focus") return "DRAIN";
     if (specialAction.id === "delay_actor") return "DELAY";
     if (specialAction.id === "self_repair") return "REPAIR";
@@ -1207,7 +1203,7 @@ function getEnemyIntentIcon(enemy?: EnemyInstance | null, context?: EnemyPlanCon
   if (!enemy) return "timer";
   if (enemy.shield > 0) return "shield";
   const plan = getEnemyActionPlan(enemy, context);
-  if (plan.some(action => action.id === "chill_timer" || action.id === "drain_focus")) return "timer";
+  if (plan.some(action => action.id === "study_tax" || action.id === "drain_focus")) return "timer";
   if (plan.some(action => action.id !== "strike")) return "special";
   return "attack";
 }
@@ -1296,7 +1292,7 @@ function getRewardCardInsight(card: VocabWord, combatState?: CombatState | null)
     return {
       tag: relics.includes("hard_edge") ? "Hard Edge pick" : "Risk pick",
       text: relics.includes("hard_edge")
-        ? "Mark Hard for extra AP before the rush cap and extra Focus while you learn it."
+        ? "Mark Hard for extra AP before the study goal and extra Focus while you learn it."
         : "Harder study, better long-term deck growth and slower scaling.",
     };
   }
@@ -1334,8 +1330,8 @@ function getRelicChoiceReason(relic: RelicDef, combatState?: CombatState | null)
   if (relic.id === "heart_ward" || relic.id === "leaf_bloom" || relic.id === "greenhouse") return { tag: "Survival", text: special === "healing_check" ? "Strong into healing tests." : "Improves recovery turns." };
   if (relic.id === "elemental_index" || relic.id === "linebreaker") return { tag: "Weakness damage", text: enemy ? `Pairs with ${formatTileLabels(enemy.def.weakTo)} commands.` : "Rewards element planning." };
   if (relic.id === "hard_edge") return { tag: "Learning pressure", text: "Makes hard-rated cards worth fighting through." };
-  if (relic.id === "tidal_memory") return { tag: "Mistake buffer", text: "Wrong answers remove less study time." };
-  if (relic.id === "combo_spark") return { tag: "Rush engine", text: "4+ correct study rushes charge more Focus." };
+  if (relic.id === "tidal_memory") return { tag: "Mistake buffer", text: "Your first miss each study set still charges +1 Focus." };
+  if (relic.id === "combo_spark") return { tag: "Study engine", text: "4+ correct study sets charge more Focus." };
 
   return { tag: "Run modifier", text: "Changes how this deck fights for the rest of the run." };
 }
@@ -1700,7 +1696,7 @@ function getTimelineToneClasses(tone: CombatTimelineStep["tone"]): string {
 function getCinematicOutcome(cinematic: CombatCinematic): { label: string; tone: CombatTimelineStep["tone"] } {
   if (cinematic.roomCleared) return { label: "Room cleared", tone: "good" };
   if (cinematic.gameOverAfter) return { label: "Defeat", tone: "bad" };
-  return { label: "Next study burst", tone: "neutral" };
+  return { label: "Next study set", tone: "neutral" };
 }
 
 function buildCombatTimeline(cinematic: CombatCinematic): CombatTimelineStep[] {
@@ -2016,6 +2012,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     powerPoints: 0,
     actionPoints: 0,
     actionPointsEarnedThisRush: 0,
+    studyApGoal: STUDY_RUSH_AP_CAP,
     actionPointsSpentThisWindow: 0,
     actionPointCarryCap: 0,
     enemyActionPoints: 0,
@@ -2084,9 +2081,8 @@ export default function App() {
 
   // ─── Timer Logic ──────────────────────────────────────
   useEffect(() => {
-    const isStudyTimer = combat?.mode === "study";
     const isBoardTimer = combat?.mode === "board" && !combat.isResolvingRunes;
-    if (screen !== "combat" || !combat || combat.isPaused || combat.phase !== "answering" || (!isStudyTimer && !isBoardTimer)) {
+    if (screen !== "combat" || !combat || combat.isPaused || combat.phase !== "answering" || !isBoardTimer) {
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
@@ -2097,14 +2093,6 @@ export default function App() {
     timerRef.current = setInterval(() => {
       setCombat(prev => {
         if (!prev || prev.phase !== "answering" || prev.isPaused) return prev;
-        if (prev.mode === "study") {
-          const newLeft = prev.timerLeft - 0.1;
-          if (newLeft <= 0) {
-            finishStudyRound({ ...prev, timerLeft: 0 });
-            return prev;
-          }
-          return { ...prev, timerLeft: newLeft };
-        }
         if (prev.mode === "board" && !prev.isResolvingRunes) {
           const newLeft = prev.boardTimeLeft - 0.1;
           if (newLeft <= 0) {
@@ -2280,20 +2268,20 @@ export default function App() {
 
   const beginStudyRound = () => {
     if (!combat || combat.phase !== "answering" || combat.isPaused) return;
-    const hasTimerBoost = combat.activeBuffs.some(buff => buff.type === "timer_extend");
-    const hasTimerSlow = combat.activeBuffs.some(buff => buff.type === "timer_slow");
-    const timerMax = Math.max(4, getQuestionTimerForFloor(combat.difficultyFloor) + (hasTimerBoost ? 3 : 0) - (hasTimerSlow ? 2 : 0));
+    const hasStudyHeadStart = combat.activeBuffs.some(buff => buff.type === "study_head_start");
+    const hasStudyTax = combat.activeBuffs.some(buff => buff.type === "study_tax");
+    const headStartAp = hasStudyHeadStart ? 1 : 0;
+    const studyApGoal = STUDY_RUSH_AP_CAP + (hasStudyTax ? 1 : 0);
     const nextCardData = drawNextStudyCard(combat);
 
     setCombat({
       ...combat,
       ...nextCardData,
       mode: "study",
-      timerMax,
-      timerLeft: timerMax,
-      activeBuffs: combat.activeBuffs.filter(buff => buff.type !== "timer_extend" && buff.type !== "timer_slow"),
-      actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints),
-      actionPointsEarnedThisRush: 0,
+      activeBuffs: combat.activeBuffs.filter(buff => !["study_head_start", "study_tax", "timer_extend", "timer_slow"].includes(buff.type)),
+      actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints) + headStartAp,
+      actionPointsEarnedThisRush: headStartAp,
+      studyApGoal,
       actionPointsSpentThisWindow: 0,
       nextStudyShuffle: false,
       studyQuestionsTotal: 0,
@@ -2312,13 +2300,13 @@ export default function App() {
       dragTileStatus: null,
       pendingCinematic: null,
       cinematic: null,
-      boardMessage: `Study rush started. Correct cards earn AP${hasTimerSlow ? ". Enemy chill shortened the timer" : ""}${combat.nextStudyShuffle ? ". Answers were scrambled" : ""}.`,
+      boardMessage: `Study set started. Fill ${studyApGoal} AP to open commands${headStartAp ? " with a 1 AP head start" : ""}${hasStudyTax ? ". Enemy pressure added 1 AP to the goal" : ""}${combat.nextStudyShuffle ? ". Answers were scrambled" : ""}.`,
     });
   };
 
-  const finishStudyRound = (state: CombatState) => {
+  const finishStudyRound = (state: CombatState, saveData: SaveData = save) => {
     const answered = state.studyQuestionsTotal;
-    const nextSave = save;
+    const nextSave = saveData;
     const adjustedState = {
       ...state,
       deck: refillDeck(state.deck, nextSave),
@@ -2373,7 +2361,7 @@ export default function App() {
       pendingCinematic: null,
       cinematic: null,
       eventNotices: appendCombatNotices(adjustedState.eventNotices, studyNotices),
-      boardMessage: `Study rush done: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${adjustedState.actionPointsEarnedThisRush} AP and ${adjustedState.skillCharge}/12 Focus is ready.${studyStatusMessage}`,
+      boardMessage: `Study set complete: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${adjustedState.actionPointsEarnedThisRush} AP and ${adjustedState.skillCharge}/12 Focus is ready.${studyStatusMessage}`,
     });
   };
 
@@ -2427,10 +2415,9 @@ export default function App() {
     }, state.board);
   };
 
-  const handleCorrectAnswer = (state: CombatState, timeTaken: number) => {
+  const handleCorrectAnswer = (state: CombatState) => {
     if (!state.currentWord) return;
 
-    const speedBonus = Math.max(0, (state.timerMax - timeTaken) / state.timerMax);
     const cardRating = getRatingFromBox(getCardProgress(state.currentWord, save).box);
     const hardEdgeBonus = state.runRelics.includes("hard_edge") && cardRating === "hard" ? 1 : 0;
     const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
@@ -2441,7 +2428,7 @@ export default function App() {
     const nextSave = updateCardProgressFromAnswer(save, state.currentWord, true);
     const nextDeck = refillDeck(state.deck, nextSave);
     const answered = state.studyQuestionsTotal + 1;
-    const nextScore = state.score + 20 + Math.floor(speedBonus * 20);
+    const nextScore = state.score + 20 + earnedAp * 5;
     const learnedMessage = getActiveDeck(nextSave).cardRatings?.[state.currentWord.id] === "known" ? " Mastered and removed from study." : "";
     const comboSparkFocus = state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? 2 : 0;
     const focusGain = (state.runRelics.includes("deep_focus") ? 2 : 1) + hardEdgeBonus + comboSparkFocus + difficultyFocusBonus;
@@ -2449,8 +2436,8 @@ export default function App() {
       ...(hardEdgeBonus > 0 ? [createCombatNotice("Relic: Hard Edge", "Hard card answered: +1 AP before cap and +1 Focus.", "relic")] : []),
       ...(steadyGripBonus > 0 ? [createCombatNotice("Relic: Steady Grip", "First correct answer added +1 AP before cap.", "relic")] : []),
       ...(difficultyFocusBonus > 0 ? [createCombatNotice("Difficult Card", "Harder vocabulary charged +1 extra Focus.", "good")] : []),
-      ...(state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? [createCombatNotice("Relic: Rush Spark", "4 correct in one rush: +2 Focus.", "relic")] : []),
-      ...(apCapped ? [createCombatNotice("AP Cap", `Study rush AP is capped at ${getStudyRushApCap(state)} for now.`, "warn")] : []),
+      ...(state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? [createCombatNotice("Relic: Rush Spark", "4 correct in one study set: +2 Focus.", "relic")] : []),
+      ...(apCapped ? [createCombatNotice("AP Goal", `Study AP goal filled at ${getStudyRushApCap(state)}.`, "good")] : []),
     ];
     setSave(nextSave);
 
@@ -2468,14 +2455,16 @@ export default function App() {
       skillCharge: Math.min(12, state.skillCharge + focusGain),
       score: nextScore,
       eventNotices: appendCombatNotices(state.eventNotices, answerNotices),
-      boardMessage: `+${earnedAp} AP${apCapped ? " (rush cap)" : ""}. +${focusGain} Focus.${learnedMessage}`,
+      boardMessage: `+${earnedAp} AP${apCapped ? " (goal filled)" : ""}. +${focusGain} Focus.${learnedMessage}`,
       flashColor: "rgba(46,204,113,0.18)",
     };
 
-    setCombat({
-      ...nextState,
-      ...drawNextStudyCard(nextState, nextSave),
-    });
+    if (nextState.actionPointsEarnedThisRush >= getStudyRushApCap(nextState)) {
+      finishStudyRound(nextState, nextSave);
+      return;
+    }
+
+    setCombat({ ...nextState, ...drawNextStudyCard(nextState, nextSave) });
   };
 
   const handleWrongAnswer = (state: CombatState, selectedOption: string) => {
@@ -2483,11 +2472,10 @@ export default function App() {
     const nextSave = state.currentWord ? updateCardProgressFromAnswer(save, state.currentWord, false) : save;
     setSave(nextSave);
     const bloodQuill = state.runRelics.includes("blood_quill");
-    const penalty = getWrongStudyPenalty(state);
-    const nextTimerLeft = Math.max(0, Math.round((state.timerLeft - penalty) * 10) / 10);
     const answered = state.studyQuestionsTotal + 1;
     const bloodQuillAp = bloodQuill ? clampStudyRushAp(state, 1) : 0;
     const bloodQuillCapped = bloodQuill && bloodQuillAp === 0;
+    const tidalMemoryFocus = state.runRelics.includes("tidal_memory") && state.studyWrongRound === 0 ? 1 : 0;
     const nextState = {
       ...state,
       deck: refillDeck(state.deck, nextSave),
@@ -2498,7 +2486,7 @@ export default function App() {
       studyQuestionsLeft: 0,
       studyWrongRound: state.studyWrongRound + 1,
       wrongCount: state.wrongCount + 1,
-      timerLeft: nextTimerLeft,
+      skillCharge: Math.min(12, state.skillCharge + tidalMemoryFocus),
       phase: "wrong" as const,
       studyFeedback: missedWord ? {
         selected: selectedOption,
@@ -2508,10 +2496,14 @@ export default function App() {
       fragileDebuff: state.fragileDebuff + (bloodQuill ? 1 : 0),
       eventNotices: bloodQuill
         ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Blood Quill", bloodQuillCapped ? "AP cap blocked the miss AP, but Fragile still applies." : "+1 AP gained, but the next enemy hit hurts more.", bloodQuillCapped ? "warn" : "relic")])
-        : state.eventNotices,
+        : tidalMemoryFocus > 0
+          ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Tidal Memory", "First miss this study set still charged +1 Focus.", "relic")])
+          : state.eventNotices,
       boardMessage: bloodQuill
-        ? `Missed card. -${penalty.toFixed(1)}s study time. Blood Quill ${bloodQuillCapped ? "hit the AP cap" : `gave +${bloodQuillAp} AP`} and made you fragile.`
-        : `Missed card. -${penalty.toFixed(1)}s study time.`,
+        ? `Missed card. Blood Quill ${bloodQuillCapped ? "hit the AP goal" : `gave +${bloodQuillAp} AP`} and made you fragile.`
+        : tidalMemoryFocus > 0
+          ? "Missed card. Tidal Memory charged +1 Focus."
+          : "Missed card. Review the answer and keep building AP.",
       flashColor: "rgba(255,71,87,0.2)",
     };
 
@@ -2521,12 +2513,12 @@ export default function App() {
       const latestCombat = combatRef.current;
       if (!latestCombat || latestCombat.mode !== "study" || latestCombat.phase !== "wrong" || latestCombat.currentWord?.id !== missedWord?.id) return;
 
-      if (nextTimerLeft <= 0) {
+      if (nextState.actionPointsEarnedThisRush >= getStudyRushApCap(nextState)) {
         finishStudyRound({
           ...nextState,
           phase: "answering",
           studyFeedback: null,
-        });
+        }, nextSave);
         return;
       }
 
@@ -2961,13 +2953,13 @@ export default function App() {
             resolutionNotes.push(`${chargedEnemy.def.name} scrambled the rune board.`);
             combatNotices.push(createCombatNotice("Enemy Special", "Rune board scrambled.", "warn"));
           } else if (chargedEnemy.def.special === "freeze_timer") {
-            nextBuffs.push({ type: "timer_slow", remaining: 1 });
+            nextBuffs.push({ type: "study_tax", remaining: 1 });
             const curse = setRandomRuneStatus(nextBoard, "cursed", 2);
             nextBoard = curse.board;
             specialChangedTileIds = Array.from(new Set([...specialChangedTileIds, ...curse.changedIds]));
-            boardMessage += " The next study timer is chilled.";
-            resolutionNotes.push(`Next study burst is chilled and ${curse.changedIds.length} runes were cursed.`);
-            combatNotices.push(createCombatNotice("Enemy Special", "Study timer chilled; runes cursed.", "warn"));
+            boardMessage += " The next study goal costs 1 additional AP.";
+            resolutionNotes.push(`Next study goal increased and ${curse.changedIds.length} runes were cursed.`);
+            combatNotices.push(createCombatNotice("Enemy Special", "Study goal increased; runes cursed.", "warn"));
           } else if (chargedEnemy.def.special === "self_heal") {
             const healedHp = Math.min(chargedEnemy.maxHp, nextEnemies[currentEnemyIndex].hp + Math.max(6, Math.floor(chargedEnemy.maxHp * 0.12)));
             nextEnemies[currentEnemyIndex] = {
@@ -2979,13 +2971,13 @@ export default function App() {
             combatNotices.push(createCombatNotice("Enemy Special", `${chargedEnemy.def.name} healed.`, "warn"));
           } else if (chargedEnemy.def.special === "timer_drain") {
             nextSkillCharge = Math.max(0, nextSkillCharge - 3);
-            nextBuffs.push({ type: "timer_slow", remaining: 1 });
+            nextBuffs.push({ type: "study_tax", remaining: 1 });
             const curse = setRandomRuneStatus(nextBoard, "cursed", 3);
             nextBoard = curse.board;
             specialChangedTileIds = Array.from(new Set([...specialChangedTileIds, ...curse.changedIds]));
-            boardMessage += " Focus and study time are drained.";
-            resolutionNotes.push(`Focus lost, study was chilled, and ${curse.changedIds.length} runes were cursed.`);
-            combatNotices.push(createCombatNotice("Enemy Special", "Focus drained; next study chilled.", "bad"));
+            boardMessage += " Focus is drained and the next study goal rises.";
+            resolutionNotes.push(`Focus lost, study goal increased, and ${curse.changedIds.length} runes were cursed.`);
+            combatNotices.push(createCombatNotice("Enemy Special", "Focus drained; next study goal increased.", "bad"));
           } else if (chargedEnemy.def.special === "randomize_positions") {
             nextBoard = shuffleRuneBoard(nextBoard);
             const conversion = convertRandomRunes(nextBoard, "shadow", 2);
@@ -3002,9 +2994,9 @@ export default function App() {
             const curse = setRandomRuneStatus(nextBoard, "cursed", chargedEnemy.phase >= 3 ? 4 : 2, { kind: "shadow" });
             nextBoard = curse.board;
             specialChangedTileIds = Array.from(new Set([...conversion.changedIds, ...curse.changedIds]));
-            nextBuffs.push({ type: "timer_slow", remaining: 1 });
+            nextBuffs.push({ type: "study_tax", remaining: 1 });
             boardMessage += " The board is cursed for the next round.";
-            resolutionNotes.push(`Board curse: ${conversion.changedIds.length} runes turned Shadow, ${curse.changedIds.length} were cursed, and study was chilled.`);
+            resolutionNotes.push(`Board curse: ${conversion.changedIds.length} runes turned Shadow, ${curse.changedIds.length} were cursed, and the next study goal increased.`);
             combatNotices.push(createCombatNotice("Boss Special", "Board cursed for the next round.", "bad"));
           }
         }
@@ -3026,7 +3018,7 @@ export default function App() {
     finalStats = { ...finalStats, enemyDamage };
     enemyHpAfter = nextEnemies[state.currentEnemyIndex]?.hp ?? enemyHpAfter;
     const isGameOver = nextPlayerHp <= 0;
-    const nextMessage = isGameOver ? "You were defeated." : `${boardMessage} Study burst coming up.`;
+    const nextMessage = isGameOver ? "You were defeated." : `${boardMessage} Study set coming up.`;
     const combatLog = buildCombatLog(
       finalStats,
       enemy,
@@ -3180,10 +3172,10 @@ export default function App() {
         if (action.id === "scramble_answers") {
           if (nextStudyShuffle) continue;
           nextStudyShuffle = true;
-          resolutionNotes.push("Next study rush answer order will be scrambled.");
-        } else if (action.id === "chill_timer") {
-          nextBuffs.push({ type: "timer_slow", remaining: 1 });
-          resolutionNotes.push("Next study rush timer is shortened.");
+          resolutionNotes.push("Next study set answer order will be scrambled.");
+        } else if (action.id === "study_tax") {
+          nextBuffs.push({ type: "study_tax", remaining: 1 });
+          resolutionNotes.push("Next study set requires 1 additional AP.");
         } else if (action.id === "drain_focus") {
           nextSkillCharge = Math.max(0, nextSkillCharge - 3);
           apPenaltyNextRush = 1;
@@ -3205,9 +3197,9 @@ export default function App() {
         } else if (action.id === "punish_neglect") {
           resolutionNotes.push(`${enemy.def.name} punished the party for not healing or defending.`);
         } else if (action.id === "boss_protocol") {
-          nextBuffs.push({ type: "timer_slow", remaining: 1 });
+          nextBuffs.push({ type: "study_tax", remaining: 1 });
           apPenaltyNextRush = Math.max(apPenaltyNextRush, 1);
-          resolutionNotes.push("Boss protocol chilled study and reduced next AP gain.");
+          resolutionNotes.push("Boss protocol raised the next AP goal and reduced early AP gain.");
         } else if (action.id === "boss_pressure") {
           resolutionNotes.push(`${enemy.def.name} spent extra AP on pressure.`);
         }
@@ -3266,7 +3258,7 @@ export default function App() {
         log: combatLog,
       },
       isGameOver ? "enemyAction" : "studyReady",
-      isGameOver ? "You were defeated." : "Enemy acted. Study rush coming up.",
+      isGameOver ? "You were defeated." : "Enemy acted. Study set coming up.",
       false,
       isGameOver
     );
@@ -3311,7 +3303,7 @@ export default function App() {
       playerAnim: incomingDamage > 0 ? "hit" : null,
       screenShake: incomingDamage > 0 ? 6 : 0,
       flashColor: incomingDamage > 0 ? "rgba(255,71,87,0.18)" : "rgba(69,169,255,0.12)",
-      boardMessage: isGameOver ? "You were defeated." : `${enemy.def.name} used ${enemyActionName}. Study rush coming up.`,
+      boardMessage: isGameOver ? "You were defeated." : `${enemy.def.name} used ${enemyActionName}. Study set coming up.`,
     };
 
     setCombat(nextState);
@@ -3335,7 +3327,7 @@ export default function App() {
         enemyAnim: null,
         playerAnim: null,
         activeActorId: null,
-        boardMessage: "Study rush ready. Earn AP for the next command window.",
+        boardMessage: "Study set ready. Fill the AP goal to open the next command window.",
       } : prev);
     }, 1150);
   };
@@ -4139,11 +4131,10 @@ export default function App() {
   const handleAnswer = (selectedOption: string) => {
     if (!combat || combat.phase !== "answering" || combat.mode !== "study") return;
 
-    const timeTaken = combat.timerMax - combat.timerLeft;
     const isCorrect = combat.currentWord?.word === selectedOption;
     
     if (isCorrect) {
-      handleCorrectAnswer(combat, timeTaken);
+      handleCorrectAnswer(combat);
     } else {
       handleWrongAnswer(combat, selectedOption);
     }
@@ -4171,8 +4162,8 @@ export default function App() {
         abilityDetail = `Steady Hand added ${formatBoardTime(BOARD_TIME_SKILL_BONUS)} to the rune sprint.`;
         abilityTone = "good";
       } else {
-        newBuffs.push({ type: "timer_extend", remaining: 3 });
-        abilityDetail = "Next study burst gets extra time.";
+        newBuffs.push({ type: "study_head_start", remaining: 1 });
+        abilityDetail = "Next study set begins with +1 AP already prepared.";
         abilityTone = "good";
       }
     } else if (cls.id === "speedreader") {
@@ -4210,7 +4201,7 @@ export default function App() {
       boardMessage: cls.id === "speedreader"
         ? "Quickened Script discounted the next Flame command."
         : cls.id === "linguist"
-          ? isRuneScreen ? `Steady Hand added ${formatBoardTime(BOARD_TIME_SKILL_BONUS)} to the rune sprint.` : "Next study burst gets extra time."
+          ? isRuneScreen ? `Steady Hand added ${formatBoardTime(BOARD_TIME_SKILL_BONUS)} to the rune sprint.` : "Next study set begins with +1 AP already prepared."
           : cls.id === "scholar" && isRuneScreen
             ? "Ward will block the next enemy strike."
             : combat.boardMessage,
@@ -4343,6 +4334,7 @@ export default function App() {
       powerPoints: 0,
       actionPoints: 0,
       actionPointsEarnedThisRush: 0,
+      studyApGoal: STUDY_RUSH_AP_CAP,
       actionPointsSpentThisWindow: 0,
       actionPointCarryCap: combat.actionPointCarryCap || 0,
       enemyActionPoints: 0,
@@ -4574,8 +4566,6 @@ export default function App() {
   const currentEnemyPuzzle = getEnemyPuzzleHint(currentEnemy);
   const currentEnemyIntentIcon = getEnemyIntentIcon(currentEnemy, currentEnemyPlanContext);
   const currentEnemyIntentShort = getEnemyIntentShortLabel(currentEnemy, currentEnemyPlanContext);
-  const timerPct = combat ? (combat.timerLeft / combat.timerMax) * 100 : 0;
-  const timerColor = timerPct > 60 ? "#2ECC71" : timerPct > 30 ? "#F39C12" : "#FF4757";
   const activeDeck = getActiveDeck(save);
   const activeDeckStats = activeDeck.stats || createDeckStats();
   const activeDeckCards = activeDeck.cards.length;
@@ -4711,7 +4701,7 @@ export default function App() {
           {/* Play Button */}
           <button
             onClick={() => setScreen("classSelect")}
-            className="group relative mb-6 rounded-lg border border-[#c2ad72]/45 bg-gradient-to-r from-[#172733] via-[#1d2f38] to-[#332d18] px-12 py-4 text-xl font-bold text-[#eee8d3] shadow-[0_0_30px_rgba(194,173,114,0.16)] transition-all duration-200 hover:scale-105 hover:border-[#eee8d3]/55 hover:shadow-[0_0_34px_rgba(194,173,114,0.26)]"
+            className="group relative mb-6 max-w-[calc(100vw-2rem)] rounded-lg border border-[#c2ad72]/45 bg-gradient-to-r from-[#172733] via-[#1d2f38] to-[#332d18] px-5 py-4 text-base font-bold text-[#eee8d3] shadow-[0_0_30px_rgba(194,173,114,0.16)] transition-all duration-200 hover:scale-105 hover:border-[#eee8d3]/55 hover:shadow-[0_0_34px_rgba(194,173,114,0.26)] sm:px-12 sm:text-xl"
           >
             <span className="flex items-center gap-3">
               <Sword className="w-6 h-6" />
@@ -4786,8 +4776,8 @@ export default function App() {
               <div className="flex items-start gap-4">
                 <div className="p-2 bg-green-500/20 rounded-lg"><BookOpen className="w-6 h-6 text-green-400" /></div>
                 <div>
-                  <h3 className="text-white font-semibold">Study Rush</h3>
-                  <p className="text-sm">Answer as many flashcards as you can before time runs out. Misses cut the timer.</p>
+                  <h3 className="text-white font-semibold">Study Set</h3>
+                  <p className="text-sm">Answer flashcards until your AP goal is full. Misses show the correct answer so you can keep learning.</p>
                 </div>
               </div>
               
@@ -4795,7 +4785,7 @@ export default function App() {
                 <div className="p-2 bg-yellow-500/20 rounded-lg"><Zap className="w-6 h-6 text-yellow-400" /></div>
                 <div>
                   <h3 className="text-white font-semibold">Performance Matters</h3>
-                  <p className="text-sm">Correct answers earn AP. Hard cards are worth more, but each study rush has an AP cap.</p>
+                  <p className="text-sm">Correct answers earn AP. Hard cards are worth more, so difficult cards can open commands sooner.</p>
                 </div>
               </div>
               
@@ -5398,7 +5388,7 @@ export default function App() {
             <div className="w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
               <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Welcome to the Dungeon!</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-4 sm:text-sm">
-                Answer study bursts to earn AP, then spend it on party commands before the enemy reaches you.
+                Fill study AP goals with flashcards, then spend that AP on party commands before the enemy reaches you.
               </p>
               <button
                 onClick={() => setShowTutorial(false)}
@@ -6191,7 +6181,7 @@ export default function App() {
                       <div className="font-bold text-cyan-100">{combat.skillCharge}/12</div>
                     </div>
                     <div className="rounded-md bg-black/25 p-2">
-                      <div className="text-gray-500">Rush</div>
+                      <div className="text-gray-500">Study</div>
                       <div className="font-bold text-green-200">{combat.studyCorrectRound}/{combat.studyQuestionsTotal}</div>
                     </div>
                     <div className="rounded-md bg-black/25 p-2">
@@ -6212,7 +6202,7 @@ export default function App() {
                         <div className="flex items-center gap-2 text-white">
                           <BookOpen className="h-4 w-4 text-cyan-300" />
                           <span className="font-bold">
-                            {combat.mode === "studyReady" ? "Study Rush"
+                            {combat.mode === "studyReady" ? "Study Set"
                               : combat.mode === "study" ? "Flashcards"
                                 : combat.mode === "commandReady" ? "Commands Ready"
                                   : combat.mode === "enemyAction" ? "Enemy Action"
@@ -6234,7 +6224,7 @@ export default function App() {
 
                     {combat.mode === "studyReady" && (
                       <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-50">
-                        Tap Ready below to start the timed study rush.
+                        Tap Ready below to fill your AP goal with flashcards.
                       </div>
                     )}
 
@@ -6556,7 +6546,7 @@ export default function App() {
                     <div className="flex items-center gap-2 text-white">
                       <BookOpen className="h-5 w-5 text-cyan-300" />
                       <span className="font-bold">
-                      {combat.mode === "studyReady" ? "Study Rush"
+                      {combat.mode === "studyReady" ? "Study Set"
                           : combat.mode === "study" ? "Flashcards"
                             : combat.mode === "boardReady" ? "Rune Sprint Ready"
                               : combat.mode === "cinematic" ? "Combo Resolution"
@@ -6565,7 +6555,7 @@ export default function App() {
                       </span>
                     </div>
                     <p className="mt-1 hidden text-xs text-gray-400 sm:block">
-                      {combat.mode === "studyReady" && "Answer as many cards as you can before time runs out."}
+                      {combat.mode === "studyReady" && "Answer cards until the AP goal is full."}
                       {combat.mode === "study" && `${studyAnswered} card${studyAnswered === 1 ? "" : "s"} answered.`}
                       {combat.mode === "boardReady" && `${formatBoardTime(combat.boardTimeMax)} and ${combat.powerPoints} power points ready.`}
                       {combat.mode === "board" && `${formatBoardTime(combat.boardTimeLeft)} left. Drag one rune fast.`}
@@ -6584,7 +6574,7 @@ export default function App() {
                     className="flex w-full items-center justify-center gap-2 rounded-md bg-cyan-600 py-3 font-bold text-white transition-all hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
                   >
                     <BookOpen className="h-4 w-4" />
-                    Start Study Rush
+                    Start Study Set
                   </button>
                 )}
                 {combat.mode === "boardReady" && (
@@ -6821,18 +6811,18 @@ export default function App() {
               <div className="mx-auto mb-3 hidden h-12 w-12 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-400/10 text-cyan-200 sm:mb-4 sm:flex sm:h-14 sm:w-14">
                 <BookOpen className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
-              <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Study Rush Ready</h3>
+              <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Study Set Ready</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
-                Answer as many flashcards as you can before the timer runs out. Wrong answers cut the clock.
+                Fill your AP goal to open party commands. Hard cards are worth more AP, so they shorten the set.
               </p>
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:mb-5 sm:gap-3 sm:text-sm">
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
-                  <div className="text-xs text-gray-500">Goal</div>
-                  <div className="font-bold text-white">Rush</div>
+                  <div className="text-xs text-gray-500">AP Goal</div>
+                  <div className="font-bold text-white">{STUDY_RUSH_AP_CAP} AP</div>
                 </div>
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
-                  <div className="text-xs text-gray-500">Timer</div>
-                  <div className="font-bold text-white">{getQuestionTimerForFloor(combat.difficultyFloor).toFixed(0)}s</div>
+                  <div className="text-xs text-gray-500">Card Value</div>
+                  <div className="font-bold text-white">Easy 1 / Hard 3</div>
                 </div>
               </div>
               <button
@@ -7026,7 +7016,7 @@ export default function App() {
                 <div>
                   <div className="flex items-center gap-2 text-white">
                     <BookOpen className="h-5 w-5 text-cyan-300" />
-                    <h3 className="text-base font-bold sm:text-xl">Study Rush</h3>
+                    <h3 className="text-base font-bold sm:text-xl">Study Set</h3>
                   </div>
                   <p className="mt-1 text-xs text-gray-400 sm:text-sm">
                     {studyAnswered} answered
@@ -7045,25 +7035,21 @@ export default function App() {
                     </span>
                   )}
                   <span className="hidden rounded-md bg-black/30 px-2 py-1.5 text-xs font-bold text-gray-300 sm:inline-flex sm:px-3 sm:py-2 sm:text-sm">
-                    Cap {combat.actionPointsEarnedThisRush}/{currentStudyApCap}
+                    Goal {combat.actionPointsEarnedThisRush}/{currentStudyApCap}
                   </span>
                 </div>
               </div>
 
               <div className="mb-3 sm:mb-5">
                 <div className="mb-1 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1">
-                    <Timer className="h-3 w-3" style={{ color: timerColor }} />
-                    <span style={{ color: timerColor }}>{combat.timerLeft.toFixed(1)}s</span>
-                  </div>
-                  <span className="text-gray-500">Focus timer</span>
+                  <span className="font-bold text-yellow-100">{combat.actionPointsEarnedThisRush} / {currentStudyApCap} AP prepared</span>
+                  <span className="text-gray-500">Fill the goal to continue</span>
                 </div>
                 <div className="h-3 overflow-hidden rounded-full bg-gray-800">
                   <div
-                    className="h-full rounded-full transition-all duration-100"
+                    className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-yellow-200 transition-all duration-300"
                     style={{
-                      width: `${timerPct}%`,
-                      background: `linear-gradient(90deg, ${timerColor}, ${timerPct > 50 ? "#2ECC71" : timerPct > 30 ? "#F39C12" : "#FF4757"})`,
+                      width: `${Math.min(100, (combat.actionPointsEarnedThisRush / Math.max(1, currentStudyApCap)) * 100)}%`,
                     }}
                   />
                 </div>
@@ -7152,7 +7138,7 @@ export default function App() {
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-orange-400">x{combat.maxCombo}</div>
-              <div className="text-xs text-gray-500">Best Rush</div>
+              <div className="text-xs text-gray-500">Best Study Set</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-yellow-400">+{orbsEarned}</div>

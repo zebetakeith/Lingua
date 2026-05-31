@@ -43,7 +43,7 @@ export function getEnemyApForTurn(enemy: EnemyLike): number {
 
 export function getEnemySpecialText(special: string | null): string {
   if (special === "shuffle_answers") return "scrambles answers";
-  if (special === "freeze_timer") return "chills the next study timer";
+  if (special === "freeze_timer") return "adds 1 AP to the next study goal";
   if (special === "sequential") return "strikes faster after a hit";
   if (special === "self_heal") return "heals after attacking";
   if (special === "timer_drain") return "drains Focus and AP";
@@ -72,7 +72,7 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
       name: "Scramble Answers",
       apCost: 1,
       damage: 0,
-      description: "Shuffles answer order during the next study rush.",
+      description: "Shuffles answer order during the next study set.",
       counterplay: "Act before it reaches the front, or prepare for mixed answer positions.",
       severity: "medium",
     };
@@ -80,12 +80,12 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
 
   if (special === "freeze_timer") {
     return {
-      id: "chill_timer",
-      name: "Chill Timer",
+      id: "study_tax",
+      name: "Study Tax",
       apCost: 1,
       damage: 0,
-      description: "Shortens the next study rush timer.",
-      counterplay: "Ward the hit or keep enough HP to survive the shorter study window.",
+      description: "Adds 1 AP to the next study goal.",
+      counterplay: "Ward the hit or prepare to answer one more card in the next study set.",
       severity: "medium",
     };
   }
@@ -158,7 +158,7 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
       name: "Boss Protocol",
       apCost: 1,
       damage: 0,
-      description: "Chills the next study rush and reduces early AP gain.",
+      description: "Raises the next study goal and reduces early AP gain.",
       counterplay: "Save burst commands for phase shifts and keep Ward ready.",
       severity: "high",
     };
@@ -215,7 +215,7 @@ export function getEnemyCounterplayText(enemy: EnemyLike, context: EnemyPlanCont
   if (enemy.def.special === "healing_check") return "Heal or defend before its turn.";
   if (enemy.def.special === "self_heal") return "Burst it down or break shield before it heals.";
   if (enemy.def.special === "timer_drain") return "Ward the hit or spend AP before Focus is drained.";
-  if (enemy.def.special === "freeze_timer") return "Ward the hit or prepare for a shorter study rush.";
+  if (enemy.def.special === "freeze_timer") return "Ward the hit or prepare for a longer study set.";
   if (enemy.def.special === "randomize_positions") return "Act with key party members before it delays them.";
   if (enemy.def.special === "three_phase") return "Save burst commands for phase shifts.";
   if (enemy.def.special === "enrage_at_50") return "Hold burst until you can push through half HP.";

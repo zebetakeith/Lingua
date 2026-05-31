@@ -39,7 +39,7 @@ export interface PartyAttackSummary {
 
 export const SKILL_DEFS: SkillDef[] = [
   { id: "steady_hand", name: "Syntax Mark", element: "light", cost: 2, description: "Light damage and Exposed, boosting the next weakness hit." },
-  { id: "convert_flame", name: "Flame Script", element: "flame", cost: 3, description: "Flame burst; stronger after a 4+ correct study rush." },
+  { id: "convert_flame", name: "Flame Script", element: "flame", cost: 3, description: "Flame burst; stronger after a 4+ correct study set." },
   { id: "ward_word", name: "Ward Word", element: "tide", cost: 2, description: "Raise a Ward that sharply reduces the next enemy hit." },
   { id: "verdant_shift", name: "Verdant Shift", element: "leaf", cost: 3, description: "Heal the party and deal small Leaf damage." },
   { id: "umbra_surge", name: "Umbra Surge", element: "shadow", cost: 4, description: "Heavy Shadow damage with bonus against Exposed or shielded enemies." },
@@ -54,24 +54,24 @@ export const CHARACTER_DEFS: CharacterDef[] = [
 ];
 
 export const RELIC_DEFS: RelicDef[] = [
-  { id: "steady_grip", name: "Steady Grip", element: "light", rarity: "common", description: "The first correct card each study rush gives +1 AP." },
-  { id: "ember_primer", name: "Ember Primer", element: "flame", rarity: "uncommon", description: "A perfect study rush discounts the next Flame action by 1 AP." },
+  { id: "steady_grip", name: "Steady Grip", element: "light", rarity: "common", description: "The first correct card each study set gives +1 AP." },
+  { id: "ember_primer", name: "Ember Primer", element: "flame", rarity: "uncommon", description: "A perfect study set discounts the next Flame action by 1 AP." },
   { id: "heart_ward", name: "Heart Ward", element: "heart", rarity: "uncommon", description: "The first heal each fight also grants Ward." },
   { id: "deep_focus", name: "Deep Focus", element: "shadow", rarity: "rare", description: "Correct answers charge Focus faster." },
-  { id: "tidal_memory", name: "Tidal Memory", element: "tide", rarity: "common", description: "Wrong answers reduce less study time." },
-  { id: "leaf_bloom", name: "Leaf Bloom", element: "leaf", rarity: "rare", description: "Healing commands restore extra HP after strong study rushes." },
-  { id: "combo_spark", name: "Rush Spark", element: "flame", rarity: "uncommon", description: "4+ correct in one rush grants extra Focus." },
+  { id: "tidal_memory", name: "Tidal Memory", element: "tide", rarity: "common", description: "The first wrong answer each study set still charges +1 Focus." },
+  { id: "leaf_bloom", name: "Leaf Bloom", element: "leaf", rarity: "rare", description: "Healing commands restore extra HP after strong study sets." },
+  { id: "combo_spark", name: "Rush Spark", element: "flame", rarity: "uncommon", description: "4+ correct in one study set grants extra Focus." },
   { id: "linebreaker", name: "Linebreaker", element: "light", rarity: "rare", description: "Weakness hits deal bonus damage." },
-  { id: "warded_notes", name: "Warded Notes", element: "tide", rarity: "uncommon", description: "A perfect study rush also raises a Ward." },
-  { id: "hard_edge", name: "Hard Edge", element: "shadow", rarity: "common", description: "Correct hard-rated cards give +1 AP before the rush cap and +1 Focus." },
+  { id: "warded_notes", name: "Warded Notes", element: "tide", rarity: "uncommon", description: "A perfect study set also raises a Ward." },
+  { id: "hard_edge", name: "Hard Edge", element: "shadow", rarity: "common", description: "Correct hard-rated cards give +1 AP before the study goal and +1 Focus." },
   { id: "greenhouse", name: "Greenhouse", element: "leaf", rarity: "common", description: "Verdant Shift restores extra HP." },
   { id: "shadow_bargain", name: "Shadow Bargain", element: "shadow", rarity: "rare", description: "Taking enemy damage charges Focus." },
   { id: "elemental_index", name: "Elemental Index", element: "light", rarity: "uncommon", description: "Hitting an enemy weakness charges +1 Focus when combat resolves." },
   { id: "fracture_notes", name: "Fracture Notes", element: "flame", rarity: "rare", description: "Breaking a shield spills bonus damage into HP and charges extra Focus." },
   { id: "clean_margin", name: "Clean Margin", element: "tide", rarity: "rare", description: "Breaking a shield also raises a Ward if you do not already have one." },
-  { id: "clarity_lens", name: "Clarity Lens", element: "light", rarity: "uncommon", description: "A perfect study rush applies Exposed to the enemy." },
+  { id: "clarity_lens", name: "Clarity Lens", element: "light", rarity: "uncommon", description: "A perfect study set applies Exposed to the enemy." },
   { id: "blood_quill", name: "Blood Quill", element: "shadow", rarity: "uncommon", description: "Wrong answers grant +1 AP but apply a fragile self-debuff." },
-  { id: "combo_aegis", name: "Rush Aegis", element: "heart", rarity: "rare", description: "4+ correct in one rush raises a Ward once per floor." },
+  { id: "combo_aegis", name: "Rush Aegis", element: "heart", rarity: "rare", description: "4+ correct in one study set raises a Ward once per floor." },
   { id: "runic_tumbler", name: "Runic Tumbler", element: "shadow", rarity: "rare", description: "Defending can delay one enemy action on the timeline." },
 ];
 
