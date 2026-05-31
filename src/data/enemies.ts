@@ -83,7 +83,7 @@ export const ENEMIES: EnemyDef[] = [
     id: "book_wisp",
     name: "Page Wisp",
     element: "light",
-    weakTo: ["shadow"],
+    weakTo: ["tide", "shadow"],
     resists: ["light"],
     hpBase: 64,
     damage: 12,

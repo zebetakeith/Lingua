@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type
 import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles } from "lucide-react";
 import VOCABULARY, { getRandomWord, generateDistractors, type VocabWord } from "./data/vocabulary";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
-import { CLASSES, getClassById } from "./data/classes";
+import { getClassById } from "./data/classes";
 import { getEncounterForFloor, type EncounterInfo } from "./game/encounters";
 import {
   getEnemyActionPlan,
@@ -21,6 +21,7 @@ import {
   getPartyMaxHp,
   getRelicById,
   getSkillById,
+  getUltimateById,
   type CharacterDef,
   type RelicDef,
 } from "./game/party";
@@ -108,6 +109,7 @@ interface SavedDeck {
   stats: DeckStats;
   unlockedClasses: string[];
   unlockedCharacterIds: string[];
+  selectedPartyCharacterIds: string[];
   unlockedRelicIds: string[];
   relicHistory: string[];
   bossClears: number;
@@ -173,7 +175,9 @@ interface CombatState {
   cinematicStepIndex: number;
   relicChoices: RelicDef[];
   runRelics: string[];
+  runPartyCharacterIds: string[];
   guestCharacterIds: string[];
+  recruitedCharacterIds: string[];
   combatLog: string[];
   eventNotices: CombatNotice[];
   actionEffect: CombatActionEffect | null;
@@ -220,6 +224,7 @@ interface CombatState {
 }
 
 interface CombatCinematicStats {
+  source: "command" | "runes";
   elements: TileKind[];
   runeCounts: Record<TileKind, number>;
   elementDamage: Record<TileKind, number>;
@@ -375,8 +380,11 @@ const MAX_STUDY_AP_PER_CARD = 5;
 const STUDY_RUSH_AP_CAP = 5;
 const PLAYER_ACTION_DELAY = 20;
 const ENEMY_ACTION_DELAY = 70;
+const MAX_ACTIVE_PARTY_SIZE = 3;
 const EARLY_GUEST_FLOOR = 2;
 const EARLY_GUEST_CHARACTER_ID = "scholar";
+const FIRST_BOSS_FLOOR = 5;
+const FIRST_BOSS_RECRUIT_ID = "speedreader";
 
 const TILE_DEFS: Record<TileKind, { label: string; sigil: string; color: string; dark: string; glow: string }> = {
   flame: { label: "Flame", sigil: "Ignis", color: "#D66B4D", dark: "#461A13", glow: "rgba(214,107,77,0.5)" },
@@ -441,6 +449,7 @@ function createSavedDeck(name: string, cards: VocabWord[], id = `deck-${Date.now
     stats: createDeckStats(),
     unlockedClasses: ["linguist"],
     unlockedCharacterIds: ["linguist"],
+    selectedPartyCharacterIds: ["linguist"],
     unlockedRelicIds: [],
     relicHistory: [],
     bossClears: 0,
@@ -455,6 +464,14 @@ function createDefaultDeck(): SavedDeck {
 
 function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck {
   const now = Date.now();
+  const unlockedCharacterIds = Array.from(new Set([
+    "linguist",
+    ...(Array.isArray(deck.unlockedCharacterIds) ? deck.unlockedCharacterIds : fallback.unlockedCharacterIds),
+    ...(Array.isArray(deck.unlockedClasses) ? deck.unlockedClasses : fallback.unlockedClasses),
+  ]));
+  const selectedPartyCharacterIds = (Array.isArray(deck.selectedPartyCharacterIds) ? deck.selectedPartyCharacterIds : fallback.selectedPartyCharacterIds)
+    .filter(id => unlockedCharacterIds.includes(id))
+    .slice(0, MAX_ACTIVE_PARTY_SIZE);
   return {
     ...fallback,
     ...deck,
@@ -466,9 +483,8 @@ function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck
     unlockedClasses: Array.isArray(deck.unlockedClasses) && deck.unlockedClasses.length > 0
       ? Array.from(new Set(["linguist", ...deck.unlockedClasses]))
       : fallback.unlockedClasses,
-    unlockedCharacterIds: Array.isArray(deck.unlockedCharacterIds) && deck.unlockedCharacterIds.length > 0
-      ? Array.from(new Set(["linguist", ...deck.unlockedCharacterIds]))
-      : fallback.unlockedCharacterIds,
+    unlockedCharacterIds,
+    selectedPartyCharacterIds: selectedPartyCharacterIds.length > 0 ? selectedPartyCharacterIds : ["linguist"],
     unlockedRelicIds: Array.isArray(deck.unlockedRelicIds) ? deck.unlockedRelicIds : fallback.unlockedRelicIds,
     relicHistory: Array.isArray(deck.relicHistory) ? deck.relicHistory : fallback.relicHistory,
     bossClears: typeof deck.bossClears === "number" ? deck.bossClears : fallback.bossClears,
@@ -602,32 +618,81 @@ function getDeckUnlockedClasses(deck: SavedDeck): string[] {
   return Array.from(new Set(["linguist", ...(deck.unlockedClasses || [])]));
 }
 
-function getRunParty(saveData: SaveData, guestCharacterIds: string[] = []): CharacterDef[] {
-  const activeDeck = getActiveDeck(saveData);
-  const unlocked = new Set([...(activeDeck.unlockedCharacterIds || []), ...getDeckUnlockedClasses(activeDeck), ...guestCharacterIds]);
-  return CHARACTER_DEFS.filter(character => unlocked.has(character.id));
+function getDeckUnlockedCharacterIds(deck: SavedDeck): string[] {
+  return Array.from(new Set(["linguist", ...(deck.unlockedCharacterIds || []), ...getDeckUnlockedClasses(deck)]));
 }
 
-function getRunGuestCharacterIds(floor: number, currentGuests: string[] = []): string[] {
-  return floor >= EARLY_GUEST_FLOOR
-    ? Array.from(new Set([...currentGuests, EARLY_GUEST_CHARACTER_ID]))
-    : currentGuests;
+function getDeckSelectedPartyIds(deck: SavedDeck): string[] {
+  const unlocked = new Set(getDeckUnlockedCharacterIds(deck));
+  const selected = (deck.selectedPartyCharacterIds || []).filter(id => unlocked.has(id)).slice(0, MAX_ACTIVE_PARTY_SIZE);
+  return selected.length > 0 ? selected : ["linguist"];
+}
+
+function getPartyByIds(characterIds: string[]): CharacterDef[] {
+  return characterIds
+    .map(id => CHARACTER_DEFS.find(character => character.id === id))
+    .filter((character): character is CharacterDef => Boolean(character));
+}
+
+function getRunParty(saveData: SaveData, guestCharacterIds: string[] = [], runPartyCharacterIds?: string[]): CharacterDef[] {
+  const activeDeck = getActiveDeck(saveData);
+  const selectedIds = runPartyCharacterIds || getDeckSelectedPartyIds(activeDeck);
+  return getPartyByIds(Array.from(new Set([...selectedIds, ...guestCharacterIds])).slice(0, MAX_ACTIVE_PARTY_SIZE));
+}
+
+function getRunGuestCharacterIds(floor: number, runPartyCharacterIds: string[], currentGuests: string[] = [], unlockedCharacterIds: string[] = []): string[] {
+  const guests = Array.from(new Set(currentGuests));
+  const activeIds = new Set([...runPartyCharacterIds, ...guests]);
+  const unlocked = new Set(unlockedCharacterIds);
+  const addGuest = (id: string) => {
+    if (activeIds.size >= MAX_ACTIVE_PARTY_SIZE || activeIds.has(id) || unlocked.has(id)) return;
+    guests.push(id);
+    activeIds.add(id);
+  };
+
+  if (floor >= EARLY_GUEST_FLOOR) addGuest(EARLY_GUEST_CHARACTER_ID);
+  if (floor >= FIRST_BOSS_FLOOR) addGuest(FIRST_BOSS_RECRUIT_ID);
+  return guests;
+}
+
+function getImmediateBossRecruitIds(state: CombatState, roomCleared: boolean): string[] {
+  return roomCleared && state.floor === FIRST_BOSS_FLOOR && state.encounter.isBoss
+    ? [FIRST_BOSS_RECRUIT_ID]
+    : [];
+}
+
+function recordBossClearForActiveDeck(saveData: SaveData, state: CombatState, characterIds: string[] = []): SaveData {
+  if (!state.encounter.isBoss) return saveData;
+  return updateActiveDeck(saveData, deck => {
+    const bossClears = deck.bossClears + 1;
+    const unlockedCharacterIds = Array.from(new Set([
+      ...getDeckUnlockedCharacterIds(deck),
+      ...getMilestoneCharacterUnlocks(deck.stats, bossClears),
+      ...characterIds,
+    ]));
+    const selected = getDeckSelectedPartyIds({ ...deck, unlockedCharacterIds });
+    return {
+      ...deck,
+      bossClears,
+      unlockedCharacterIds,
+      selectedPartyCharacterIds: Array.from(new Set([...selected, ...characterIds])).slice(0, MAX_ACTIVE_PARTY_SIZE),
+    };
+  });
 }
 
 function getMilestoneCharacterUnlocks(stats: DeckStats, bossClears: number): string[] {
   const unlocked = ["linguist"];
-  if (stats.bestFloor >= 5) unlocked.push("speedreader");
+  if (bossClears >= 1) unlocked.push("speedreader");
   if (stats.totalCorrect >= 50) unlocked.push("scholar");
   if (stats.bestFloor >= 8) unlocked.push("botanist");
-  if (bossClears >= 1) unlocked.push("duskblade");
+  if (bossClears >= 2) unlocked.push("duskblade");
   return unlocked;
 }
 
 function getPendingCharacterUnlocks(saveData: SaveData, state: CombatState | null): CharacterDef[] {
   if (!state) return [];
   const deck = saveData.decks.find(candidate => candidate.id === state.deckId) || getActiveDeck(saveData);
-  const currentUnlocks = new Set([...(deck.unlockedCharacterIds || []), ...getDeckUnlockedClasses(deck)]);
-  const clearedBoss = state.enemies.some(enemy => enemy.def.isBoss && enemy.isDead);
+  const currentUnlocks = new Set(getDeckUnlockedCharacterIds(deck));
   const projectedStats: DeckStats = {
     ...deck.stats,
     bestFloor: Math.max(deck.stats.bestFloor, state.floor),
@@ -636,7 +701,7 @@ function getPendingCharacterUnlocks(saveData: SaveData, state: CombatState | nul
     maxCombo: Math.max(deck.stats.maxCombo, state.maxCombo),
     bestScore: Math.max(deck.stats.bestScore, state.score),
   };
-  const projectedBossClears = deck.bossClears + (clearedBoss ? 1 : 0);
+  const projectedBossClears = deck.bossClears;
   const milestoneIds = getMilestoneCharacterUnlocks(projectedStats, projectedBossClears);
 
   return CHARACTER_DEFS.filter(character => milestoneIds.includes(character.id) && !currentUnlocks.has(character.id));
@@ -681,8 +746,6 @@ function updateRunStats(saveData: SaveData, state: CombatState, orbsEarned: numb
 
   const deckId = state.deckId || getActiveDeckId(saveData);
   const decks = saveData.decks.length > 0 ? saveData.decks : [createDefaultDeck()];
-  const clearedBoss = state.enemies.some(enemy => enemy.def.isBoss && enemy.isDead);
-
   return {
     ...saveData,
     wisdomOrbs: saveData.wisdomOrbs + orbsEarned,
@@ -699,17 +762,19 @@ function updateRunStats(saveData: SaveData, state: CombatState, orbsEarned: numb
         totalWrong: deck.stats.totalWrong + state.wrongCount,
         maxCombo: Math.max(deck.stats.maxCombo, state.maxCombo),
       };
-      const nextBossClears = deck.bossClears + (clearedBoss ? 1 : 0);
+      const nextBossClears = deck.bossClears;
+      const unlockedCharacterIds = Array.from(new Set([
+        ...(deck.unlockedCharacterIds || []),
+        ...getMilestoneCharacterUnlocks(nextStats, nextBossClears),
+      ]));
 
       return {
         ...deck,
         updatedAt: Date.now(),
         stats: nextStats,
         bossClears: nextBossClears,
-        unlockedCharacterIds: Array.from(new Set([
-          ...(deck.unlockedCharacterIds || []),
-          ...getMilestoneCharacterUnlocks(nextStats, nextBossClears),
-        ])),
+        unlockedCharacterIds,
+        selectedPartyCharacterIds: getDeckSelectedPartyIds({ ...deck, unlockedCharacterIds }),
       };
     }),
   };
@@ -1123,6 +1188,13 @@ function delayPartyMember(queue: TurnQueueEntry[], amount = 45): TurnQueueEntry[
   return sortTurnQueue(queue.map(entry => entry.id === target.id ? { ...entry, actionValue: entry.actionValue + amount } : entry));
 }
 
+function delayNextEnemyAction(queue: TurnQueueEntry[], amount = 28): TurnQueueEntry[] {
+  const enemy = queue.find(entry => entry.kind === "enemy");
+  return enemy
+    ? sortTurnQueue(queue.map(entry => entry.id === enemy.id ? { ...entry, actionValue: entry.actionValue + amount } : entry))
+    : queue;
+}
+
 function removeEnemyFromQueue(queue: TurnQueueEntry[], enemy: EnemyInstance): TurnQueueEntry[] {
   return sortTurnQueue(queue.filter(entry => !(entry.kind === "enemy" && entry.refId === enemy.def.id)));
 }
@@ -1428,6 +1500,7 @@ function createEncounterBoard(encounter: EncounterInfo): { board: BoardTile[]; c
 
 function createEmptyCinematicStats(): CombatCinematicStats {
   return {
+    source: "runes",
     elements: [],
     runeCounts: createRuneCountMap(),
     elementDamage: createRuneCountMap(),
@@ -1456,6 +1529,7 @@ function createDirectActionStats(
   runeWeight = 3
 ): CombatCinematicStats {
   const stats = createEmptyCinematicStats();
+  stats.source = "command";
   stats.elements = kind === "heart" ? [] : [kind];
   stats.runeCounts[kind] = runeWeight;
   stats.elementDamage[kind] = Math.max(0, rawDamage);
@@ -1527,7 +1601,8 @@ function resolveEnemyDefense(enemy: EnemyInstance, stats: CombatCinematicStats, 
 
   const weakRuneCount = enemy.def.weakTo.reduce((total, kind) => total + (stats.runeCounts[kind] || 0), 0);
   const shieldBreakBonus = enemy.shield > 0 && weakRuneCount > 0 ? 6 + weakRuneCount * 2 : 0;
-  const shieldDamage = enemy.shield > 0
+  const commandShieldBlocked = stats.source === "command" && enemy.shield > 0 && weaknessHits.length === 0;
+  const shieldDamage = enemy.shield > 0 && !commandShieldBlocked
     ? Math.min(enemy.shield, adjustedDamage + shieldBreakBonus)
     : 0;
   const shieldAfter = Math.max(0, enemy.shield - shieldDamage);
@@ -1535,7 +1610,9 @@ function resolveEnemyDefense(enemy: EnemyInstance, stats: CombatCinematicStats, 
   const fractureBonus = shieldBroken && runRelics.includes("fracture_notes")
     ? 8 + stats.comboCount * 2
     : 0;
-  const hpDamage = Math.max(0, adjustedDamage - enemy.shield) + fractureBonus;
+  const hpDamage = commandShieldBlocked
+    ? 0
+    : Math.max(0, adjustedDamage - enemy.shield) + fractureBonus;
 
   return {
     adjustedByElement,
@@ -1661,6 +1738,7 @@ function mergeCinematicStats(
   });
 
   return {
+    source: current?.source === "command" || next.source === "command" ? "command" : "runes",
     elements: [...(current?.elements || []), ...next.elements].slice(-6),
     runeCounts,
     elementDamage,
@@ -1691,10 +1769,13 @@ function buildCombatLog(
   enemyActionLabel: string,
   extraLines: string[] = []
 ): string[] {
+  const isCommand = stats.source === "command";
   const lines: string[] = [
-    stats.matchedCount > 0
-      ? `${stats.comboCount} combo, ${stats.matchedCount} runes resolved.`
-      : "No rune matches resolved.",
+    isCommand
+      ? `${stats.attackers.join(", ") || "Party"} command resolved.`
+      : stats.matchedCount > 0
+        ? `${stats.comboCount} combo, ${stats.matchedCount} runes resolved.`
+        : "No rune matches resolved.",
   ];
 
   TILE_KINDS.forEach(kind => {
@@ -1702,12 +1783,14 @@ function buildCombatLog(
     const runeCount = stats.runeCounts[kind];
     const damage = stats.elementDamage[kind];
     if (runeCount > 0 || damage > 0) {
-      lines.push(`${TILE_DEFS[kind].label}: ${runeCount} runes -> ${damage} damage.`);
+      lines.push(isCommand
+        ? `${TILE_DEFS[kind].label}: ${damage} damage.`
+        : `${TILE_DEFS[kind].label}: ${runeCount} runes -> ${damage} damage.`);
     }
   });
 
   if (stats.runeCounts.heart > 0 || stats.heal > 0) {
-    lines.push(`Heart: ${stats.runeCounts.heart} runes -> ${stats.heal} HP restored.`);
+    lines.push(isCommand ? `Recovery: ${stats.heal} HP restored.` : `Heart: ${stats.runeCounts.heart} runes -> ${stats.heal} HP restored.`);
   }
 
   if (stats.enhancedRunes > 0) {
@@ -1759,6 +1842,7 @@ function getCinematicOutcome(cinematic: CombatCinematic): { label: string; tone:
 }
 
 function buildCombatTimeline(cinematic: CombatCinematic): CombatTimelineStep[] {
+  const isCommand = cinematic.source === "command";
   const primaryKind = getPrimaryCinematicKind(cinematic);
   const primaryTile = TILE_DEFS[primaryKind];
   const statusParts = [
@@ -1767,13 +1851,15 @@ function buildCombatTimeline(cinematic: CombatCinematic): CombatTimelineStep[] {
   ].filter(Boolean);
   const steps: CombatTimelineStep[] = [
     {
-      id: "rune-pattern",
-      label: "Runes",
-      title: cinematic.matchedCount > 0 ? `${cinematic.comboCount} Combo Prepared` : "No Combo Prepared",
-      detail: cinematic.matchedCount > 0
-        ? `${cinematic.matchedCount} runes resolved. ${primaryTile.label} carried the spell core.${statusParts.length > 0 ? ` ${statusParts.join("; ")}.` : ""}`
-        : "No rune matches resolved, so the party could not prepare a damaging spell.",
-      tone: cinematic.matchedCount > 0 ? "good" : "warn",
+      id: isCommand ? "party-command" : "rune-pattern",
+      label: isCommand ? "Command" : "Runes",
+      title: isCommand ? `${primaryTile.label} Command` : cinematic.matchedCount > 0 ? `${cinematic.comboCount} Combo Prepared` : "No Combo Prepared",
+      detail: isCommand
+        ? `${cinematic.attackers.join(", ") || "Party"} acted. ${primaryTile.label} carried the command.`
+        : cinematic.matchedCount > 0
+          ? `${cinematic.matchedCount} runes resolved. ${primaryTile.label} carried the spell core.${statusParts.length > 0 ? ` ${statusParts.join("; ")}.` : ""}`
+          : "No rune matches resolved, so the party could not prepare a damaging spell.",
+      tone: isCommand || cinematic.matchedCount > 0 ? "good" : "warn",
       meta: cinematic.attackers.length > 0 ? `Attackers: ${cinematic.attackers.join(", ")}` : undefined,
     },
   ];
@@ -1831,7 +1917,9 @@ function buildCombatTimeline(cinematic: CombatCinematic): CombatTimelineStep[] {
       ? "The room is cleared. Pick the reward that best shapes this deck's run."
       : cinematic.gameOverAfter
         ? "The run ends here, but deck progress and card history remain saved."
-        : "Combat returns to flashcards. Study performance will fuel the next rune board.",
+        : isCommand
+          ? "Combat returns to flashcards. Study performance will fuel the next command window."
+          : "Combat returns to flashcards. Study performance will fuel the next rune board.",
     tone: outcome.tone,
     meta: `Final: ${cinematic.enemyName} ${cinematic.enemyHpAfter}/${Math.max(cinematic.enemyHpAfter, cinematic.enemyHpBefore)} HP, you ${cinematic.playerHpAfter} HP.`,
   });
@@ -2019,6 +2107,12 @@ function getFloorLessonNotice(floor: number): CombatNotice | null {
   if (floor === 3) {
     return createCombatNotice("Lesson: AP Rhythm", "Spend at least 3 AP before Doodle Dragon acts.", "warn");
   }
+  if (floor === 4) {
+    return createCombatNotice("Lesson: Shield Break", "Scholar's Tide commands crack Page Wisp's shield, delay its turn, and charge Focus.", "good");
+  }
+  if (floor === FIRST_BOSS_FLOOR) {
+    return createCombatNotice("Speedreader joins as a guest", "Use Flame Script to crack Root Lump's shield. It enrages below half HP.", "warn");
+  }
   return null;
 }
 
@@ -2029,8 +2123,10 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
   const hpMult = getHpMultiplier(difficultyFloor);
   const timerMax = getQuestionTimerForFloor(difficultyFloor);
   const deck = startingDeck && startingDeck.length > 0 ? startingDeck : createStarterDeck(saveData);
-  const guestCharacterIds = getRunGuestCharacterIds(floor);
-  const runParty = getRunParty(saveData, guestCharacterIds);
+  const activeDeck = getActiveDeck(saveData);
+  const runPartyCharacterIds = getDeckSelectedPartyIds(activeDeck);
+  const guestCharacterIds = getRunGuestCharacterIds(floor, runPartyCharacterIds, [], getDeckUnlockedCharacterIds(activeDeck));
+  const runParty = getRunParty(saveData, guestCharacterIds, runPartyCharacterIds);
   const runPlayerMaxHp = getPartyMaxHp(runParty, playerMaxHp);
   const encounterBoard = createEncounterBoard(encounter);
   
@@ -2078,7 +2174,9 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     cinematicStepIndex: 0,
     relicChoices: [],
     runRelics: [],
+    runPartyCharacterIds,
     guestCharacterIds,
+    recruitedCharacterIds: [],
     combatLog: [],
     eventNotices: [getFloorLessonNotice(floor)].filter((notice): notice is CombatNotice => Boolean(notice)),
     actionEffect: null,
@@ -2140,7 +2238,6 @@ export default function App() {
   const [newDeckName, setNewDeckName] = useState("");
   const [starterDraftDeck, setStarterDraftDeck] = useState<VocabWord[]>([]);
   const [starterDraftChoices, setStarterDraftChoices] = useState<VocabWord[]>([]);
-  const [starterDraftClassId, setStarterDraftClassId] = useState<string>("linguist");
   const [starterDraftMessage, setStarterDraftMessage] = useState("");
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -2639,9 +2736,11 @@ export default function App() {
       gameOverAfter,
     };
 
-    const inlineMessage = stats.matchedCount > 0
-      ? `${stats.comboCount} combo chain is firing from the rune board.`
-      : "No combo formed. Enemy intent resolves.";
+    const inlineMessage = stats.source === "command"
+      ? "Party command is resolving on the battlefield."
+      : stats.matchedCount > 0
+        ? `${stats.comboCount} combo chain is firing from the rune board.`
+        : "No combo formed. Enemy intent resolves.";
 
     setCombat({
       ...state,
@@ -3430,7 +3529,7 @@ export default function App() {
   const handlePlayerCommand = (action: PlayerActionId) => {
     if (!combat || combat.mode !== "command" || combat.phase !== "answering" || combat.isPaused) return;
     const actor = getCurrentActor(combat);
-    const party = getRunParty(save, combat.guestCharacterIds);
+    const party = getRunParty(save, combat.guestCharacterIds, combat.runPartyCharacterIds);
     const member = getActorCharacter(actor, party);
     const enemy = combat.enemies[combat.currentEnemyIndex];
     if (!actor || !member || !enemy || enemy.isDead) return;
@@ -3533,6 +3632,7 @@ export default function App() {
 
       if (defense.shieldBroken) {
         nextSkillCharge = Math.min(12, nextSkillCharge + (combat.runRelics.includes("fracture_notes") ? 3 : 2));
+        nextQueue = delayNextEnemyAction(nextQueue);
         phaseBanner = "SHIELD BROKEN";
         actionNotices.push(createCombatNotice("Shield Break", "Counter delayed and Focus charged.", "good"));
       }
@@ -3568,6 +3668,15 @@ export default function App() {
     }
 
     const allDead = nextEnemies.every(nextEnemy => nextEnemy.isDead);
+    const immediateRecruitIds = getImmediateBossRecruitIds(combat, allDead);
+    const nextRunPartyCharacterIds = Array.from(new Set([...combat.runPartyCharacterIds, ...immediateRecruitIds])).slice(0, MAX_ACTIVE_PARTY_SIZE);
+    const nextGuestCharacterIds = combat.guestCharacterIds.filter(id => !immediateRecruitIds.includes(id));
+    if (allDead && combat.encounter.isBoss) {
+      setSave(prev => recordBossClearForActiveDeck(prev, combat, immediateRecruitIds));
+    }
+    if (immediateRecruitIds.length > 0) {
+      actionNotices.push(createCombatNotice("Speedreader recruited", "Flame Script is now permanently unlocked for this deck.", "good"));
+    }
     if (!allDead && enemyHpAfter <= 0) {
       const nextIndex = nextEnemies.findIndex((nextEnemy, index) => index > combat.currentEnemyIndex && !nextEnemy.isDead);
       if (nextIndex !== -1) {
@@ -3638,6 +3747,9 @@ export default function App() {
       cinematicStepIndex: 0,
       combatLog,
       eventNotices: appendCombatNotices(combat.eventNotices, actionNotices),
+      runPartyCharacterIds: nextRunPartyCharacterIds,
+      guestCharacterIds: nextGuestCharacterIds,
+      recruitedCharacterIds: Array.from(new Set([...combat.recruitedCharacterIds, ...immediateRecruitIds])),
       damageNumbers: [
         ...combat.damageNumbers,
         ...(defense.hpDamage + defense.shieldDamage > 0 ? [{
@@ -3731,6 +3843,210 @@ export default function App() {
     }, enemyIsNext ? 950 : 650);
   };
 
+  const handleUltimate = () => {
+    if (!combat || combat.mode !== "command" || combat.phase !== "answering" || combat.isPaused) return;
+    const actor = getCurrentActor(combat);
+    const party = getRunParty(save, combat.guestCharacterIds, combat.runPartyCharacterIds);
+    const member = getActorCharacter(actor, party);
+    const enemy = combat.enemies[combat.currentEnemyIndex];
+    const ultimate = member ? getUltimateById(member.ultimateId) : null;
+    if (!actor || !member || !enemy || enemy.isDead || !ultimate || combat.skillCharge < ultimate.focusCost) return;
+
+    const playerHpBefore = combat.playerHp;
+    const enemyHpBefore = enemy.hp;
+    const shieldBefore = enemy.shield;
+    let rawDamage = 0;
+    let healAmount = 0;
+    let nextExposedTurns = combat.exposedTurns;
+    let nextBuffs = [...combat.activeBuffs];
+    let nextQueue = combat.turnQueue;
+    const actionNotices: CombatNotice[] = [
+      createCombatNotice(`Ultimate: ${ultimate.name}`, "12 Focus spent. AP and turn position preserved.", "good"),
+    ];
+
+    if (ultimate.id === "glossary_star") {
+      rawDamage = Math.floor(member.attack * 2.55) + combat.difficultyFloor * 2;
+      nextExposedTurns = Math.max(nextExposedTurns, 2);
+    } else if (ultimate.id === "meteor_script") {
+      rawDamage = Math.floor(member.attack * 2.85) + combat.difficultyFloor * 2 + (combat.studyCorrectRound >= 4 ? 18 : 0);
+    } else if (ultimate.id === "perfect_recall") {
+      nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }];
+      nextQueue = delayNextEnemyAction(nextQueue);
+      actionNotices.push(createCombatNotice("Perfect Recall", "Ward raised. The next enemy action was delayed.", "good"));
+    } else if (ultimate.id === "bloom_chorus") {
+      healAmount = Math.min(combat.playerMaxHp - combat.playerHp, 48 + member.recovery * 2);
+      nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }];
+    } else if (ultimate.id === "black_margin") {
+      rawDamage = Math.floor(member.attack * 3.2) + combat.difficultyFloor * 2;
+      if (combat.exposedTurns > 0 || enemy.shield > 0) rawDamage += 24;
+    }
+
+    if (rawDamage > 0 && enemy.def.weakTo.includes(ultimate.element) && combat.exposedTurns > 0) {
+      rawDamage = Math.floor(rawDamage * 1.35);
+      nextExposedTurns = Math.max(0, nextExposedTurns - 1);
+      actionNotices.push(createCombatNotice("Exposed Triggered", "Ultimate weakness damage amplified.", "good"));
+    }
+    if (rawDamage > 0 && enemy.def.weakTo.includes(ultimate.element) && combat.runRelics.includes("linebreaker")) {
+      rawDamage = Math.floor(rawDamage * 1.18);
+    }
+
+    const stats = createDirectActionStats(ultimate.element, rawDamage, healAmount, member.name, rawDamage > 0 ? 6 : 0);
+    const defense = resolveEnemyDefense(enemy, stats, combat.runRelics);
+    stats.rawDamage = defense.rawDamage;
+    stats.damage = defense.hpDamage;
+    stats.shieldDamage = defense.shieldDamage;
+    stats.shieldBroken = defense.shieldBroken;
+    stats.elementDamage = defense.adjustedByElement;
+    stats.weaknessHits = defense.weaknessHits;
+    stats.resistedHits = defense.resistedHits;
+    stats.heal = healAmount;
+
+    let nextSkillCharge = 0;
+    if (defense.shieldBroken) {
+      nextSkillCharge = combat.runRelics.includes("fracture_notes") ? 3 : 2;
+      nextQueue = delayNextEnemyAction(nextQueue);
+      actionNotices.push(createCombatNotice("Shield Break", `Counter delayed. +${nextSkillCharge} Focus.`, "good"));
+    }
+
+    const enemyHpAfter = Math.max(0, enemy.hp - defense.hpDamage);
+    const nextEnemies = [...combat.enemies];
+    nextEnemies[combat.currentEnemyIndex] = {
+      ...enemy,
+      hp: enemyHpAfter,
+      shield: defense.shieldAfter,
+      isDead: enemyHpAfter <= 0,
+    };
+    if (enemyHpAfter <= 0) {
+      nextQueue = removeEnemyFromQueue(nextQueue, enemy);
+    } else if (enemy.def.special === "enrage_at_50" && enemyHpAfter / enemy.maxHp <= 0.5 && enemy.phase === 1) {
+      nextEnemies[combat.currentEnemyIndex] = {
+        ...nextEnemies[combat.currentEnemyIndex],
+        phase: 2,
+        currentDamage: Math.floor(enemy.currentDamage * 1.5),
+      };
+    }
+
+    const nextPlayerHp = Math.min(combat.playerMaxHp, combat.playerHp + healAmount);
+    const allDead = nextEnemies.every(nextEnemy => nextEnemy.isDead);
+    const immediateRecruitIds = getImmediateBossRecruitIds(combat, allDead);
+    const nextRunPartyCharacterIds = Array.from(new Set([...combat.runPartyCharacterIds, ...immediateRecruitIds])).slice(0, MAX_ACTIVE_PARTY_SIZE);
+    const nextGuestCharacterIds = combat.guestCharacterIds.filter(id => !immediateRecruitIds.includes(id));
+    if (allDead && combat.encounter.isBoss) {
+      setSave(prev => recordBossClearForActiveDeck(prev, combat, immediateRecruitIds));
+    }
+    if (immediateRecruitIds.length > 0) {
+      actionNotices.push(createCombatNotice("Speedreader recruited", "Flame Script is now permanently unlocked for this deck.", "good"));
+    }
+
+    const combatLog = buildCombatLog(
+      stats,
+      enemy,
+      enemyHpBefore,
+      enemyHpAfter,
+      playerHpBefore,
+      nextPlayerHp,
+      allDead ? `${enemy.def.name} fell.` : `${member.name} used ${ultimate.name}.`,
+      ["Ultimate spent 12 Focus without consuming AP or advancing the timeline."]
+    );
+    const rewardChoices = allDead ? createRewardChoices(save, combat.deck, combat.difficultyFloor) : combat.rewardChoices;
+    const relicChoices = allDead && combat.encounter.offersRelic ? createRelicChoices(combat.runRelics, combat.encounter) : combat.relicChoices;
+    const cinematic = createActionCinematic(
+      stats,
+      enemy,
+      {
+        enemyIntent: getEnemyIntent(enemy, getEnemyPlanContext(combat)),
+        enemyHpBefore,
+        enemyHpAfter,
+        shieldBefore,
+        shieldAfter: defense.shieldAfter,
+        shieldBroken: defense.shieldBroken,
+        playerHpBefore,
+        playerHpAfter: nextPlayerHp,
+        enemyActionLabel: allDead ? `${enemy.def.name} fell.` : `${member.name} used ${ultimate.name}.`,
+        roomCleared: allDead,
+        wardBlocked: false,
+        log: combatLog,
+      },
+      "command",
+      allDead ? "Room cleared. Choose a reward." : "Ultimate resolved.",
+      allDead,
+      false
+    );
+
+    const nextState: CombatState = {
+      ...combat,
+      phase: "transition",
+      enemies: nextEnemies,
+      playerHp: nextPlayerHp,
+      turnQueue: nextQueue,
+      activeActorId: getCurrentActor({ ...combat, turnQueue: nextQueue })?.id || null,
+      exposedTurns: nextExposedTurns,
+      activeBuffs: nextBuffs,
+      skillCharge: nextSkillCharge,
+      rewardChoices,
+      relicChoices,
+      runPartyCharacterIds: nextRunPartyCharacterIds,
+      guestCharacterIds: nextGuestCharacterIds,
+      recruitedCharacterIds: Array.from(new Set([...combat.recruitedCharacterIds, ...immediateRecruitIds])),
+      cinematic,
+      cinematicStepIndex: 0,
+      combatLog,
+      eventNotices: appendCombatNotices(combat.eventNotices, actionNotices),
+      actionEffect: createCombatActionEffect(
+        ultimate.id === "perfect_recall" ? "ward" : ultimate.id === "bloom_chorus" ? "mend" : "skill",
+        `ULTIMATE: ${ultimate.name}`,
+        TILE_DEFS[ultimate.element].color,
+        {
+          kind: ultimate.element,
+          detail: "12 Focus - free action - timeline preserved",
+          casterName: member.name,
+          casterSprite: member.sprite,
+        }
+      ),
+      damageNumbers: [
+        ...combat.damageNumbers,
+        ...(defense.hpDamage + defense.shieldDamage > 0 ? [{
+          id: damageIdCounter++,
+          value: defense.hpDamage + defense.shieldDamage,
+          x: 58 + Math.random() * 12,
+          y: 32,
+          color: "#FFE66D",
+          isCrit: true,
+        }] : []),
+        ...(healAmount > 0 ? [{
+          id: damageIdCounter++,
+          value: healAmount,
+          x: 22 + Math.random() * 12,
+          y: 66,
+          color: TILE_DEFS.heart.color,
+          isCrit: true,
+        }] : []),
+      ],
+      enemyAnim: defense.hpDamage + defense.shieldDamage > 0 ? "hit" : null,
+      playerAnim: healAmount > 0 ? "heal" : null,
+      flashColor: TILE_DEFS[ultimate.element].glow,
+      showPhaseBanner: allDead ? combat.showPhaseBanner : enemy.def.special === "enrage_at_50" && enemyHpAfter / enemy.maxHp <= 0.5 && enemy.phase === 1 ? "ENRAGED" : defense.shieldBroken ? "SHIELD BROKEN" : combat.showPhaseBanner,
+      score: combat.score + defense.hpDamage + defense.shieldDamage + healAmount + 24,
+      boardMessage: allDead ? "Room cleared. Choose a reward." : `${ultimate.name} resolved. ${combat.actionPoints} AP remains.`,
+    };
+
+    setCombat(nextState);
+    if (allDead) {
+      finishRoomAfterCommand(nextState);
+      return;
+    }
+    window.setTimeout(() => {
+      setCombat(prev => prev && prev.cinematic?.id === cinematic.id ? {
+        ...prev,
+        phase: "answering",
+        cinematic: null,
+        cinematicStepIndex: 0,
+        enemyAnim: null,
+        playerAnim: null,
+      } : prev);
+    }, 850);
+  };
+
   const endCommandWindow = () => {
     if (!combat || combat.mode !== "command" || combat.phase !== "answering") return;
     if (getCurrentActor(combat)?.kind === "enemy") {
@@ -3752,7 +4068,7 @@ export default function App() {
   const commitResolvedBoardMove = (state: CombatState, result: MatchResult) => {
     const hasSurge = state.activeBuffs.some(b => b.type === "board_surge");
     const nextBuffs = state.activeBuffs.filter(b => b.type !== "board_surge");
-    const party = getRunParty(save, state.guestCharacterIds);
+    const party = getRunParty(save, state.guestCharacterIds, state.runPartyCharacterIds);
     const attackSummary = getPartyDamage(result, party, hasSurge, state.runRelics);
     let damage = attackSummary.total;
     const cls = getClassById(save.selectedClass);
@@ -3790,6 +4106,7 @@ export default function App() {
     const primaryKind = getPrimaryRuneKind(result);
     const primaryTile = TILE_DEFS[primaryKind];
     const moveStats = mergeCinematicStats(state.pendingCinematic, {
+      source: "runes",
       elements: [primaryKind],
       runeCounts: result.kindCounts,
       elementDamage: attackSummary.byElement,
@@ -4116,7 +4433,7 @@ export default function App() {
     if (!combat || !skill || combat.phase !== "answering" || combat.isResolvingRunes || combat.mode !== "boardReady" || combat.skillCharge < skill.cost) return;
 
     const nextSkillCharge = combat.skillCharge - skill.cost;
-    const caster = getRunParty(save, combat.guestCharacterIds).find(member => member.skillId === skillId);
+    const caster = getRunParty(save, combat.guestCharacterIds, combat.runPartyCharacterIds).find(member => member.skillId === skillId);
     const createSkillEffect = (kind: TileKind = skill.element, detail = skill.description) => createCombatActionEffect("skill", skill.name, TILE_DEFS[kind].color, {
       kind,
       detail,
@@ -4248,103 +4565,31 @@ export default function App() {
     }
   };
 
-  const handleAbility = () => {
-    if (!combat || combat.abilityUsed || combat.abilityCooldown > 0 || combat.mode === "study" || combat.mode === "commandReady" || combat.mode === "command" || combat.mode === "enemyAction" || combat.mode === "board" || combat.mode === "resolveReady" || combat.mode === "cinematic") return;
-    
-    const cls = getClassById(save.selectedClass);
-    if (!cls) return;
-    
-    const newBuffs = [...combat.activeBuffs];
-    
-    const isRuneScreen = combat.mode === "boardReady";
-    let nextBoardTimeMax = combat.boardTimeMax;
-    let nextBoardTimeLeft = combat.boardTimeLeft;
-    let nextFlameDiscount = combat.flameDiscountNext;
-    let abilityDetail = cls.abilityDescription;
-    let abilityTone: CombatNotice["tone"] = "neutral";
+  const beginCombatRun = (draftDeck: VocabWord[], saveOverride: SaveData = save) => {
+    const initial = createInitialCombat(1, STARTING_HP, saveOverride, draftDeck);
 
-    if (cls.id === "linguist") {
-      if (isRuneScreen) {
-        nextBoardTimeMax = Math.min(MAX_BOARD_TIME, Math.round((combat.boardTimeMax + BOARD_TIME_SKILL_BONUS) * 10) / 10);
-        nextBoardTimeLeft = nextBoardTimeMax;
-        abilityDetail = `Steady Hand added ${formatBoardTime(BOARD_TIME_SKILL_BONUS)} to the rune sprint.`;
-        abilityTone = "good";
-      } else {
-        newBuffs.push({ type: "study_head_start", remaining: 1 });
-        abilityDetail = "Next study set begins with +1 AP already prepared.";
-        abilityTone = "good";
-      }
-    } else if (cls.id === "speedreader") {
-      nextFlameDiscount = true;
-      abilityDetail = "Next Flame command costs 1 less AP.";
-      abilityTone = "good";
-    } else if (cls.id === "scholar") {
-      newBuffs.push({ type: isRuneScreen ? "ward" : "reveal_answer", remaining: isRuneScreen ? 1 : 5 });
-      abilityDetail = isRuneScreen ? "Ward will block the next enemy strike." : "Study answer help is primed.";
-      abilityTone = "good";
-    }
-    
-    setCombat({
-      ...combat,
-      abilityUsed: true,
-      abilityCooldown: cls.abilityCooldown,
-      activeBuffs: newBuffs,
-      boardTimeMax: nextBoardTimeMax,
-      boardTimeLeft: nextBoardTimeLeft,
-      flameDiscountNext: nextFlameDiscount,
-      actionEffect: createCombatActionEffect(
-        cls.id === "speedreader" ? "surge" : cls.id === "scholar" && isRuneScreen ? "ward" : "skill",
-        cls.abilityName,
-        cls.id === "speedreader" ? POWER_UP_DEFS.surge.color : cls.id === "scholar" ? TILE_DEFS.tide.color : TILE_DEFS.light.color,
-        {
-          kind: cls.id === "speedreader" ? "flame" : cls.id === "scholar" ? "tide" : "light",
-          detail: abilityDetail,
-          casterName: cls.name,
-          casterSprite: cls.sprite,
-        }
-      ),
-      eventNotices: appendCombatNotices(combat.eventNotices, [
-        createCombatNotice(cls.abilityName, abilityDetail, abilityTone),
-      ]),
-      boardMessage: cls.id === "speedreader"
-        ? "Quickened Script discounted the next Flame command."
-        : cls.id === "linguist"
-          ? isRuneScreen ? `Steady Hand added ${formatBoardTime(BOARD_TIME_SKILL_BONUS)} to the rune sprint.` : "Next study set begins with +1 AP already prepared."
-          : cls.id === "scholar" && isRuneScreen
-            ? "Ward will block the next enemy strike."
-            : combat.boardMessage,
-    });
-  };
-
-  const beginCombatRun = (classId: string, draftDeck: VocabWord[], saveOverride: SaveData = save) => {
-    const nextSave = { ...saveOverride, selectedClass: classId };
-    const initial = createInitialCombat(1, STARTING_HP, nextSave, draftDeck);
-
-    setSave(nextSave);
+    setSave(saveOverride);
     setCombat(initial);
     setStarterDraftDeck([]);
     setStarterDraftChoices([]);
     setStarterDraftMessage("");
     setScreen("combat");
 
-    if (getActiveDeck(nextSave).stats.totalRuns === 0) {
+    if (getActiveDeck(saveOverride).stats.totalRuns === 0) {
       setShowTutorial(true);
     }
   };
 
-  const startRun = (classId: string) => {
-    const nextSave = { ...save, selectedClass: classId };
-    const studyLibrary = getStudyLibrary(nextSave);
+  const startRun = () => {
+    const studyLibrary = getStudyLibrary(save);
     if (studyLibrary.length === 0) {
       setImportMessage("Add cards to this deck before starting a run.");
       setScreen("flashcards");
       return;
     }
 
-    setSave(nextSave);
-    setStarterDraftClassId(classId);
     setStarterDraftDeck(studyLibrary.length <= RUN_START_CARD_TARGET ? studyLibrary : []);
-    setStarterDraftChoices(studyLibrary.length <= RUN_START_CARD_TARGET ? [] : createStarterDraftChoices(nextSave, []));
+    setStarterDraftChoices(studyLibrary.length <= RUN_START_CARD_TARGET ? [] : createStarterDraftChoices(save, []));
     setStarterDraftMessage(studyLibrary.length <= RUN_START_CARD_TARGET
       ? `This deck has ${studyLibrary.length} study card${studyLibrary.length === 1 ? "" : "s"}. Start with all available cards.`
       : "Choose your starting study cards for this run."
@@ -4362,7 +4607,7 @@ export default function App() {
     setStarterDraftDeck(nextDraft);
 
     if (rating !== "known" && nextDraft.length >= RUN_START_CARD_TARGET) {
-      beginCombatRun(starterDraftClassId, nextDraft, baseSave);
+      beginCombatRun(nextDraft, baseSave);
       return;
     }
 
@@ -4395,13 +4640,18 @@ export default function App() {
     
     const word = drawWordFromDeck(nextDeck, nextSave, combat.currentWord?.id);
     const options = generateDistractors(word, getAllCards(nextSave));
-    const nextGuestCharacterIds = getRunGuestCharacterIds(nextFloorNum, combat.guestCharacterIds);
-    const nextRunParty = getRunParty(nextSave, nextGuestCharacterIds);
+    const nextGuestCharacterIds = getRunGuestCharacterIds(
+      nextFloorNum,
+      combat.runPartyCharacterIds,
+      combat.guestCharacterIds,
+      getDeckUnlockedCharacterIds(getActiveDeck(nextSave))
+    );
+    const nextRunParty = getRunParty(nextSave, nextGuestCharacterIds, combat.runPartyCharacterIds);
 
     // A guest contributes their HP immediately, then the party recovers between floors.
     const nextPlayerMaxHp = getPartyMaxHp(nextRunParty, combat.playerMaxHp);
     const joinedPartyHp = Math.max(0, nextPlayerMaxHp - combat.playerMaxHp);
-    const healAmount = Math.floor(combat.playerMaxHp * 0.2);
+    const healAmount = Math.floor(combat.playerMaxHp * (combat.encounter.isBoss ? 0.3 : 0.2));
     const newHp = Math.min(nextPlayerMaxHp, combat.playerHp + joinedPartyHp + healAmount);
     const floorLesson = getFloorLessonNotice(nextFloorNum);
     
@@ -4441,6 +4691,7 @@ export default function App() {
       cinematicStepIndex: 0,
       relicChoices: [],
       guestCharacterIds: nextGuestCharacterIds,
+      recruitedCharacterIds: [],
       combatLog: [],
       eventNotices: [
         ...(encounter.modifierLabel === "Standard"
@@ -4653,6 +4904,21 @@ export default function App() {
     setImportMessage("");
   };
 
+  const togglePartyCharacter = (characterId: string) => {
+    setSave(prev => updateActiveDeck(prev, deck => {
+      if (!getDeckUnlockedCharacterIds(deck).includes(characterId)) return deck;
+      const selected = getDeckSelectedPartyIds(deck);
+      if (selected.includes(characterId)) {
+        return selected.length > 1
+          ? { ...deck, selectedPartyCharacterIds: selected.filter(id => id !== characterId) }
+          : deck;
+      }
+      return selected.length < MAX_ACTIVE_PARTY_SIZE
+        ? { ...deck, selectedPartyCharacterIds: [...selected, characterId] }
+        : deck;
+    }));
+  };
+
   const deleteDeck = (deckId: string) => {
     if (save.decks.length <= 1) {
       setImportMessage("Keep at least one deck.");
@@ -4687,8 +4953,7 @@ export default function App() {
   const activeDeck = getActiveDeck(save);
   const activeDeckStats = activeDeck.stats || createDeckStats();
   const activeDeckCards = activeDeck.cards.length;
-  const selectedClass = getClassById(save.selectedClass);
-  const runParty = getRunParty(save, combat?.guestCharacterIds);
+  const runParty = getRunParty(save, combat?.guestCharacterIds, combat?.runPartyCharacterIds);
   const currentEnemyTelegraphClass = getEnemyTelegraphClass(currentEnemy);
   const showLegacyCinematicScreen: boolean = false;
   const accuracy = combat && (combat.correctCount + combat.wrongCount) > 0
@@ -4705,6 +4970,7 @@ export default function App() {
   const activeTurnActor = combat ? getCurrentActor(combat) : null;
   const activeCommandCharacter = getActorCharacter(activeTurnActor, runParty);
   const activeCommandSkill = activeCommandCharacter ? getSkillById(activeCommandCharacter.skillId) : null;
+  const activeCommandUltimate = activeCommandCharacter ? getUltimateById(activeCommandCharacter.ultimateId) : null;
   const apCombatMode = Boolean(combat && ["studyReady", "study", "commandReady", "command", "enemyAction"].includes(combat.mode));
   const activeCinematic = combat?.cinematic;
   const preparedPreview = combat?.pendingCinematic && currentEnemy && !currentEnemy.isDead
@@ -4855,7 +5121,7 @@ export default function App() {
               className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
             >
               <Star className="w-5 h-5 text-yellow-400" />
-              Upgrades
+              Roster
             </button>
           </div>
           
@@ -4940,8 +5206,8 @@ export default function App() {
               <div className="flex items-start gap-4">
                 <div className="p-2 bg-purple-500/20 rounded-lg"><Star className="w-6 h-6 text-purple-400" /></div>
                 <div>
-                  <h3 className="text-white font-semibold">Deck Progression</h3>
-                  <p className="text-sm">Each deck has its own party unlocks, relic history, best floor, and scaling pace.</p>
+                  <h3 className="text-white font-semibold">Focus Ultimates</h3>
+                  <p className="text-sm">Correct cards charge Focus. At 12 Focus, the active character can fire a free ultimate without spending AP or moving on the timeline.</p>
                 </div>
               </div>
             </div>
@@ -5194,7 +5460,7 @@ export default function App() {
   }
 
   if (screen === "starterDraft") {
-    const selectedDraftClass = getClassById(starterDraftClassId);
+    const selectedDraftParty = getRunParty(save);
     const canStartDraftRun = starterDraftDeck.length > 0;
 
     return (
@@ -5226,12 +5492,14 @@ export default function App() {
 
           <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
             <div className="rounded-lg border border-[#0F3460] bg-[#16213E]/90 p-4">
-              <div className="mb-3 flex items-center gap-3">
-                <img src={assetUrl(selectedDraftClass?.sprite)} alt="" className="h-14 w-14 object-contain" />
-                <div>
-                  <div className="font-bold text-white">{selectedDraftClass?.name}</div>
-                  <div className="text-xs text-gray-500">{starterDraftDeck.length}/{RUN_START_CARD_TARGET} chosen</div>
+              <div className="mb-3">
+                <div className="mb-2 flex -space-x-2">
+                  {selectedDraftParty.map(member => (
+                    <img key={member.id} src={assetUrl(member.sprite)} alt="" className="h-12 w-12 rounded-full border border-white/15 bg-black/20 object-contain" />
+                  ))}
                 </div>
+                <div className="font-bold text-white">{selectedDraftParty.map(member => member.name).join(", ")}</div>
+                <div className="text-xs text-gray-500">{starterDraftDeck.length}/{RUN_START_CARD_TARGET} cards chosen</div>
               </div>
               <div className="space-y-2">
                 {starterDraftDeck.map(card => (
@@ -5247,7 +5515,7 @@ export default function App() {
                 )}
               </div>
               <button
-                onClick={() => beginCombatRun(starterDraftClassId, starterDraftDeck)}
+                onClick={() => beginCombatRun(starterDraftDeck)}
                 disabled={!canStartDraftRun}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-[#E94560] py-3 font-bold text-white transition-all hover:bg-[#ff5b72] disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
               >
@@ -5308,72 +5576,89 @@ export default function App() {
   }
 
   if (screen === "classSelect") {
+    const selectedPartyIds = getDeckSelectedPartyIds(activeDeck);
     return (
       <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_menu_blob.png")} />
-        <div className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-start px-4 py-6 sm:justify-center">
-          <h2 className="mb-5 text-2xl font-bold text-white sm:mb-8 sm:text-3xl" style={{ fontFamily: "Cinzel, Georgia, serif", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
-            Choose Your Class
+        <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col items-center justify-start px-4 py-6 sm:justify-center">
+          <h2 className="mb-2 text-2xl font-bold text-white sm:text-3xl" style={{ fontFamily: "Cinzel, Georgia, serif", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
+            Choose Your Party
           </h2>
-          <div className="mb-5 rounded-lg border border-cyan-400/30 bg-black/35 px-4 py-2 text-sm text-cyan-100">
-            Running deck: <span className="font-bold text-white">{activeDeck.name}</span>
+          <div className="mb-5 max-w-xl rounded-lg border border-cyan-400/30 bg-black/35 px-4 py-2 text-center text-sm text-cyan-100">
+            Pick up to {MAX_ACTIVE_PARTY_SIZE} unlocked characters for <span className="font-bold text-white">{activeDeck.name}</span>. Tutorial guests fill open slots during the opening floors.
           </div>
           
-          <div className="grid w-full max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
-            {CLASSES.map(cls => {
-              const isUnlocked = getDeckUnlockedClasses(activeDeck).includes(cls.id);
+          <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {CHARACTER_DEFS.map(character => {
+              const isUnlocked = getDeckUnlockedCharacterIds(activeDeck).includes(character.id);
+              const isSelected = selectedPartyIds.includes(character.id);
+              const tile = TILE_DEFS[character.element];
+              const skill = getSkillById(character.skillId);
+              const ultimate = getUltimateById(character.ultimateId);
+              const selectionBlocked = !isSelected && selectedPartyIds.length >= MAX_ACTIVE_PARTY_SIZE;
               return (
-                <div
-                  key={cls.id}
-                  className={`relative mx-auto w-full max-w-xs overflow-hidden rounded-2xl border-2 transition-all duration-200 ${
-                    isUnlocked
-                      ? "border-[#0F3460] hover:border-[#E94560] hover:scale-105 cursor-pointer bg-[#16213E]/90"
-                      : "border-gray-700 bg-gray-900/80 opacity-70"
+                <button
+                  type="button"
+                  key={character.id}
+                  disabled={!isUnlocked || selectionBlocked}
+                  onClick={() => togglePartyCharacter(character.id)}
+                  className={`relative overflow-hidden rounded-lg border-2 p-3 text-left transition-all ${
+                    isSelected
+                      ? "bg-[#16213E]/96 shadow-lg"
+                      : isUnlocked
+                        ? "bg-[#071225]/86 hover:-translate-y-1"
+                        : "cursor-not-allowed border-gray-700 bg-gray-900/76 opacity-65"
                   }`}
-                  onClick={() => isUnlocked && startRun(cls.id)}
+                  style={{ borderColor: isSelected ? tile.color : undefined }}
                 >
                   {!isUnlocked && (
-                    <div className="absolute inset-0 flex items-center justify-center z-10 bg-black/50">
-                      <div className="text-center">
-                        <Lock className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-                        <p className="text-gray-400 text-sm">{cls.unlockRequirement}</p>
-                        <p className="text-yellow-400 text-sm">{cls.unlockCost} orbs</p>
-                      </div>
+                    <div className="absolute right-2 top-2 z-10 rounded-full bg-black/55 p-1.5 text-gray-400">
+                      <Lock className="h-4 w-4" />
                     </div>
                   )}
-                  
-                  <div className="flex h-32 items-center justify-center bg-gradient-to-b from-[#0F3460]/50 to-transparent sm:h-48">
-                    <img src={assetUrl(cls.sprite)} alt={cls.name} className="h-28 object-contain drop-shadow-lg sm:h-40" />
+                  {isSelected && (
+                    <div className="absolute right-2 top-2 rounded-full bg-green-400/20 p-1 text-green-100">
+                      <Check className="h-4 w-4" />
+                    </div>
+                  )}
+                  <div className="flex h-24 items-center justify-center">
+                    <img src={assetUrl(character.sprite)} alt={character.name} className="h-24 object-contain drop-shadow-lg" />
                   </div>
-                  
-                  <div className="p-4 sm:p-5">
-                    <h3 className="mb-1 text-lg font-bold text-white sm:text-xl">{cls.name}</h3>
-                    <p className="mb-3 text-sm text-gray-400">{cls.description}</p>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Zap className="w-4 h-4 text-yellow-400" />
-                        <span className="text-gray-300">{cls.abilityName}</span>
-                      </div>
-                      <p className="text-gray-500 text-xs">{cls.abilityDescription}</p>
-                      <div className="flex items-center gap-2 text-sm mt-2">
-                        <Shield className="w-4 h-4 text-blue-400" />
-                        <span className="text-gray-400 text-xs">{cls.passiveDescription}</span>
-                      </div>
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-bold text-white">{character.name}</h3>
+                      <span className="text-[10px] font-bold uppercase" style={{ color: tile.color }}>{TILE_DEFS[character.element].label}</span>
+                    </div>
+                    <p className="mt-1 min-h-8 text-xs text-gray-400">{character.passive}</p>
+                    <div className="mt-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-gray-300">
+                      <div><span className="font-bold text-cyan-100">{skill?.name}</span>: {skill?.description}</div>
+                      <div className="mt-1"><span className="font-bold text-yellow-100">{ultimate?.name}</span>: {ultimate?.description}</div>
+                    </div>
+                    <div className={`mt-2 text-xs font-bold ${isUnlocked ? isSelected ? "text-green-200" : "text-cyan-200" : "text-gray-500"}`}>
+                      {isUnlocked ? isSelected ? "Selected" : selectionBlocked ? "Party full" : "Tap to select" : character.unlockHint}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
           
-          <button
-            onClick={() => setScreen("menu")}
-            className="mt-6 flex items-center gap-2 rounded-lg bg-white/10 px-6 py-3 text-white transition-all hover:bg-white/20 sm:mt-8"
-          >
-            <Home className="w-5 h-5" />
-            Back to Menu
-          </button>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button
+              onClick={() => setScreen("menu")}
+              className="flex items-center gap-2 rounded-lg bg-white/10 px-5 py-3 text-white transition-all hover:bg-white/20"
+            >
+              <Home className="h-5 w-5" />
+              Back
+            </button>
+            <button
+              onClick={startRun}
+              className="flex items-center gap-2 rounded-lg bg-[#E94560] px-6 py-3 font-bold text-white transition-all hover:bg-[#ff5b72]"
+            >
+              <Sword className="h-5 w-5" />
+              Draft Starting Cards
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -6123,7 +6408,7 @@ export default function App() {
 
                   <div className="relative grid min-h-0 flex-1 grid-cols-[1fr_0.95fr_1fr] items-center gap-2">
                     <div className={`justify-self-center text-center ${cinematicPlayerClass}`}>
-                      <img src={assetUrl(selectedClass?.sprite)} alt="Player" className="mx-auto h-16 object-contain drop-shadow-2xl sm:h-20 md:h-24" />
+                      <img src={assetUrl(runParty[0]?.sprite)} alt="Player" className="mx-auto h-16 object-contain drop-shadow-2xl sm:h-20 md:h-24" />
                       <div className="mt-1 text-[11px] font-bold text-gray-200 sm:text-xs">
                         HP {activeCinematic.playerHpBefore} {"->"} {activeCinematic.playerHpAfter}
                       </div>
@@ -6432,6 +6717,28 @@ export default function App() {
                           })}
                         </div>
 
+                        {activeCommandUltimate && (
+                          <button
+                            type="button"
+                            onClick={handleUltimate}
+                            disabled={combat.phase !== "answering" || combat.skillCharge < activeCommandUltimate.focusCost}
+                            className={`ultimate-command-button flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-all ${
+                              combat.skillCharge >= activeCommandUltimate.focusCost
+                                ? "border-yellow-200/70 bg-yellow-300/14 text-yellow-50 shadow-[0_0_20px_rgba(255,216,77,0.2)] hover:bg-yellow-300/22"
+                                : "cursor-not-allowed border-white/10 bg-white/4 text-gray-500 opacity-70"
+                            }`}
+                          >
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Zap className="h-4 w-4 shrink-0" />
+                              <span className="min-w-0">
+                                <span className="block truncate text-xs font-black uppercase tracking-wide">Ultimate: {activeCommandUltimate.name}</span>
+                                <span className="block truncate text-[10px]">{activeCommandUltimate.description}</span>
+                              </span>
+                            </span>
+                            <span className="shrink-0 rounded bg-black/25 px-2 py-1 text-[10px] font-black">{activeCommandUltimate.focusCost} Focus</span>
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           onClick={endCommandWindow}
@@ -6451,7 +6758,7 @@ export default function App() {
                   </div>
 
                   <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 sm:gap-4">
-                    <img src={assetUrl(selectedClass?.sprite)} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
+                    <img src={assetUrl(runParty[0]?.sprite)} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
                     <div className="flex-1">
                       <div className="mb-1 flex justify-between text-xs">
                         <span className="flex items-center gap-1 text-gray-300">
@@ -6906,7 +7213,7 @@ export default function App() {
 
               <div className="flex items-center gap-2 sm:gap-4">
                 <div className={`relative transition-all duration-300 ${combat.playerAnim === "hit" ? "player-hit" : combat.playerAnim === "heal" ? "player-heal" : ""}`}>
-                  <img src={assetUrl(selectedClass?.sprite)} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
+                  <img src={assetUrl(runParty[0]?.sprite)} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
                   {combat.activeBuffs.length > 0 && (
                     <div className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-yellow-400 animate-pulse" />
                   )}
@@ -6936,24 +7243,6 @@ export default function App() {
                     />
                   </div>
                 </div>
-
-                <button
-                  onClick={handleAbility}
-                  disabled={combat.abilityUsed || combat.abilityCooldown > 0 || combat.phase !== "answering" || combat.mode === "study" || combat.mode === "board" || combat.mode === "resolveReady" || combat.mode === "cinematic"}
-                  className={`relative rounded-lg border-2 p-1.5 transition-all duration-200 sm:p-3 ${
-                    combat.abilityUsed || combat.abilityCooldown > 0 || combat.mode === "study" || combat.mode === "board" || combat.mode === "resolveReady" || combat.mode === "cinematic"
-                      ? "cursor-not-allowed border-gray-700 bg-gray-800 text-gray-600"
-                      : "border-[#E94560] bg-[#0F3460] text-white hover:scale-105 hover:bg-[#1a4a7a]"
-                  }`}
-                  title={selectedClass?.abilityName}
-                >
-                  <Zap className="h-5 w-5" />
-                  {combat.abilityCooldown > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-gray-700 text-xs">
-                      {combat.abilityCooldown}
-                    </span>
-                  )}
-                </button>
 
                 <div className="text-right">
                   <div className="hidden text-xs text-gray-500 sm:block">Accuracy</div>
@@ -7328,6 +7617,25 @@ export default function App() {
             </div>
           </div>
 
+          {combat.recruitedCharacterIds.length > 0 && (
+            <div className="mb-5 flex w-full max-w-2xl items-center gap-3 rounded-lg border border-orange-300/55 bg-orange-300/14 px-4 py-3 text-left shadow-[0_0_24px_rgba(255,151,72,0.18)]">
+              {combat.recruitedCharacterIds.map(characterId => {
+                const character = CHARACTER_DEFS.find(candidate => candidate.id === characterId);
+                if (!character) return null;
+                return (
+                  <div key={character.id} className="flex items-center gap-3">
+                    <img src={assetUrl(character.sprite)} alt="" className="h-14 w-14 object-contain" />
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-wide text-orange-200">Permanent deck recruit</div>
+                      <div className="text-lg font-black text-white">{character.name} joined {activeDeck.name}</div>
+                      <div className="text-xs text-orange-50/80">This character stays available for future runs.</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {combat.relicChoices.length > 0 && (
             <div className="mb-6 w-full max-w-4xl">
               <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
@@ -7456,12 +7764,6 @@ export default function App() {
     const bestFloor = activeDeckStats.bestFloor;
     const isNewBest = floor >= bestFloor;
     
-    // Check unlocks
-    const unlockChecks = [
-      { classId: "speedreader", requirement: "Reach Floor 5", met: floor >= 5, cost: 100 },
-      { classId: "scholar", requirement: "Learn 50 words (total correct)", met: save.stats.totalCorrect >= 50, cost: 200 },
-    ];
-    
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-48" style={assetBackground("/bg_combat_blob.png")} />
@@ -7507,21 +7809,6 @@ export default function App() {
             </div>
           </div>
           
-          {/* Unlock notifications */}
-          {unlockChecks.map(check => {
-            if (!check.met || getDeckUnlockedClasses(activeDeck).includes(check.classId)) return null;
-            const cls = getClassById(check.classId);
-            return (
-              <div key={check.classId} className="bg-purple-500/20 border border-purple-500 rounded-xl p-4 mb-4 max-w-md w-full flex items-center gap-4">
-                <img src={assetUrl(cls?.sprite)} alt="" className="w-12 h-12 object-contain" />
-                <div>
-                  <p className="text-purple-400 font-bold">New Class Unlocked!</p>
-                  <p className="text-white">{cls?.name} is now available</p>
-                </div>
-              </div>
-            );
-          })}
-          
           {/* Action buttons */}
           <div className="flex gap-4">
             <button
@@ -7529,7 +7816,7 @@ export default function App() {
               className="flex items-center gap-2 px-6 py-3 bg-[#0F3460] hover:bg-[#1a4a7a] rounded-lg text-white font-bold transition-all"
             >
               <Star className="w-5 h-5 text-yellow-400" />
-              Upgrades
+              Roster
             </button>
             <button
               onClick={() => {
@@ -7570,7 +7857,7 @@ export default function App() {
               <ChevronRight className="w-5 h-5 rotate-180" />
               Back
             </button>
-            <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "Cinzel, Georgia, serif" }}>Deck Upgrades</h2>
+            <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "Cinzel, Georgia, serif" }}>Deck Roster</h2>
             <div className="flex items-center gap-2">
               <img src={assetUrl("/wisdom_orb_blob.svg")} alt="" className="h-6 w-6" />
               <span className="text-yellow-400 font-bold">{save.wisdomOrbs}</span>
@@ -7579,79 +7866,17 @@ export default function App() {
           
           {/* Content */}
           <div className="flex-1 overflow-auto p-6">
-            {/* Character Classes */}
-            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-              <Sword className="w-5 h-5 text-blue-400" />
-              {activeDeck.name} Classes
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              {CLASSES.map(cls => {
-                const isUnlocked = getDeckUnlockedClasses(activeDeck).includes(cls.id);
-                const canUnlock = !isUnlocked && save.wisdomOrbs >= cls.unlockCost;
-                
-                return (
-                  <div 
-                    key={cls.id} 
-                    className={`rounded-xl p-4 border-2 ${
-                      isUnlocked ? "bg-[#16213E] border-[#0F3460]" : "bg-gray-900/50 border-gray-800"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 mb-3">
-                      <img src={assetUrl(cls.sprite)} alt="" className="w-12 h-12 object-contain" />
-                      <div>
-                        <h4 className="text-white font-bold">{cls.name}</h4>
-                        <p className="text-gray-500 text-xs">{cls.passiveDescription}</p>
-                      </div>
-                    </div>
-                    <p className="text-gray-400 text-sm mb-3">{cls.description}</p>
-                    
-                    {isUnlocked ? (
-                      <div className="flex items-center gap-2 text-green-400 text-sm">
-                        <Check className="w-4 h-4" />
-                        Unlocked
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          if (canUnlock) {
-                            setSave(prev => ({
-                              ...prev,
-                              wisdomOrbs: prev.wisdomOrbs - cls.unlockCost,
-                              decks: prev.decks.map(deck => deck.id === getActiveDeckId(prev)
-                                ? {
-                                    ...deck,
-                                    unlockedClasses: Array.from(new Set([...(deck.unlockedClasses || []), cls.id])),
-                                    unlockedCharacterIds: Array.from(new Set([...(deck.unlockedCharacterIds || []), cls.id])),
-                                    updatedAt: Date.now(),
-                                  }
-                                : deck),
-                            }));
-                          }
-                        }}
-                        disabled={!canUnlock}
-                        className={`w-full py-2 rounded-lg text-sm font-bold transition-all ${
-                          canUnlock
-                            ? "bg-yellow-600 hover:bg-yellow-500 text-white"
-                            : "bg-gray-800 text-gray-600 cursor-not-allowed"
-                        }`}
-                      >
-                        {canUnlock ? `Unlock (${cls.unlockCost} orbs)` : `Locked (${cls.unlockCost} orbs)`}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-300" />
-              {activeDeck.name} Party
+              {activeDeck.name} Characters
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-8">
               {CHARACTER_DEFS.map(character => {
-                const isUnlocked = getRunParty(save).some(member => member.id === character.id);
+                const isUnlocked = getDeckUnlockedCharacterIds(activeDeck).includes(character.id);
+                const isSelected = getDeckSelectedPartyIds(activeDeck).includes(character.id);
                 const tile = TILE_DEFS[character.element];
                 const skill = getSkillById(character.skillId);
+                const ultimate = getUltimateById(character.ultimateId);
 
                 return (
                   <div
@@ -7667,8 +7892,9 @@ export default function App() {
                       </div>
                     </div>
                     <p className="mb-2 text-xs text-gray-400">{skill?.name}: {skill?.description}</p>
+                    <p className="mb-2 text-xs text-yellow-100/80">{ultimate?.name}: {ultimate?.description}</p>
                     <div className={isUnlocked ? "text-xs font-bold text-green-300" : "text-xs text-gray-500"}>
-                      {isUnlocked ? "In party pool" : character.unlockHint}
+                      {isUnlocked ? isSelected ? "Selected for next run" : "Unlocked roster member" : character.unlockHint}
                     </div>
                   </div>
                 );

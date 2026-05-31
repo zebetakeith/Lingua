@@ -203,13 +203,14 @@ export function getEnemyActionPlan(enemy: EnemyLike, context: EnemyPlanContext =
 
   const spent = actions.reduce((total, action) => total + action.apCost, 0);
   if (enemy.def.isBoss && spent < budget) {
-    const damage = Math.max(3, Math.floor(enemy.currentDamage * 0.25));
+    const spareAp = budget - spent;
+    const damage = Math.max(3, Math.floor(enemy.currentDamage * 0.25)) * spareAp;
     actions.push({
       id: "boss_pressure",
       name: "Boss Pressure",
-      apCost: 1,
+      apCost: spareAp,
       damage,
-      description: `Spends extra AP for +${damage} pressure damage.`,
+      description: `Spends ${spareAp} extra AP for +${damage} pressure damage.`,
       counterplay: "Expect bosses to spend spare AP on extra pressure.",
       severity: "high",
     });

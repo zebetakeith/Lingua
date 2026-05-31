@@ -832,6 +832,19 @@
   64% { transform: translateX(-1.05rem) scale(1.08); }
 }
 
+@keyframes enemyDelayAttack {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(0deg) scale(1); }
+  28% { transform: translateX(0.18rem) translateY(-0.55rem) rotate(6deg) scale(1.12); }
+  58% { transform: translateX(-0.72rem) translateY(-0.12rem) rotate(-9deg) scale(1.06); }
+  76% { transform: translateX(-0.2rem) translateY(0.08rem) rotate(3deg) scale(1.03); }
+}
+
+@keyframes enemyEnrageAttack {
+  0%, 100% { transform: translateX(0) scale(1); filter: brightness(1); }
+  28% { transform: translateX(0) scale(1.2, 0.92); filter: brightness(1.45); }
+  62% { transform: translateX(-1.12rem) scale(1.16, 0.88); filter: brightness(1.2); }
+}
+
 .rune-swap {
   animation: runeSwap 180ms ease-out;
 }
@@ -1530,6 +1543,14 @@ img[src*="enemy_"] {
   animation: enemyApCheckAttack 1.05s ease-out both;
 }
 
+.battlefield-enemy-attacking.enemy-telegraph-randomize-positions {
+  animation: enemyDelayAttack 1.05s ease-out both;
+}
+
+.battlefield-enemy-attacking.enemy-telegraph-enrage-at-50 {
+  animation: enemyEnrageAttack 1.05s cubic-bezier(0.2, 0.82, 0.25, 1) both;
+}
+
 .battlefield-intent-badge.enemy-telegraph-heavy-attack,
 .enemy-mobile-intent-ribbon.enemy-telegraph-heavy-attack {
   box-shadow: 0 0 18px rgba(107, 197, 214, 0.38);
@@ -1545,6 +1566,18 @@ img[src*="enemy_"] {
 .enemy-mobile-intent-ribbon.enemy-telegraph-low-combo-punish {
   border-color: rgba(169, 135, 231, 0.72);
   box-shadow: 0 0 18px rgba(169, 135, 231, 0.42);
+}
+
+.battlefield-intent-badge.enemy-telegraph-randomize-positions,
+.enemy-mobile-intent-ribbon.enemy-telegraph-randomize-positions {
+  border-color: rgba(107, 197, 214, 0.76);
+  box-shadow: 0 0 18px rgba(107, 197, 214, 0.46);
+}
+
+.battlefield-intent-badge.enemy-telegraph-enrage-at-50,
+.enemy-mobile-intent-ribbon.enemy-telegraph-enrage-at-50 {
+  border-color: rgba(255, 134, 108, 0.78);
+  box-shadow: 0 0 20px rgba(255, 134, 108, 0.52);
 }
 
 @media (max-width: 767px) {
