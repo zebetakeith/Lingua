@@ -173,6 +173,7 @@ interface CombatState {
   cinematicStepIndex: number;
   relicChoices: RelicDef[];
   runRelics: string[];
+  guestCharacterIds: string[];
   combatLog: string[];
   eventNotices: CombatNotice[];
   actionEffect: CombatActionEffect | null;
@@ -374,6 +375,8 @@ const MAX_STUDY_AP_PER_CARD = 5;
 const STUDY_RUSH_AP_CAP = 5;
 const PLAYER_ACTION_DELAY = 20;
 const ENEMY_ACTION_DELAY = 70;
+const EARLY_GUEST_FLOOR = 2;
+const EARLY_GUEST_CHARACTER_ID = "scholar";
 
 const TILE_DEFS: Record<TileKind, { label: string; sigil: string; color: string; dark: string; glow: string }> = {
   flame: { label: "Flame", sigil: "Ignis", color: "#D66B4D", dark: "#461A13", glow: "rgba(214,107,77,0.5)" },
@@ -599,10 +602,16 @@ function getDeckUnlockedClasses(deck: SavedDeck): string[] {
   return Array.from(new Set(["linguist", ...(deck.unlockedClasses || [])]));
 }
 
-function getRunParty(saveData: SaveData): CharacterDef[] {
+function getRunParty(saveData: SaveData, guestCharacterIds: string[] = []): CharacterDef[] {
   const activeDeck = getActiveDeck(saveData);
-  const unlocked = new Set([...(activeDeck.unlockedCharacterIds || []), ...getDeckUnlockedClasses(activeDeck)]);
+  const unlocked = new Set([...(activeDeck.unlockedCharacterIds || []), ...getDeckUnlockedClasses(activeDeck), ...guestCharacterIds]);
   return CHARACTER_DEFS.filter(character => unlocked.has(character.id));
+}
+
+function getRunGuestCharacterIds(floor: number, currentGuests: string[] = []): string[] {
+  return floor >= EARLY_GUEST_FLOOR
+    ? Array.from(new Set([...currentGuests, EARLY_GUEST_CHARACTER_ID]))
+    : currentGuests;
 }
 
 function getMilestoneCharacterUnlocks(stats: DeckStats, bossClears: number): string[] {
@@ -1331,6 +1340,10 @@ function getEnemyPuzzleHint(enemy?: EnemyInstance | null): { label: string; text
   };
 }
 
+function getEnemyTelegraphClass(enemy?: EnemyInstance | null): string {
+  return `enemy-telegraph-${(enemy?.def.special || "strike").replace(/_/g, "-")}`;
+}
+
 function getRewardCardInsight(card: VocabWord, combatState?: CombatState | null): { tag: string; text: string } {
   const relics = combatState?.runRelics || [];
 
@@ -1996,6 +2009,19 @@ function createCombatActionEffect(
 }
 
 // ─── Initial Combat State ────────────────────────────────
+function getFloorLessonNotice(floor: number): CombatNotice | null {
+  if (floor === 1) {
+    return createCombatNotice("Lesson: Guard", "Bloop Slime spends 2 AP on Belly Flop. Defend before it acts.", "warn");
+  }
+  if (floor === 2) {
+    return createCombatNotice("Scholar joins as a guest", "Ward Word can block Nibble Imp's Scramble Answers.", "good");
+  }
+  if (floor === 3) {
+    return createCombatNotice("Lesson: AP Rhythm", "Spend at least 3 AP before Doodle Dragon acts.", "warn");
+  }
+  return null;
+}
+
 function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveData, startingDeck?: VocabWord[]): CombatState {
   const difficultyFloor = getDifficultyFloor(floor, saveData);
   const encounter = getEncounterForFloor(floor);
@@ -2003,7 +2029,8 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
   const hpMult = getHpMultiplier(difficultyFloor);
   const timerMax = getQuestionTimerForFloor(difficultyFloor);
   const deck = startingDeck && startingDeck.length > 0 ? startingDeck : createStarterDeck(saveData);
-  const runParty = getRunParty(saveData);
+  const guestCharacterIds = getRunGuestCharacterIds(floor);
+  const runParty = getRunParty(saveData, guestCharacterIds);
   const runPlayerMaxHp = getPartyMaxHp(runParty, playerMaxHp);
   const encounterBoard = createEncounterBoard(encounter);
   
@@ -2051,8 +2078,9 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     cinematicStepIndex: 0,
     relicChoices: [],
     runRelics: [],
+    guestCharacterIds,
     combatLog: [],
-    eventNotices: [],
+    eventNotices: [getFloorLessonNotice(floor)].filter((notice): notice is CombatNotice => Boolean(notice)),
     actionEffect: null,
     skillCharge: 0,
     powerPoints: 0,
@@ -3342,7 +3370,7 @@ export default function App() {
       skillCharge: nextSkillCharge,
       activeBuffs: nextBuffs,
       fragileDebuff: 0,
-      actionEffect: createCombatActionEffect("enemy", enemyActionName, "#ff7895", {
+      actionEffect: createCombatActionEffect("enemy", enemyActionName, TILE_DEFS[enemy.def.element].color, {
         kind: enemy.def.element,
         detail: `${enemyApSpent}/${enemyApBudget} AP - ${wardBlocked ? "blocked" : `${incomingDamage} damage`}`,
         casterName: enemy.def.name,
@@ -3402,7 +3430,7 @@ export default function App() {
   const handlePlayerCommand = (action: PlayerActionId) => {
     if (!combat || combat.mode !== "command" || combat.phase !== "answering" || combat.isPaused) return;
     const actor = getCurrentActor(combat);
-    const party = getRunParty(save);
+    const party = getRunParty(save, combat.guestCharacterIds);
     const member = getActorCharacter(actor, party);
     const enemy = combat.enemies[combat.currentEnemyIndex];
     if (!actor || !member || !enemy || enemy.isDead) return;
@@ -3724,7 +3752,7 @@ export default function App() {
   const commitResolvedBoardMove = (state: CombatState, result: MatchResult) => {
     const hasSurge = state.activeBuffs.some(b => b.type === "board_surge");
     const nextBuffs = state.activeBuffs.filter(b => b.type !== "board_surge");
-    const party = getRunParty(save);
+    const party = getRunParty(save, state.guestCharacterIds);
     const attackSummary = getPartyDamage(result, party, hasSurge, state.runRelics);
     let damage = attackSummary.total;
     const cls = getClassById(save.selectedClass);
@@ -4088,7 +4116,7 @@ export default function App() {
     if (!combat || !skill || combat.phase !== "answering" || combat.isResolvingRunes || combat.mode !== "boardReady" || combat.skillCharge < skill.cost) return;
 
     const nextSkillCharge = combat.skillCharge - skill.cost;
-    const caster = getRunParty(save).find(member => member.skillId === skillId);
+    const caster = getRunParty(save, combat.guestCharacterIds).find(member => member.skillId === skillId);
     const createSkillEffect = (kind: TileKind = skill.element, detail = skill.description) => createCombatActionEffect("skill", skill.name, TILE_DEFS[kind].color, {
       kind,
       detail,
@@ -4358,10 +4386,6 @@ export default function App() {
     const difficultyFloor = getDifficultyFloor(nextFloorNum, nextSave);
     const encounter = getEncounterForFloor(nextFloorNum);
     
-    // Heal 20% between floors
-    const healAmount = Math.floor(combat.playerMaxHp * 0.2);
-    const newHp = Math.min(combat.playerMaxHp, combat.playerHp + healAmount);
-    
     const enemyDefs = getEnemiesForFloor(nextFloorNum);
     const hpMult = getHpMultiplier(difficultyFloor);
     const timerMax = getQuestionTimerForFloor(difficultyFloor);
@@ -4371,7 +4395,15 @@ export default function App() {
     
     const word = drawWordFromDeck(nextDeck, nextSave, combat.currentWord?.id);
     const options = generateDistractors(word, getAllCards(nextSave));
-    const nextRunParty = getRunParty(nextSave);
+    const nextGuestCharacterIds = getRunGuestCharacterIds(nextFloorNum, combat.guestCharacterIds);
+    const nextRunParty = getRunParty(nextSave, nextGuestCharacterIds);
+
+    // A guest contributes their HP immediately, then the party recovers between floors.
+    const nextPlayerMaxHp = getPartyMaxHp(nextRunParty, combat.playerMaxHp);
+    const joinedPartyHp = Math.max(0, nextPlayerMaxHp - combat.playerMaxHp);
+    const healAmount = Math.floor(combat.playerMaxHp * 0.2);
+    const newHp = Math.min(nextPlayerMaxHp, combat.playerHp + joinedPartyHp + healAmount);
+    const floorLesson = getFloorLessonNotice(nextFloorNum);
     
     setCombat({
       ...combat,
@@ -4382,6 +4414,7 @@ export default function App() {
       deck: nextDeck,
       rewardChoices: [],
       playerHp: newHp,
+      playerMaxHp: nextPlayerMaxHp,
       combo: 0,
       currentEnemyIndex: 0,
       enemies,
@@ -4407,10 +4440,14 @@ export default function App() {
       cinematic: null,
       cinematicStepIndex: 0,
       relicChoices: [],
+      guestCharacterIds: nextGuestCharacterIds,
       combatLog: [],
-      eventNotices: encounter.modifierLabel === "Standard"
-        ? []
-        : [createCombatNotice(encounter.title, encounter.modifierDescription, encounter.isBoss ? "bad" : "warn")],
+      eventNotices: [
+        ...(encounter.modifierLabel === "Standard"
+          ? []
+          : [createCombatNotice(encounter.title, encounter.modifierDescription, encounter.isBoss ? "bad" : "warn")]),
+        ...(floorLesson ? [floorLesson] : []),
+      ],
       powerPoints: 0,
       actionPoints: 0,
       actionPointsEarnedThisRush: 0,
@@ -4651,7 +4688,8 @@ export default function App() {
   const activeDeckStats = activeDeck.stats || createDeckStats();
   const activeDeckCards = activeDeck.cards.length;
   const selectedClass = getClassById(save.selectedClass);
-  const runParty = getRunParty(save);
+  const runParty = getRunParty(save, combat?.guestCharacterIds);
+  const currentEnemyTelegraphClass = getEnemyTelegraphClass(currentEnemy);
   const showLegacyCinematicScreen: boolean = false;
   const accuracy = combat && (combat.correctCount + combat.wrongCount) > 0
     ? Math.round((combat.correctCount / (combat.correctCount + combat.wrongCount)) * 100)
@@ -5637,15 +5675,15 @@ export default function App() {
                           }}
                         >
                           <RuneGlyph kind={member.element} />
-                          <span>{member.name}</span>
+                          <span>{member.name}{combat.guestCharacterIds.includes(member.id) ? " Guest" : ""}</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                <div className={`battlefield-enemy-member absolute bottom-0 right-[6%] sm:right-[25%] ${cinematicEnemyClass}`}>
+                <div className={`battlefield-enemy-member absolute bottom-0 right-[6%] sm:right-[25%] ${cinematicEnemyClass} ${currentEnemyTelegraphClass} ${combat.enemyAnim === "attack" ? "battlefield-enemy-attacking" : ""}`}>
                   <div
-                    className={`battlefield-intent-badge battlefield-intent-${currentEnemyIntent?.severity || "low"}`}
+                    className={`battlefield-intent-badge battlefield-intent-${currentEnemyIntent?.severity || "low"} ${currentEnemyTelegraphClass}`}
                     title={currentEnemyIntent?.counterplay}
                   >
                     {currentEnemyIntentIcon === "attack" ? (
@@ -5867,7 +5905,7 @@ export default function App() {
                 </div>
               </div>
               <div
-                className="enemy-mobile-intent-ribbon relative z-30 mb-1 flex max-w-[94vw] items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-bold sm:hidden"
+                className={`enemy-mobile-intent-ribbon ${currentEnemyTelegraphClass} relative z-30 mb-1 flex max-w-[94vw] items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-bold sm:hidden`}
                 style={{
                   borderColor: currentEnemyIntent?.severity === "high" ? "rgba(255,120,149,0.72)" : "rgba(255,255,255,0.18)",
                   backgroundColor: currentEnemyIntent?.severity === "high" ? "rgba(126,39,73,0.78)" : "rgba(7,62,80,0.78)",
@@ -6264,7 +6302,10 @@ export default function App() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="truncate text-sm font-bold text-white">{member.name}</span>
-                              <span className="text-[10px] font-bold" style={{ color: tile.color }}>{TILE_DEFS[member.element].label}</span>
+                              <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: tile.color }}>
+                                {combat.guestCharacterIds.includes(member.id) && <span className="rounded bg-white/10 px-1 py-0.5 text-[9px] text-green-100">Guest</span>}
+                                {TILE_DEFS[member.element].label}
+                              </span>
                             </div>
                             <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-400">
                               <span>SPD {member.speed}</span>
@@ -6346,7 +6387,10 @@ export default function App() {
                           <div className="flex items-center gap-2">
                             <img src={assetUrl(activeCommandCharacter.sprite)} alt="" className="h-10 w-10 object-contain" />
                             <div className="min-w-0">
-                              <div className="truncate text-sm font-bold text-white">{activeCommandCharacter.name}</div>
+                              <div className="flex items-center gap-1.5 truncate text-sm font-bold text-white">
+                                <span>{activeCommandCharacter.name}</span>
+                                {combat.guestCharacterIds.includes(activeCommandCharacter.id) && <span className="rounded bg-green-300/14 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-green-100">Guest</span>}
+                              </div>
                               <div className="text-[11px] font-semibold text-gray-400">{activeCommandSkill?.name || "Skill"} - {activeCommandSkill?.description || activeCommandCharacter.passive}</div>
                             </div>
                           </div>
@@ -7237,6 +7281,7 @@ export default function App() {
     const rewardChoices = combat.rewardChoices;
     const pendingCharacterUnlocks = getPendingCharacterUnlocks(save, combat);
     const rampStride = getDeckRampStride(Math.max(1, activeDeckCards));
+    const isFirstRelicReward = combat.floor === 3 && combat.relicChoices.length > 0;
     
     return (
       <div className="relative h-screen w-full overflow-auto bg-[#1A1A2E]">
@@ -7287,8 +7332,13 @@ export default function App() {
             <div className="mb-6 w-full max-w-4xl">
               <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
                 <Sparkles className="h-5 w-5 text-yellow-300" />
-                Choose a Deck Relic
+                {isFirstRelicReward ? "Choose Your First Relic" : "Choose a Deck Relic"}
               </h3>
+              {isFirstRelicReward && (
+                <p className="mx-auto mb-3 max-w-2xl rounded-lg border border-yellow-300/25 bg-yellow-300/10 px-3 py-2 text-center text-sm font-semibold text-yellow-50">
+                  Relics reshape this run. Pick the rule change that sounds fun, then add your next study card.
+                </p>
+              )}
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 {combat.relicChoices.map(relic => {
                   const tile = TILE_DEFS[relic.element];
