@@ -4668,19 +4668,19 @@ export default function App() {
   // ─── RENDER: Main Menu ────────────────────────────────
   if (screen === "menu") {
     return (
-      <div className="relative w-full h-screen overflow-hidden">
+      <div className="cute-theme relative h-screen w-full overflow-hidden">
         <div 
           className="absolute inset-0 bg-cover bg-center"
-          style={assetBackground("/bg_menu_relic.svg")}
+          style={assetBackground("/bg_menu_blob.png")}
         />
-        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-b from-sky-100/10 via-transparent to-teal-700/20" />
         
         {/* Floating particles */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           {Array.from({ length: 20 }).map((_, i) => (
             <div
               key={i}
-              className="absolute w-1 h-1 bg-[#c2ad72]/35 rounded-full animate-pulse"
+              className="absolute h-2 w-2 rounded-full bg-[#fff1a8]/60 animate-pulse"
               style={{
                 left: `${Math.random() * 100}%`,
                 top: `${Math.random() * 100}%`,
@@ -4697,9 +4697,9 @@ export default function App() {
             <h1 
               className="text-5xl md:text-7xl font-bold text-center tracking-wider"
               style={{ 
-                color: "#eee8d3",
-                textShadow: "0 0 28px rgba(194,173,114,0.26), 0 4px 8px rgba(0,0,0,0.86)",
-                fontFamily: "Cinzel, Georgia, serif"
+                color: "#fff9d6",
+                textShadow: "0 3px 0 rgba(30,141,151,0.46), 0 8px 18px rgba(18,91,115,0.24)",
+                fontFamily: "Nunito, Inter, sans-serif"
               }}
             >
               LEXICON
@@ -4707,26 +4707,26 @@ export default function App() {
             <h1 
               className="text-4xl md:text-6xl font-bold text-center tracking-widest -mt-2"
               style={{ 
-                color: "#b98594",
-                textShadow: "0 0 24px rgba(185,133,148,0.24), 0 4px 8px rgba(0,0,0,0.86)",
-                fontFamily: "Cinzel, Georgia, serif"
+                color: "#ff7895",
+                textShadow: "0 3px 0 rgba(175,70,109,0.42), 0 8px 18px rgba(18,91,115,0.2)",
+                fontFamily: "Nunito, Inter, sans-serif"
               }}
             >
               LABYRINTH
             </h1>
           </div>
           
-          <p className="text-gray-300 text-lg mb-8 tracking-wide" style={{ textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}>
+          <p className="mb-8 text-lg font-bold tracking-wide text-teal-950" style={{ textShadow: "0 1px 0 rgba(255,255,255,0.65)" }}>
             Master Words. Conquer Dungeons.
           </p>
-          <div className="mb-4 rounded-lg border border-cyan-400/30 bg-black/35 px-4 py-2 text-sm text-cyan-100">
-            Deck: <span className="font-bold text-white">{activeDeck.name}</span> · {activeDeckCards.toLocaleString()} / {MAX_DECK_CARDS.toLocaleString()} cards
+          <div className="mb-4 rounded-lg border border-teal-700/20 bg-white/80 px-4 py-2 text-sm font-bold text-teal-900 shadow-lg backdrop-blur-sm">
+            Deck: <span className="font-black text-teal-950">{activeDeck.name}</span> · {activeDeckCards.toLocaleString()} / {MAX_DECK_CARDS.toLocaleString()} cards
           </div>
           
           {/* Play Button */}
           <button
             onClick={() => setScreen("classSelect")}
-            className="group relative mb-6 max-w-[calc(100vw-2rem)] rounded-lg border border-[#c2ad72]/45 bg-gradient-to-r from-[#172733] via-[#1d2f38] to-[#332d18] px-5 py-4 text-base font-bold text-[#eee8d3] shadow-[0_0_30px_rgba(194,173,114,0.16)] transition-all duration-200 hover:scale-105 hover:border-[#eee8d3]/55 hover:shadow-[0_0_34px_rgba(194,173,114,0.26)] sm:px-12 sm:text-xl"
+            className="group relative mb-6 max-w-[calc(100vw-2rem)] rounded-lg border border-teal-700/20 bg-[#ff7895] px-5 py-4 text-base font-black text-white shadow-[0_10px_0_rgba(184,78,117,0.72),0_18px_30px_rgba(18,91,115,0.18)] transition-all duration-200 hover:-translate-y-1 hover:bg-[#ff8fa6] sm:px-12 sm:text-xl"
           >
             <span className="flex items-center gap-3">
               <Sword className="w-6 h-6" />
@@ -4739,21 +4739,21 @@ export default function App() {
           <div className="flex flex-wrap justify-center gap-4 mt-4">
             <button
               onClick={() => setScreen("howToPlay")}
-              className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-lg text-white transition-all duration-200 hover:scale-105"
+              className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
             >
               <HelpCircle className="w-5 h-5" />
               How to Play
             </button>
             <button
               onClick={() => setScreen("flashcards")}
-              className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-lg text-white transition-all duration-200 hover:scale-105"
+              className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
             >
               <FileText className="w-5 h-5 text-cyan-300" />
               Flashcards
             </button>
             <button
               onClick={() => setScreen("meta")}
-              className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-lg text-white transition-all duration-200 hover:scale-105"
+              className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
             >
               <Star className="w-5 h-5 text-yellow-400" />
               Upgrades
@@ -4761,9 +4761,9 @@ export default function App() {
           </div>
           
           {/* Stats bar */}
-          <div className="absolute bottom-6 flex items-center gap-6 text-sm text-gray-400">
+          <div className="absolute bottom-6 flex items-center gap-6 rounded-full border border-teal-700/15 bg-white/76 px-4 py-2 text-sm font-bold text-teal-900 shadow-md backdrop-blur-sm">
             <div className="flex items-center gap-2">
-              <img src={assetUrl("/wisdom_orb_relic.svg")} alt="" className="w-5 h-5" />
+              <img src={assetUrl("/wisdom_orb_blob.svg")} alt="" className="h-5 w-5" />
               <span>{save.wisdomOrbs}</span>
             </div>
             <div className="flex items-center gap-2">
@@ -4792,7 +4792,7 @@ export default function App() {
   if (screen === "howToPlay") {
     return (
       <div className="relative h-screen w-full overflow-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={assetBackground("/bg_combat_relic.svg")} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-60" style={assetBackground("/bg_combat_blob.png")} />
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6 sm:px-6">
           <div className="w-full max-w-3xl rounded-lg border border-[#0F3460] bg-[#16213E]/90 p-5 backdrop-blur-sm sm:p-8">
             <h2 className="text-3xl font-bold text-white mb-6 text-center" style={{ fontFamily: "Cinzel, Georgia, serif" }}>How to Play</h2>
@@ -4868,7 +4868,7 @@ export default function App() {
 
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={assetBackground("/bg_menu_relic.svg")} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-50" style={assetBackground("/bg_menu_blob.png")} />
         
         <div className="relative z-10 h-full flex flex-col">
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#0F3460]">
@@ -5100,7 +5100,7 @@ export default function App() {
 
     return (
       <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-25" style={assetBackground("/bg_menu_relic.svg")} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-55" style={assetBackground("/bg_menu_blob.png")} />
         <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col px-4 py-5 sm:py-8">
           <div className="mb-5 flex items-center justify-between gap-3">
             <button
@@ -5211,7 +5211,7 @@ export default function App() {
   if (screen === "classSelect") {
     return (
       <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={assetBackground("/bg_menu_relic.svg")} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_menu_blob.png")} />
         <div className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-start px-4 py-6 sm:justify-center">
           <h2 className="mb-5 text-2xl font-bold text-white sm:mb-8 sm:text-3xl" style={{ fontFamily: "Cinzel, Georgia, serif", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
             Choose Your Class
@@ -5284,7 +5284,7 @@ export default function App() {
   if (screen === "combat" && combat) {
     return (
       <div
-        className="relative h-[100dvh] w-full select-none overflow-hidden"
+        className="cute-theme relative h-[100dvh] w-full select-none overflow-hidden"
         style={{
           transform: combat.screenShake > 0 
             ? `translate(${(Math.random()-0.5)*combat.screenShake}px, ${(Math.random()-0.5)*combat.screenShake}px)` 
@@ -5300,9 +5300,12 @@ export default function App() {
         {/* Background */}
         <div 
           className="absolute inset-0 bg-cover bg-center"
-          style={assetBackground("/bg_combat_relic.svg")}
+          style={assetBackground("/bg_combat_blob.png")}
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#1A1A2E]/70 via-[#1A1A2E]/50 to-[#1A1A2E]/80" />
+        <div
+          className="absolute inset-0"
+          style={{ background: "linear-gradient(180deg, rgba(7,62,80,0.46), rgba(10,82,96,0.38), rgba(7,62,80,0.58))" }}
+        />
         
         {/* Phase Banner */}
         {combat.showPhaseBanner && (
@@ -7145,7 +7148,7 @@ export default function App() {
     
     return (
       <div className="relative h-screen w-full overflow-auto bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-30" style={assetBackground("/bg_combat_relic.svg")} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_combat_blob.png")} />
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6">
           <h2 
             className="text-4xl font-bold mb-2"
@@ -7319,7 +7322,7 @@ export default function App() {
     
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={assetBackground("/bg_combat_relic.svg")} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-48" style={assetBackground("/bg_combat_blob.png")} />
         <div className="absolute inset-0 bg-gradient-to-b from-red-900/20 to-[#1A1A2E]" />
         
         <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
@@ -7357,7 +7360,7 @@ export default function App() {
             </div>
             
             <div className="mt-4 pt-4 border-t border-[#0F3460] flex items-center justify-center gap-2">
-              <img src={assetUrl("/wisdom_orb_relic.svg")} alt="" className="w-6 h-6" />
+              <img src={assetUrl("/wisdom_orb_blob.svg")} alt="" className="h-6 w-6" />
               <span className="text-yellow-400 font-bold text-lg">+{orbsEarned} Wisdom Orbs</span>
             </div>
           </div>
@@ -7413,7 +7416,7 @@ export default function App() {
   if (screen === "meta") {
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
-        <div className="absolute inset-0 bg-cover bg-center opacity-20" style={assetBackground("/bg_menu_relic.svg")} />
+        <div className="absolute inset-0 bg-cover bg-center opacity-50" style={assetBackground("/bg_menu_blob.png")} />
         
         <div className="relative z-10 h-full flex flex-col">
           {/* Header */}
@@ -7427,7 +7430,7 @@ export default function App() {
             </button>
             <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "Cinzel, Georgia, serif" }}>Deck Upgrades</h2>
             <div className="flex items-center gap-2">
-              <img src={assetUrl("/wisdom_orb_relic.svg")} alt="" className="w-6 h-6" />
+              <img src={assetUrl("/wisdom_orb_blob.svg")} alt="" className="h-6 w-6" />
               <span className="text-yellow-400 font-bold">{save.wisdomOrbs}</span>
             </div>
           </div>

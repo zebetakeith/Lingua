@@ -46,11 +46,11 @@ export const SKILL_DEFS: SkillDef[] = [
 ];
 
 export const CHARACTER_DEFS: CharacterDef[] = [
-  { id: "linguist", name: "Linguist", element: "light", sprite: "/char_linguist_occult.webp", hp: 100, attack: 18, recovery: 8, speed: 100, passive: "Balanced stats and steady study rewards.", skillId: "steady_hand", unlockHint: "Starter character for every deck." },
-  { id: "speedreader", name: "Speedreader", element: "flame", sprite: "/char_speedreader_occult.webp", hp: 82, attack: 26, recovery: 4, speed: 125, passive: "Flame attacks scale with fast answers.", skillId: "convert_flame", unlockHint: "Reach Floor 5 on this deck." },
-  { id: "scholar", name: "Scholar", element: "tide", sprite: "/char_scholar_occult.webp", hp: 92, attack: 15, recovery: 13, speed: 92, passive: "Better control and defensive study tools.", skillId: "ward_word", unlockHint: "Answer 50 cards correctly on this deck." },
-  { id: "botanist", name: "Botanist", element: "leaf", sprite: "/char_botanist_occult.webp", hp: 96, attack: 17, recovery: 17, speed: 88, passive: "Recovery specialist who turns setup turns into survival.", skillId: "verdant_shift", unlockHint: "Reach Floor 8 on this deck." },
-  { id: "duskblade", name: "Duskblade", element: "shadow", sprite: "/char_duskblade_occult.webp", hp: 88, attack: 24, recovery: 5, speed: 112, passive: "Risky attacker who turns Focus into burst damage.", skillId: "umbra_surge", unlockHint: "Clear a boss on this deck." },
+  { id: "linguist", name: "Linguist", element: "light", sprite: "/char_linguist_blob.svg", hp: 100, attack: 18, recovery: 8, speed: 100, passive: "Balanced stats and steady study rewards.", skillId: "steady_hand", unlockHint: "Starter character for every deck." },
+  { id: "speedreader", name: "Speedreader", element: "flame", sprite: "/char_speedreader_blob.svg", hp: 82, attack: 26, recovery: 4, speed: 125, passive: "Flame attacks scale with fast answers.", skillId: "convert_flame", unlockHint: "Reach Floor 5 on this deck." },
+  { id: "scholar", name: "Scholar", element: "tide", sprite: "/char_scholar_blob.svg", hp: 92, attack: 15, recovery: 13, speed: 92, passive: "Better control and defensive study tools.", skillId: "ward_word", unlockHint: "Answer 50 cards correctly on this deck." },
+  { id: "botanist", name: "Botanist", element: "leaf", sprite: "/char_botanist_blob.svg", hp: 96, attack: 17, recovery: 17, speed: 88, passive: "Recovery specialist who turns setup turns into survival.", skillId: "verdant_shift", unlockHint: "Reach Floor 8 on this deck." },
+  { id: "duskblade", name: "Duskblade", element: "shadow", sprite: "/char_duskblade_blob.svg", hp: 88, attack: 24, recovery: 5, speed: 112, passive: "Risky attacker who turns Focus into burst damage.", skillId: "umbra_surge", unlockHint: "Clear a boss on this deck." },
 ];
 
 export const RELIC_DEFS: RelicDef[] = [

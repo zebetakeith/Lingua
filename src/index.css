@@ -1590,6 +1590,81 @@ img[src*="enemy_"] {
   }
 }
 
+/* Soft-blob visual pass */
+:root {
+  --blob-aqua: #63d4c8;
+  --blob-teal: #168f99;
+  --blob-mint: #b9f1c2;
+  --blob-yellow: #ffd84d;
+  --blob-coral: #ff866c;
+  --blob-pink: #ff7895;
+  --blob-lavender: #a987e7;
+  --blob-ink: #25334a;
+}
+
+@keyframes blobBob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-4px) scale(1.025, 0.975); }
+}
+
+@keyframes blobEnemyWobble {
+  0%, 100% { transform: translateY(0) rotate(-1deg) scale(1); }
+  50% { transform: translateY(-5px) rotate(1deg) scale(1.035, 0.965); }
+}
+
+.cute-theme {
+  color: var(--blob-ink);
+  background: #b9eee2;
+}
+
+.cute-theme img[src*="_blob"] {
+  filter: drop-shadow(0 8px 5px rgba(22, 107, 115, 0.2));
+}
+
+.cute-theme img[src*="char_"][src*="_blob"] {
+  animation: blobBob 2.6s ease-in-out infinite;
+}
+
+.cute-theme img[src*="enemy_"][src*="_blob"] {
+  animation: blobEnemyWobble 2.3s ease-in-out infinite;
+}
+
+.cute-theme .battlefield-party-member,
+.cute-theme .battlefield-enemy-member {
+  filter: none;
+}
+
+.cute-theme .battlefield-party-member::after,
+.cute-theme .battlefield-enemy-member::after {
+  background: radial-gradient(ellipse, rgba(22, 107, 115, 0.2), transparent 72%);
+}
+
+.cute-theme .battlefield-floor {
+  border-bottom-color: rgba(22, 143, 153, 0.18);
+  background:
+    radial-gradient(ellipse at 50% 88%, rgba(255, 255, 255, 0.34), transparent 58%),
+    radial-gradient(ellipse at 20% 76%, rgba(99, 212, 200, 0.2), transparent 42%),
+    radial-gradient(ellipse at 78% 72%, rgba(169, 135, 231, 0.14), transparent 48%);
+}
+
+.cute-theme [class*="bg-[#16213E]"] {
+  background-color: rgba(7, 62, 80, 0.9) !important;
+}
+
+.cute-theme [class*="border-[#0F3460]"] {
+  border-color: rgba(99, 212, 200, 0.46) !important;
+}
+
+.cute-theme [class*="border-[#E94560]"] {
+  border-color: rgba(255, 120, 149, 0.5) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cute-theme img[src*="_blob"] {
+    animation: none;
+  }
+}
+
 @media (max-width: 430px) and (min-height: 780px) {
   .combat-battlefield {
     height: 29dvh !important;
