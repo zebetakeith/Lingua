@@ -1,6 +1,6 @@
 import type { MatchResult, TileKind } from "./runes";
 import { createRuneCountMap, TILE_KINDS } from "./runes";
-import type { MotionPreset } from "./presentation";
+import type { CombatVisualPreset, MotionPreset } from "./presentation";
 
 export interface CharacterDef {
   id: string;
@@ -25,6 +25,7 @@ export interface SkillDef {
   element: TileKind;
   cost: number;
   description: string;
+  visualPreset: CombatVisualPreset;
 }
 
 export interface UltimateDef {
@@ -33,6 +34,7 @@ export interface UltimateDef {
   element: TileKind;
   focusCost: number;
   description: string;
+  visualPreset: CombatVisualPreset;
 }
 
 export interface RelicDef {
@@ -50,19 +52,19 @@ export interface PartyAttackSummary {
 }
 
 export const SKILL_DEFS: SkillDef[] = [
-  { id: "steady_hand", name: "Syntax Mark", element: "light", cost: 2, description: "Light damage and Exposed, boosting the next weakness hit." },
-  { id: "convert_flame", name: "Flame Script", element: "flame", cost: 3, description: "Flame burst; stronger after a 4+ correct study set." },
-  { id: "ward_word", name: "Ward Word", element: "tide", cost: 2, description: "Raise a Ward that sharply reduces the next enemy hit." },
-  { id: "verdant_shift", name: "Verdant Shift", element: "leaf", cost: 3, description: "Heal the party and deal small Leaf damage." },
-  { id: "umbra_surge", name: "Umbra Surge", element: "shadow", cost: 4, description: "Heavy Shadow damage with bonus against Exposed or shielded enemies." },
+  { id: "steady_hand", name: "Syntax Mark", element: "light", cost: 2, description: "Light damage and Exposed, boosting the next weakness hit.", visualPreset: "glossary-star" },
+  { id: "convert_flame", name: "Flame Script", element: "flame", cost: 3, description: "Flame burst; stronger after a 4+ correct study set.", visualPreset: "flame-script" },
+  { id: "ward_word", name: "Ward Word", element: "tide", cost: 2, description: "Raise a Ward that sharply reduces the next enemy hit.", visualPreset: "ward-word" },
+  { id: "verdant_shift", name: "Verdant Shift", element: "leaf", cost: 3, description: "Heal the party and deal small Leaf damage.", visualPreset: "verdant-shift" },
+  { id: "umbra_surge", name: "Umbra Surge", element: "shadow", cost: 4, description: "Heavy Shadow damage with bonus against Exposed or shielded enemies.", visualPreset: "umbra-surge" },
 ];
 
 export const ULTIMATE_DEFS: UltimateDef[] = [
-  { id: "glossary_star", name: "Glossary Star", element: "light", focusCost: 12, description: "Heavy Light damage and Exposed for the next two weakness hits." },
-  { id: "meteor_script", name: "Meteor Script", element: "flame", focusCost: 12, description: "Heavy Flame damage, boosted after a 4+ correct study set." },
-  { id: "perfect_recall", name: "Perfect Recall", element: "tide", focusCost: 12, description: "Raise Ward and delay the next enemy timeline action." },
-  { id: "bloom_chorus", name: "Bloom Chorus", element: "leaf", focusCost: 12, description: "Restore a large amount of HP and raise Ward." },
-  { id: "black_margin", name: "Black Margin", element: "shadow", focusCost: 12, description: "Heavy Shadow damage, boosted against Exposed or shielded enemies." },
+  { id: "glossary_star", name: "Glossary Star", element: "light", focusCost: 12, description: "Heavy Light damage and Exposed for the next two weakness hits.", visualPreset: "glossary-star" },
+  { id: "meteor_script", name: "Meteor Script", element: "flame", focusCost: 12, description: "Heavy Flame damage, boosted after a 4+ correct study set.", visualPreset: "meteor-script" },
+  { id: "perfect_recall", name: "Perfect Recall", element: "tide", focusCost: 12, description: "Raise Ward and delay the next enemy timeline action.", visualPreset: "perfect-recall" },
+  { id: "bloom_chorus", name: "Bloom Chorus", element: "leaf", focusCost: 12, description: "Restore a large amount of HP and raise Ward.", visualPreset: "bloom-chorus" },
+  { id: "black_margin", name: "Black Margin", element: "shadow", focusCost: 12, description: "Heavy Shadow damage, boosted against Exposed or shielded enemies.", visualPreset: "black-margin" },
 ];
 
 export const CHARACTER_DEFS: CharacterDef[] = [

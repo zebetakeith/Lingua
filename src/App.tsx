@@ -25,6 +25,7 @@ import {
   type CharacterDef,
   type RelicDef,
 } from "./game/party";
+import type { CombatVisualPreset } from "./game/presentation";
 import {
   BOARD_COLS,
   BOARD_ROWS,
@@ -348,6 +349,7 @@ interface CombatActionEffect {
   color: string;
   casterSprite?: string;
   casterName?: string;
+  visualPreset?: CombatVisualPreset;
 }
 
 interface StudyFeedback {
@@ -1222,6 +1224,19 @@ function getActionLabel(member: CharacterDef, action: PlayerActionId): string {
   if (action === "attack") return "Attack";
   if (action === "defend") return "Defend";
   return getSkillById(member.skillId)?.name || "Skill";
+}
+
+function getPlayerActionVisualPreset(member: CharacterDef, action: PlayerActionId): CombatVisualPreset {
+  if (action === "attack") return "basic-strike";
+  if (action === "defend") return "guard-bubble";
+  return getSkillById(member.skillId)?.visualPreset || "basic-strike";
+}
+
+function getEnemyActionVisualPreset(enemy: EnemyDef): CombatVisualPreset {
+  if (enemy.special === "shuffle_answers") return "enemy-scramble";
+  if (enemy.special === "randomize_positions") return "enemy-delay";
+  if (enemy.special === "low_combo_punish" || enemy.special === "enrage_at_50") return "enemy-pressure";
+  return "enemy-strike";
 }
 
 function getTimelineRelativeValue(entry: TurnQueueEntry, queue: TurnQueueEntry[]): number {
@@ -3509,6 +3524,7 @@ export default function App() {
         detail: `${enemyApSpent}/${enemyApBudget} AP - ${wardBlocked ? "blocked" : `${incomingDamage} damage`}`,
         casterName: enemy.def.name,
         casterSprite: enemy.def.sprite,
+        visualPreset: getEnemyActionVisualPreset(enemy.def),
       }),
       cinematic,
       cinematicStepIndex: 0,
@@ -3819,6 +3835,7 @@ export default function App() {
         detail: `${baseCost} AP - +${actionTimelineDelay} time - ${getTimelineOutcomeText(nextQueue, actor.id)}`,
         casterName: member.name,
         casterSprite: member.sprite,
+        visualPreset: getPlayerActionVisualPreset(member, action),
       }),
       enemyAnim: defense.hpDamage + defense.shieldDamage > 0 ? "hit" : null,
       playerAnim: healAmount > 0 ? "heal" : null,
@@ -4036,6 +4053,7 @@ export default function App() {
           detail: "12 Focus - free action - timeline preserved",
           casterName: member.name,
           casterSprite: member.sprite,
+          visualPreset: ultimate.visualPreset,
         }
       ),
       damageNumbers: [
@@ -5053,6 +5071,7 @@ export default function App() {
     : combat?.options || [];
   const hasBoardSurge = combat?.activeBuffs.some(b => b.type === "board_surge") || false;
   const hasWard = combat?.activeBuffs.some(b => b.type === "ward") || false;
+  const hasGuard = combat?.activeBuffs.some(b => b.type === "guard") || false;
   const enhancedRuneCount = combat?.board.filter(tile => tile.status === "enhanced").length || 0;
   const cursedRuneCount = combat?.board.filter(tile => tile.status === "cursed").length || 0;
   const enemyApBudget = currentEnemy ? getEnemyApForTurn(currentEnemy) : 0;
@@ -5761,12 +5780,15 @@ export default function App() {
 
         {combat.actionEffect && (
           <div
-            className={`action-effect-layer action-effect-${combat.actionEffect.type}`}
+            className={`action-effect-layer action-effect-${combat.actionEffect.type} ${
+              combat.actionEffect.visualPreset ? `action-visual-${combat.actionEffect.visualPreset}` : ""
+            }`}
             style={{
               "--action-color": combat.actionEffect.color,
               "--action-glow": combat.actionEffect.kind ? TILE_DEFS[combat.actionEffect.kind].glow : `${combat.actionEffect.color}66`,
             } as CSSProperties}
           >
+            <div className="action-stage-pulse" />
             <div className="action-cast-card">
               {combat.actionEffect.casterSprite ? (
                 <img src={assetUrl(combat.actionEffect.casterSprite)} alt="" className="h-9 w-9 object-contain" />
@@ -5805,6 +5827,55 @@ export default function App() {
               <div className="action-mend-pulse">
                 <Heart className="h-7 w-7" />
               </div>
+            )}
+
+            {(combat.actionEffect.visualPreset === "glossary-star") && (
+              <>
+                <div className="action-page-burst">
+                  {Array.from({ length: 5 }).map((_, index) => <span key={`page-spark-${index}`} />)}
+                </div>
+                <div className="action-exposed-marker">
+                  <Star className="h-4 w-4" />
+                  <span>Exposed</span>
+                </div>
+              </>
+            )}
+
+            {(combat.actionEffect.visualPreset === "flame-script" || combat.actionEffect.visualPreset === "meteor-script") && (
+              <div className="action-comet-tail">
+                <span />
+                <span />
+                <span />
+              </div>
+            )}
+
+            {(combat.actionEffect.visualPreset === "ward-word" || combat.actionEffect.visualPreset === "perfect-recall" || combat.actionEffect.visualPreset === "guard-bubble") && (
+              <div className="action-bubble-spray">
+                {Array.from({ length: 7 }).map((_, index) => <span key={`bubble-${index}`} />)}
+              </div>
+            )}
+
+            {(combat.actionEffect.visualPreset === "verdant-shift" || combat.actionEffect.visualPreset === "bloom-chorus") && (
+              <div className="action-leaf-bloom">
+                {Array.from({ length: 6 }).map((_, index) => <span key={`leaf-${index}`} />)}
+              </div>
+            )}
+
+            {(combat.actionEffect.visualPreset === "umbra-surge" || combat.actionEffect.visualPreset === "black-margin") && (
+              <>
+                <div className="action-shadow-orb" />
+                <div className="action-shadow-slash" />
+              </>
+            )}
+
+            {combat.actionEffect.type === "enemy" && (
+              <>
+                <div className="action-enemy-warning">
+                  <Skull className="h-4 w-4" />
+                  <span>Incoming</span>
+                </div>
+                <div className="action-enemy-swipe" />
+              </>
             )}
 
             {(combat.actionEffect.type === "shuffle" || combat.actionEffect.type === "surge") && (
@@ -5962,6 +6033,7 @@ export default function App() {
                 <div className="absolute bottom-0 left-[8%] flex items-end gap-1 sm:left-[25%] sm:gap-2">
                   {runParty.slice(0, 3).map((member, index) => {
                     const tile = TILE_DEFS[member.element];
+                    const isCurrentActor = activeCommandCharacter?.id === member.id && combat.mode === "command";
                     const isAttacking = Boolean(activeCinematic && cinematicShowsSpell && (
                       activeCinematic.attackers.includes(member.name) ||
                       (activeCinematic.elementDamage[member.element] || 0) > 0 ||
@@ -5974,7 +6046,7 @@ export default function App() {
                     return (
                       <div
                         key={`battle-party-${member.id}`}
-                        className={`battlefield-party-member ${cinematicPlayerClass} ${isAttacking ? "battlefield-party-attacker" : ""} ${isCastingAction ? "battlefield-party-casting" : ""}`}
+                        className={`battlefield-party-member ${cinematicPlayerClass} ${isCurrentActor ? "battlefield-party-current" : ""} ${isAttacking ? "battlefield-party-attacker" : ""} ${isCastingAction ? "battlefield-party-casting" : ""}`}
                         style={{
                           color: tile.color,
                           "--member-color": tile.color,
@@ -5982,6 +6054,7 @@ export default function App() {
                           "--attack-delay": `${index * 90}ms`,
                         } as CSSProperties}
                       >
+                        {isCurrentActor && <div className="battlefield-turn-marker">Act</div>}
                         <div className={`mascot-motion motion-${member.motionPreset}`}>
                           <img
                             src={assetUrl(member.sprite)}
@@ -6003,8 +6076,15 @@ export default function App() {
                       </div>
                     );
                   })}
+                  {(hasWard || hasGuard) && (
+                    <div className={`battlefield-party-protection ${hasWard ? "battlefield-party-protection-ward" : "battlefield-party-protection-guard"}`}>
+                      <Shield className="h-5 w-5" />
+                      <span>{hasWard ? "Ward" : "Guard"}</span>
+                    </div>
+                  )}
                 </div>
                 <div className={`battlefield-enemy-member absolute bottom-0 right-[6%] sm:right-[25%] ${cinematicEnemyClass} ${currentEnemyTelegraphClass} ${combat.enemyAnim === "attack" ? "battlefield-enemy-attacking" : ""}`}>
+                  {combat.mode === "enemyAction" && <div className="battlefield-enemy-warning-ring" />}
                   <div
                     className={`battlefield-intent-badge cute-intent battlefield-intent-${currentEnemyIntent?.severity || "low"} ${currentEnemyTelegraphClass}`}
                     title={currentEnemyIntent?.counterplay}
@@ -6030,6 +6110,12 @@ export default function App() {
                   </div>
                   {currentEnemy.def.isBoss && (
                     <div className="absolute -inset-4 rounded-full border-2 border-red-500/30 animate-pulse" />
+                  )}
+                  {combat.exposedTurns > 0 && (
+                    <div className="battlefield-exposed-badge">
+                      <Star className="h-3 w-3" />
+                      <span>Exposed {combat.exposedTurns}</span>
+                    </div>
                   )}
                   <div className="battlefield-enemy-matchups">
                     <div className="battlefield-matchup-group battlefield-matchup-weak" title={`Weak to ${formatTileLabels(currentEnemy.def.weakTo)}`}>
@@ -6704,7 +6790,7 @@ export default function App() {
                     {combat.mode === "command" && activeCommandCharacter && (
                       <div className="space-y-2">
                         <div
-                          className="rounded-md border bg-black/25 p-2"
+                          className="command-current-card rounded-md border bg-black/25 p-2"
                           style={{ borderColor: `${TILE_DEFS[activeCommandCharacter.element].color}66` }}
                         >
                           <div className="flex items-center gap-2">
@@ -6724,6 +6810,16 @@ export default function App() {
                               Enemy in {nextEnemyTimelineDistance ?? "--"} time
                             </span>
                           </div>
+                          <div className="command-ap-meter mt-1.5" aria-label={`${combat.actionPoints} action points ready`}>
+                            <Zap className="h-3 w-3" />
+                            {Array.from({ length: Math.min(8, Math.max(1, combat.actionPoints)) }).map((_, index) => (
+                              <span
+                                key={`command-ap-${index}`}
+                                className={index < combat.actionPoints ? "command-ap-pip command-ap-pip-ready" : "command-ap-pip"}
+                              />
+                            ))}
+                            {combat.actionPoints > 8 && <strong>+{combat.actionPoints - 8}</strong>}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2">
@@ -6740,7 +6836,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => handlePlayerCommand(action)}
                                 disabled={!canUse}
-                                className="command-action-button cute-action-button flex min-h-[5.4rem] flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-1.5 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[6.4rem] sm:px-2 sm:text-sm"
+                                className={`command-action-button command-action-${action} cute-action-button flex min-h-[5.4rem] flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-1.5 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[6.4rem] sm:px-2 sm:text-sm`}
                                 title={preview}
                               >
                                 {icon}
@@ -6762,7 +6858,7 @@ export default function App() {
                             disabled={combat.phase !== "answering" || combat.skillCharge < activeCommandUltimate.focusCost}
                             className={`ultimate-command-button cute-ultimate-button flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-all ${
                               combat.skillCharge >= activeCommandUltimate.focusCost
-                                ? "border-yellow-200/70 bg-yellow-300/14 text-yellow-50 shadow-[0_0_20px_rgba(255,216,77,0.2)] hover:bg-yellow-300/22"
+                                ? "ultimate-command-ready border-yellow-200/70 bg-yellow-300/14 text-yellow-50 shadow-[0_0_20px_rgba(255,216,77,0.2)] hover:bg-yellow-300/22"
                                 : "cursor-not-allowed border-white/10 bg-white/4 text-gray-500 opacity-70"
                             }`}
                           >
