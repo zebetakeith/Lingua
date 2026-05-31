@@ -1509,6 +1509,75 @@ img[src*="enemy_"] {
   touch-action: manipulation;
 }
 
+.element-pip {
+  display: inline-flex;
+  width: 1.45rem;
+  height: 1.45rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  box-shadow: 0 3px 8px rgba(22, 107, 115, 0.12);
+}
+
+.element-pip svg,
+.action-rune-sigil .element-pip svg,
+.battlefield-spell-lance .element-pip svg {
+  width: 72%;
+  height: 72%;
+  padding: 0;
+  overflow: visible;
+  fill: currentColor;
+  filter: none;
+}
+
+.element-pip-member {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-width: 0;
+  background: transparent !important;
+}
+
+.element-pip-matchup {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-width: 0;
+  background: transparent !important;
+}
+
+.element-pip-effect {
+  width: 3.2rem;
+  height: 3.2rem;
+  border-color: currentColor !important;
+  background: rgba(255, 255, 255, 0.22) !important;
+}
+
+.element-pip-mote,
+.element-pip-stream {
+  width: 1.55rem;
+  height: 1.55rem;
+}
+
+.element-pip-caster {
+  width: 1.62rem;
+  height: 1.62rem;
+}
+
+.element-pip-projectile {
+  position: absolute;
+  right: -0.65rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  background-color: rgba(255, 255, 255, 0.84) !important;
+}
+
+.element-pip-cinematic,
+.element-pip-heal {
+  width: 1.8rem;
+  height: 1.8rem;
+}
+
 .action-effect-attack .action-rune-sigil {
   width: 4rem;
   height: 4rem;
@@ -1741,7 +1810,7 @@ img[src*="enemy_"] {
   }
 }
 
-/* Soft-blob visual pass */
+/* Soft-blob visual system */
 :root {
   --blob-aqua: #63d4c8;
   --blob-teal: #168f99;
@@ -1751,33 +1820,83 @@ img[src*="enemy_"] {
   --blob-pink: #ff7895;
   --blob-lavender: #a987e7;
   --blob-ink: #25334a;
+  --blob-panel: rgba(239, 255, 248, 0.9);
+  --blob-panel-strong: rgba(224, 251, 244, 0.96);
+  --blob-panel-deep: rgba(11, 86, 100, 0.92);
+  --blob-border: rgba(22, 143, 153, 0.34);
+  --blob-shadow: rgba(22, 107, 115, 0.2);
 }
 
-@keyframes blobBob {
+@keyframes mascotBounce {
   0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-4px) scale(1.025, 0.975); }
+  50% { transform: translateY(-5px) scale(1.035, 0.965); }
 }
 
-@keyframes blobEnemyWobble {
+@keyframes mascotDart {
+  0%, 100% { transform: translateX(0) translateY(0) rotate(-1deg) scale(1); }
+  45% { transform: translateX(4px) translateY(-3px) rotate(2deg) scale(1.035, 0.975); }
+}
+
+@keyframes mascotFloat {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-7px) rotate(1deg); }
+}
+
+@keyframes mascotSway {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-3px) rotate(2deg); }
+}
+
+@keyframes mascotHover {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-6px) scale(1.018); }
+}
+
+@keyframes mascotWobble {
   0%, 100% { transform: translateY(0) rotate(-1deg) scale(1); }
-  50% { transform: translateY(-5px) rotate(1deg) scale(1.035, 0.965); }
+  50% { transform: translateY(-4px) rotate(1deg) scale(1.045, 0.955); }
+}
+
+@keyframes mascotStomp {
+  0%, 72%, 100% { transform: translateY(0) scale(1); }
+  36% { transform: translateY(-4px) scale(1.02, 0.98); }
+  82% { transform: translateY(2px) scale(1.055, 0.945); }
+}
+
+@keyframes mascotEnrage {
+  0%, 100% { transform: scale(1); filter: none; }
+  45% { transform: scale(1.12, 1.02); filter: saturate(1.25) hue-rotate(-10deg); }
 }
 
 .cute-theme {
   color: var(--blob-ink);
   background: #b9eee2;
+  font-family: ui-rounded, "Arial Rounded MT Bold", Nunito, system-ui, sans-serif;
 }
 
-.cute-theme img[src*="_blob"] {
+.cute-theme img[src*="/cute/"] {
   filter: drop-shadow(0 8px 5px rgba(22, 107, 115, 0.2));
 }
 
-.cute-theme img[src*="char_"][src*="_blob"] {
-  animation: blobBob 2.6s ease-in-out infinite;
+.mascot-motion {
+  transform-origin: bottom center;
 }
 
-.cute-theme img[src*="enemy_"][src*="_blob"] {
-  animation: blobEnemyWobble 2.3s ease-in-out infinite;
+.mascot-art {
+  transform: scale(var(--mascot-scale, 1));
+  transform-origin: bottom center;
+}
+
+.motion-bounce { animation: mascotBounce 2.4s ease-in-out infinite; }
+.motion-dart { animation: mascotDart 1.85s ease-in-out infinite; }
+.motion-float { animation: mascotFloat 2.7s ease-in-out infinite; }
+.motion-sway { animation: mascotSway 2.8s ease-in-out infinite; }
+.motion-hover { animation: mascotHover 2.6s ease-in-out infinite; }
+.motion-wobble { animation: mascotWobble 2.1s ease-in-out infinite; }
+.motion-stomp { animation: mascotStomp 2.45s ease-in-out infinite; }
+
+.mascot-enraged {
+  animation: mascotEnrage 0.88s ease-in-out infinite;
 }
 
 .cute-theme .battlefield-party-member,
@@ -1798,20 +1917,178 @@ img[src*="enemy_"] {
     radial-gradient(ellipse at 78% 72%, rgba(169, 135, 231, 0.14), transparent 48%);
 }
 
-.cute-theme [class*="bg-[#16213E]"] {
-  background-color: rgba(7, 62, 80, 0.9) !important;
+.cute-theme .cute-panel,
+.cute-theme .cute-sheet {
+  border-color: var(--blob-border) !important;
+  background: var(--blob-panel-deep) !important;
+  box-shadow: 0 14px 30px var(--blob-shadow);
 }
 
-.cute-theme [class*="border-[#0F3460]"] {
-  border-color: rgba(99, 212, 200, 0.46) !important;
+.cute-theme .cute-sticker {
+  background: var(--blob-panel) !important;
+  color: var(--blob-ink);
+  box-shadow: 0 8px 16px rgba(22, 107, 115, 0.14);
 }
 
-.cute-theme [class*="border-[#E94560]"] {
-  border-color: rgba(255, 120, 149, 0.5) !important;
+.cute-theme .cute-sticker .text-white,
+.cute-theme .cute-sticker .text-gray-300,
+.cute-theme .cute-sticker .text-gray-400 {
+  color: var(--blob-ink) !important;
+}
+
+.cute-theme .cute-sticker [class*="bg-black"] {
+  background: rgba(99, 212, 200, 0.12) !important;
+}
+
+.cute-theme .cute-timeline {
+  border-color: rgba(255, 255, 255, 0.68);
+  background: rgba(239, 255, 248, 0.78);
+  box-shadow: 0 8px 18px rgba(22, 107, 115, 0.14);
+}
+
+.cute-theme .cute-timeline-chip {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68) !important;
+  color: var(--blob-ink) !important;
+}
+
+.cute-theme .cute-timeline-chip span:last-child {
+  background: rgba(22, 143, 153, 0.12);
+  color: #166b73;
+}
+
+.cute-theme .cute-intent {
+  border-color: rgba(255, 134, 108, 0.68);
+  background: rgba(255, 255, 255, 0.86);
+  color: #b24f61;
+  box-shadow: 0 6px 12px rgba(22, 107, 115, 0.16);
+}
+
+.cute-theme .cute-action-button {
+  border-color: rgba(99, 212, 200, 0.44);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cute-theme .cute-action-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cute-theme .cute-ultimate-button {
+  border-radius: 0.65rem;
+}
+
+.cute-theme .cute-recruit-panel {
+  border-color: rgba(255, 216, 77, 0.72);
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--blob-ink);
+}
+
+.cute-theme .cute-recruit-panel .text-white,
+.cute-theme .cute-recruit-panel .text-orange-200,
+.cute-theme .cute-recruit-panel .text-orange-50\/80 {
+  color: var(--blob-ink) !important;
+}
+
+.cute-theme .action-cast-card {
+  border-color: color-mix(in srgb, var(--action-color) 56%, white);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--blob-ink);
+  box-shadow: 0 10px 22px rgba(22, 107, 115, 0.18);
+}
+
+.cute-theme .action-cast-card .text-white,
+.cute-theme .action-cast-card .text-white\/70 {
+  color: var(--blob-ink) !important;
+}
+
+.cute-theme .action-rune-sigil {
+  border-color: color-mix(in srgb, var(--action-color) 68%, white);
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.cute-theme .cute-question-card {
+  border-color: rgba(255, 134, 108, 0.78) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--blob-ink);
+  box-shadow: 0 8px 16px rgba(22, 107, 115, 0.14);
+}
+
+.cute-theme .cute-question-card .text-gray-400 {
+  color: rgba(22, 107, 115, 0.72) !important;
+}
+
+.cute-theme .cute-question-card .text-white {
+  color: var(--blob-ink) !important;
+}
+
+.cute-theme .cute-answer-button {
+  border-color: rgba(22, 143, 153, 0.28) !important;
+  background: rgba(255, 255, 255, 0.82) !important;
+  color: var(--blob-ink) !important;
+  box-shadow: 0 4px 8px rgba(22, 107, 115, 0.1);
+}
+
+.cute-theme .cute-answer-button:hover {
+  background: rgba(229, 255, 245, 0.96) !important;
+}
+
+.cute-theme .cute-answer-button[data-answer-state="correct"] {
+  border-color: rgba(85, 181, 116, 0.76) !important;
+  background: rgba(218, 255, 225, 0.94) !important;
+  color: #2f7047 !important;
+}
+
+.cute-theme .cute-answer-button[data-answer-state="wrong"] {
+  border-color: rgba(255, 134, 108, 0.82) !important;
+  background: rgba(255, 231, 221, 0.94) !important;
+  color: #ad4e59 !important;
+}
+
+.cute-theme .cute-answer-button[data-answer-state="muted"] {
+  opacity: 0.6;
+}
+
+.cute-theme .cute-feedback-card {
+  border-color: rgba(255, 134, 108, 0.72) !important;
+  background: rgba(255, 244, 238, 0.96) !important;
+}
+
+.cute-theme .cute-feedback-card .text-white,
+.cute-theme .cute-feedback-card .text-red-100\/75,
+.cute-theme .cute-feedback-card .text-red-100\/80,
+.cute-theme .cute-feedback-card .text-red-100\/70 {
+  color: #ad4e59 !important;
+}
+
+.cute-theme h1,
+.cute-theme h2,
+.cute-theme h3 {
+  font-family: ui-rounded, "Arial Rounded MT Bold", Nunito, system-ui, sans-serif !important;
+  letter-spacing: 0 !important;
+}
+
+.cute-theme .cute-sticker .text-cyan-100,
+.cute-theme .cute-sticker .text-cyan-200 {
+  color: #167985 !important;
+}
+
+.cute-theme .cute-sticker .text-yellow-100,
+.cute-theme .cute-sticker .text-yellow-200 {
+  color: #a66519 !important;
+}
+
+.cute-theme .cute-sticker .text-green-200 {
+  color: #377e55 !important;
+}
+
+.cute-theme .cute-sticker .text-gray-500 {
+  color: rgba(37, 51, 74, 0.72) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cute-theme img[src*="_blob"] {
+  .mascot-motion,
+  .mascot-enraged {
     animation: none;
   }
 }

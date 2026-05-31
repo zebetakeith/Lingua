@@ -2036,6 +2036,41 @@ function RuneGlyph({ kind }: { kind: TileKind }) {
   );
 }
 
+function ElementPip({ kind, className = "" }: { kind: TileKind; className?: string }) {
+  const tile = TILE_DEFS[kind];
+  const motif = (() => {
+    if (kind === "light") return <path d="m12 2.8 2.55 5.17 5.7.83-4.13 4.03.98 5.69L12 15.83l-5.1 2.69.98-5.69L3.75 8.8l5.7-.83Z" />;
+    if (kind === "flame") return <path d="M12.3 2.4c1.55 3.1-.38 4.25 1.5 6.06 1.7 1.64 2.27 3.25 1.72 5.14-.6 2.08-2.14 3.65-4.2 4.12-2.75.63-5.45-1.12-5.84-3.9-.31-2.17.8-3.8 2.42-5.16 1.18-.98 2.44-2.03 2.22-4.44 1.32.74 1.83 1.8 1.76 3.25.88-.98 1.17-2.62.42-5.07Z" />;
+    if (kind === "tide") return (
+      <>
+        <circle cx="10.1" cy="13.1" r="4.4" />
+        <circle cx="15.4" cy="7.2" r="2.2" />
+        <circle cx="6.5" cy="6" r="1.45" />
+      </>
+    );
+    if (kind === "leaf") return (
+      <>
+        <path d="M12 18V9.2" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+        <path d="M11.8 10.4C7.1 10.6 4.7 8.6 4.4 4.5c4.75-.13 7.2 1.82 7.4 5.9Z" />
+        <path d="M12.2 12.5c4.3-.14 6.65-2.15 7.05-6.05-4.55-.08-6.9 1.93-7.05 6.05Z" />
+      </>
+    );
+    if (kind === "heart") return <path d="M12 19.1 4.8 12.24C.9 8.55 3.48 3.3 7.25 4.24 9.1 4.7 10.4 6.15 12 7.85c1.6-1.7 2.9-3.15 4.75-3.61 3.77-.94 6.35 4.31 2.45 8Z" />;
+    return <path d="M12 3.1c3.85 2.08 5.83 5.27 5.12 8.37-.7 3.1-3.36 5.25-6.27 5.07-2.64-.16-4.62-2.19-4.45-4.57.14-2.04 1.95-3.63 3.96-3.48 1.67.13 2.9 1.42 2.78 2.88-.1 1.17-1.16 2.05-2.3 1.95" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.4" />;
+  })();
+
+  return (
+    <span
+      className={`element-pip ${className}`}
+      style={{ color: tile.color, backgroundColor: `${tile.color}28`, borderColor: `${tile.color}66` }}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        {motif}
+      </svg>
+    </span>
+  );
+}
+
 function RuneOrb({ kind, status }: { kind: TileKind; status?: RuneStatus | null }) {
   return (
     <>
@@ -5156,7 +5191,7 @@ export default function App() {
   // ─── RENDER: How to Play ──────────────────────────────
   if (screen === "howToPlay") {
     return (
-      <div className="relative h-screen w-full overflow-auto bg-[#1A1A2E]">
+      <div className="cute-theme relative h-screen w-full overflow-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-60" style={assetBackground("/bg_combat_blob.png")} />
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6 sm:px-6">
           <div className="w-full max-w-3xl rounded-lg border border-[#0F3460] bg-[#16213E]/90 p-5 backdrop-blur-sm sm:p-8">
@@ -5464,7 +5499,7 @@ export default function App() {
     const canStartDraftRun = starterDraftDeck.length > 0;
 
     return (
-      <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
+      <div className="cute-theme relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-55" style={assetBackground("/bg_menu_blob.png")} />
         <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col px-4 py-5 sm:py-8">
           <div className="mb-5 flex items-center justify-between gap-3">
@@ -5491,7 +5526,7 @@ export default function App() {
           </div>
 
           <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-[220px_1fr]">
-            <div className="rounded-lg border border-[#0F3460] bg-[#16213E]/90 p-4">
+            <div className="cute-panel rounded-lg border border-[#0F3460] bg-[#16213E]/90 p-4">
               <div className="mb-3">
                 <div className="mb-2 flex -space-x-2">
                   {selectedDraftParty.map(member => (
@@ -5524,7 +5559,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="rounded-lg border border-[#0F3460] bg-[#071225]/90 p-4">
+            <div className="cute-panel rounded-lg border border-[#0F3460] bg-[#071225]/90 p-4">
               <div className="mb-4 rounded-md border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-sm text-cyan-100">
                 {starterDraftMessage}
               </div>
@@ -5534,7 +5569,7 @@ export default function App() {
                   {starterDraftChoices.map(choice => {
                     const rarityColor = choice.difficulty <= 2 ? "#95A5A6" : choice.difficulty <= 4 ? "#3498DB" : "#9B59B6";
                     return (
-                      <div key={choice.id} className="rounded-lg border-2 bg-[#16213E] p-4" style={{ borderColor: rarityColor }}>
+                      <div key={choice.id} className="cute-sticker rounded-lg border-2 bg-[#16213E] p-4" style={{ borderColor: rarityColor }}>
                         <div className="mb-1 text-xs" style={{ color: rarityColor }}>
                           Starting Card
                         </div>
@@ -5578,7 +5613,7 @@ export default function App() {
   if (screen === "classSelect") {
     const selectedPartyIds = getDeckSelectedPartyIds(activeDeck);
     return (
-      <div className="relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
+      <div className="cute-theme relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_menu_blob.png")} />
         <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col items-center justify-start px-4 py-6 sm:justify-center">
           <h2 className="mb-2 text-2xl font-bold text-white sm:text-3xl" style={{ fontFamily: "Cinzel, Georgia, serif", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
@@ -5602,7 +5637,7 @@ export default function App() {
                   key={character.id}
                   disabled={!isUnlocked || selectionBlocked}
                   onClick={() => togglePartyCharacter(character.id)}
-                  className={`relative overflow-hidden rounded-lg border-2 p-3 text-left transition-all ${
+                  className={`cute-sticker relative overflow-hidden rounded-lg border-2 p-3 text-left transition-all ${
                     isSelected
                       ? "bg-[#16213E]/96 shadow-lg"
                       : isUnlocked
@@ -5688,7 +5723,7 @@ export default function App() {
         />
         <div
           className="absolute inset-0"
-          style={{ background: "linear-gradient(180deg, rgba(7,62,80,0.46), rgba(10,82,96,0.38), rgba(7,62,80,0.58))" }}
+          style={{ background: "linear-gradient(180deg, rgba(7,62,80,0.2), rgba(10,82,96,0.1), rgba(7,62,80,0.3))" }}
         />
         
         {/* Phase Banner */}
@@ -5756,7 +5791,7 @@ export default function App() {
 
             {combat.actionEffect.kind && (
               <div className="action-rune-sigil">
-                <RuneGlyph kind={combat.actionEffect.kind} />
+                <ElementPip kind={combat.actionEffect.kind} className="element-pip-effect" />
               </div>
             )}
 
@@ -5772,7 +5807,7 @@ export default function App() {
               </div>
             )}
 
-            {(combat.actionEffect.type === "shuffle" || combat.actionEffect.type === "surge" || combat.actionEffect.type === "skill") && (
+            {(combat.actionEffect.type === "shuffle" || combat.actionEffect.type === "surge") && (
               <div className="action-board-ring" />
             )}
 
@@ -5788,7 +5823,7 @@ export default function App() {
                   "--mote-delay": `${index * 75}ms`,
                 } as CSSProperties}
               >
-                {combat.actionEffect!.kind ? <RuneGlyph kind={combat.actionEffect!.kind} /> : null}
+                {combat.actionEffect!.kind ? <ElementPip kind={combat.actionEffect!.kind} className="element-pip-mote" /> : null}
               </div>
             ))}
           </div>
@@ -5797,7 +5832,7 @@ export default function App() {
         {/* Tutorial overlay */}
         {showTutorial && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pb-3 pt-28 sm:inset-0 sm:items-center sm:bg-black/60 sm:p-4">
-            <div className="w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
+            <div className="cute-sheet w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
               <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Welcome to the Dungeon!</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-4 sm:text-sm">
                 Resolve fixed AP hands of flashcards, then spend the AP you earned on party commands before the enemy reaches you.
@@ -5815,7 +5850,7 @@ export default function App() {
         {/* Pause overlay */}
         {combat.isPaused && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70">
-            <div className="bg-[#16213E] rounded-2xl p-8 border border-[#0F3460] text-center">
+            <div className="cute-sheet bg-[#16213E] rounded-2xl p-8 border border-[#0F3460] text-center">
               <h3 className="text-2xl font-bold text-white mb-6">Paused</h3>
               <div className="space-y-3">
                 <button
@@ -5892,7 +5927,7 @@ export default function App() {
         </div>
 
         {combat.turnQueue.length > 0 && (
-          <div className="relative z-20 mx-auto mb-1 flex w-[min(96vw,760px)] items-center gap-1.5 overflow-hidden rounded-lg border border-white/10 bg-black/34 px-2 py-1.5 shadow-xl backdrop-blur-md sm:mb-2 sm:gap-2 sm:px-3">
+          <div className="cute-timeline relative z-20 mx-auto mb-1 flex w-[min(96vw,760px)] items-center gap-1.5 overflow-hidden rounded-lg border border-white/10 bg-black/34 px-2 py-1.5 shadow-xl backdrop-blur-md sm:mb-2 sm:gap-2 sm:px-3">
             <span className="mr-1 hidden text-[10px] font-black uppercase tracking-wide text-gray-400 sm:inline">Timeline</span>
             {combat.turnQueue.slice(0, 7).map((entry, index) => {
               const tile = TILE_DEFS[entry.element];
@@ -5900,7 +5935,7 @@ export default function App() {
               return (
                 <div
                   key={`${entry.id}-${index}`}
-                  className={`timeline-chip flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-1 transition-all sm:gap-1.5 sm:px-2 ${
+                        className={`timeline-chip cute-timeline-chip flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-1 transition-all sm:gap-1.5 sm:px-2 ${
                     isActive ? "timeline-chip-active bg-white/12 text-white" : entry.kind === "enemy" ? "bg-red-500/10 text-red-50" : "bg-white/5 text-gray-300"
                   }`}
                   style={{
@@ -5947,11 +5982,14 @@ export default function App() {
                           "--attack-delay": `${index * 90}ms`,
                         } as CSSProperties}
                       >
-                        <img
-                          src={assetUrl(member.sprite)}
-                          alt={member.name}
-                          className="h-20 w-20 object-contain sm:h-16 sm:w-16 md:h-20 md:w-20"
-                        />
+                        <div className={`mascot-motion motion-${member.motionPreset}`}>
+                          <img
+                            src={assetUrl(member.sprite)}
+                            alt={member.name}
+                            className="mascot-art h-20 w-20 object-contain sm:h-16 sm:w-16 md:h-20 md:w-20"
+                            style={{ "--mascot-scale": member.battleScale || 1 } as CSSProperties}
+                          />
+                        </div>
                         <div
                           className="battlefield-member-chip"
                           style={{
@@ -5959,7 +5997,7 @@ export default function App() {
                             backgroundColor: `${tile.color}18`,
                           }}
                         >
-                          <RuneGlyph kind={member.element} />
+                          <ElementPip kind={member.element} className="element-pip-member" />
                           <span>{member.name}{combat.guestCharacterIds.includes(member.id) ? " Guest" : ""}</span>
                         </div>
                       </div>
@@ -5968,7 +6006,7 @@ export default function App() {
                 </div>
                 <div className={`battlefield-enemy-member absolute bottom-0 right-[6%] sm:right-[25%] ${cinematicEnemyClass} ${currentEnemyTelegraphClass} ${combat.enemyAnim === "attack" ? "battlefield-enemy-attacking" : ""}`}>
                   <div
-                    className={`battlefield-intent-badge battlefield-intent-${currentEnemyIntent?.severity || "low"} ${currentEnemyTelegraphClass}`}
+                    className={`battlefield-intent-badge cute-intent battlefield-intent-${currentEnemyIntent?.severity || "low"} ${currentEnemyTelegraphClass}`}
                     title={currentEnemyIntent?.counterplay}
                   >
                     {currentEnemyIntentIcon === "attack" ? (
@@ -5982,14 +6020,14 @@ export default function App() {
                     )}
                     <span>{currentEnemyIntentShort}</span>
                   </div>
-                  <img
-                    src={assetUrl(currentEnemy.def.sprite)}
-                    alt={currentEnemy.def.name}
-                    className="h-36 w-36 object-contain sm:h-32 sm:w-32 md:h-40 md:w-40"
-                    style={{
-                      filter: currentEnemy.def.isBoss ? "saturate(0.78) contrast(1.18) brightness(1.18) drop-shadow(0 0 20px rgba(185,133,148,0.45)) drop-shadow(0 12px 22px rgba(0,0,0,0.45))" : undefined,
-                    }}
-                  />
+                  <div className={`mascot-motion motion-${currentEnemy.def.motionPreset} ${currentEnemy.phase >= 2 && currentEnemy.def.special === "enrage_at_50" ? "mascot-enraged" : ""}`}>
+                    <img
+                      src={assetUrl(currentEnemy.def.sprite)}
+                      alt={currentEnemy.def.name}
+                      className="mascot-art h-36 w-36 object-contain sm:h-32 sm:w-32 md:h-40 md:w-40"
+                      style={{ "--mascot-scale": currentEnemy.def.battleScale || 1 } as CSSProperties}
+                    />
+                  </div>
                   {currentEnemy.def.isBoss && (
                     <div className="absolute -inset-4 rounded-full border-2 border-red-500/30 animate-pulse" />
                   )}
@@ -5997,14 +6035,14 @@ export default function App() {
                     <div className="battlefield-matchup-group battlefield-matchup-weak" title={`Weak to ${formatTileLabels(currentEnemy.def.weakTo)}`}>
                       <span>Weak</span>
                       {currentEnemy.def.weakTo.slice(0, 3).map(kind => (
-                        <RuneGlyph key={`weak-${kind}`} kind={kind} />
+                        <ElementPip key={`weak-${kind}`} kind={kind} className="element-pip-matchup" />
                       ))}
                     </div>
                     {currentEnemy.def.resists && currentEnemy.def.resists.length > 0 && (
                       <div className="battlefield-matchup-group battlefield-matchup-resist" title={`Resists ${formatTileLabels(currentEnemy.def.resists)}`}>
                         <span>Resist</span>
                         {currentEnemy.def.resists.slice(0, 2).map(kind => (
-                          <RuneGlyph key={`resist-${kind}`} kind={kind} />
+                          <ElementPip key={`resist-${kind}`} kind={kind} className="element-pip-matchup" />
                         ))}
                       </div>
                     )}
@@ -6041,7 +6079,7 @@ export default function App() {
                             }}
                           >
                             {caster && <img src={assetUrl(caster.sprite)} alt="" />}
-                            <RuneGlyph kind={kind} />
+                            <ElementPip kind={kind} className="element-pip-caster" />
                           </div>
                           <div
                             className="battlefield-spell-lance battlefield-party-beam"
@@ -6056,7 +6094,7 @@ export default function App() {
                               "--end-y": `${38 + index * 6}%`,
                             } as CSSProperties}
                           >
-                            <RuneGlyph kind={kind} />
+                            <ElementPip kind={kind} className="element-pip-projectile" />
                           </div>
                         </div>
                       );
@@ -6312,7 +6350,7 @@ export default function App() {
                     "--stream-y": `-${35 + index * 2}vh`,
                   } as CSSProperties}
                 >
-                  <RuneGlyph kind={kind} />
+                  <ElementPip kind={kind} className="element-pip-stream" />
                 </div>
               );
             })}
@@ -6352,7 +6390,7 @@ export default function App() {
                   color: TILE_DEFS.heart.color,
                 } as CSSProperties}
               >
-                <RuneGlyph kind="heart" />
+                <ElementPip kind="heart" className="element-pip-heal" />
               </div>
             )}
 
@@ -6426,7 +6464,7 @@ export default function App() {
                               boxShadow: `0 0 36px ${cinematicPrimaryTile.glow}, inset 0 0 18px rgba(255,255,255,0.25)`,
                             }}
                           >
-                            <RuneGlyph kind={cinematicPrimaryKind} />
+                            <ElementPip kind={cinematicPrimaryKind} className="element-pip-cinematic" />
                           </div>
                         </>
                       )}
@@ -6557,7 +6595,7 @@ export default function App() {
               </section>
             ) : apCombatMode ? (
               <>
-                <section className="hidden min-h-0 flex-col overflow-hidden rounded-lg border border-cyan-300/25 bg-[#071225]/88 p-2 shadow-2xl sm:p-4 md:flex">
+                <section className="cute-panel hidden min-h-0 flex-col overflow-hidden rounded-lg border border-cyan-300/25 bg-[#071225]/88 p-2 shadow-2xl sm:p-4 md:flex">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 text-white">
@@ -6624,7 +6662,7 @@ export default function App() {
                   </div>
                 </section>
 
-                <section className="flex min-h-0 flex-col justify-between overflow-hidden rounded-lg border border-[#0F3460] bg-[#16213E]/88 p-2 shadow-2xl sm:p-4">
+                <section className="cute-panel flex min-h-0 flex-col justify-between overflow-hidden rounded-lg border border-[#0F3460] bg-[#16213E]/88 p-2 shadow-2xl sm:p-4">
                   <div className="min-h-0">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">
@@ -6702,7 +6740,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => handlePlayerCommand(action)}
                                 disabled={!canUse}
-                                className="command-action-button flex min-h-[5.4rem] flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-1.5 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[6.4rem] sm:px-2 sm:text-sm"
+                                className="command-action-button cute-action-button flex min-h-[5.4rem] flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-1.5 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[6.4rem] sm:px-2 sm:text-sm"
                                 title={preview}
                               >
                                 {icon}
@@ -6722,7 +6760,7 @@ export default function App() {
                             type="button"
                             onClick={handleUltimate}
                             disabled={combat.phase !== "answering" || combat.skillCharge < activeCommandUltimate.focusCost}
-                            className={`ultimate-command-button flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-all ${
+                            className={`ultimate-command-button cute-ultimate-button flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-all ${
                               combat.skillCharge >= activeCommandUltimate.focusCost
                                 ? "border-yellow-200/70 bg-yellow-300/14 text-yellow-50 shadow-[0_0_20px_rgba(255,216,77,0.2)] hover:bg-yellow-300/22"
                                 : "cursor-not-allowed border-white/10 bg-white/4 text-gray-500 opacity-70"
@@ -7257,7 +7295,7 @@ export default function App() {
 
         {!showTutorial && !combat.isPaused && combat.mode === "studyReady" && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-[#050816]/94 via-[#050816]/38 to-transparent px-3 pb-3 pt-24 sm:inset-0 sm:items-center sm:bg-[#050816]/92 sm:py-4">
-            <div className="max-h-[42dvh] w-full max-w-md overflow-auto rounded-t-lg border border-cyan-400/30 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
+            <div className="cute-sheet max-h-[42dvh] w-full max-w-md overflow-auto rounded-t-lg border border-cyan-400/30 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
               <div className="mx-auto mb-3 hidden h-12 w-12 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-400/10 text-cyan-200 sm:mb-4 sm:flex sm:h-14 sm:w-14">
                 <BookOpen className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
@@ -7288,7 +7326,7 @@ export default function App() {
 
         {!showTutorial && !combat.isPaused && combat.mode === "commandReady" && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-[#050816]/94 via-[#050816]/34 to-transparent px-3 pb-3 pt-24 sm:inset-0 sm:items-center sm:bg-[#050816]/88 sm:py-4">
-            <div className="max-h-[44dvh] w-full max-w-md overflow-auto rounded-t-lg border border-[#E94560]/40 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
+            <div className="cute-sheet max-h-[44dvh] w-full max-w-md overflow-auto rounded-t-lg border border-[#E94560]/40 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
               <div className="mx-auto mb-3 hidden h-12 w-12 items-center justify-center rounded-full border border-[#E94560]/50 bg-[#E94560]/12 text-pink-200 sm:mb-4 sm:flex sm:h-14 sm:w-14">
                 <Sword className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
@@ -7330,7 +7368,7 @@ export default function App() {
 
         {!showTutorial && !combat.isPaused && combat.mode === "boardReady" && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-[#050816]/94 via-[#050816]/34 to-transparent px-3 pb-3 pt-24 sm:inset-0 sm:items-center sm:bg-[#050816]/88 sm:py-4">
-            <div className="max-h-[52dvh] w-full max-w-md overflow-auto rounded-t-lg border border-[#E94560]/40 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
+            <div className="cute-sheet max-h-[52dvh] w-full max-w-md overflow-auto rounded-t-lg border border-[#E94560]/40 bg-[#16213E]/94 p-3 text-center shadow-2xl backdrop-blur-md sm:max-h-[92dvh] sm:rounded-lg sm:p-6">
               <div className="mx-auto mb-3 hidden h-12 w-12 items-center justify-center rounded-full border border-[#E94560]/50 bg-[#E94560]/12 text-pink-200 sm:mb-4 sm:flex sm:h-14 sm:w-14">
                 <Sparkles className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
@@ -7464,7 +7502,7 @@ export default function App() {
 
         {!showTutorial && !combat.isPaused && combat.mode === "study" && combat.currentWord && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-[#050816]/95 via-[#050816]/48 to-transparent px-3 pb-3 pt-[30dvh] sm:inset-0 sm:items-center sm:bg-[#050816]/92 sm:py-3">
-            <div className="max-h-[68dvh] w-full max-w-2xl overflow-auto rounded-t-lg border border-[#0F3460] bg-[#16213E]/95 p-3 shadow-2xl backdrop-blur-md sm:max-h-[94dvh] sm:rounded-lg sm:p-5">
+            <div className="cute-sheet max-h-[68dvh] w-full max-w-2xl overflow-auto rounded-t-lg border border-[#0F3460] bg-[#16213E]/95 p-3 shadow-2xl backdrop-blur-md sm:max-h-[94dvh] sm:rounded-lg sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-2 sm:mb-5 sm:gap-4">
                 <div>
                   <div className="flex items-center gap-2 text-white">
@@ -7509,7 +7547,7 @@ export default function App() {
               </div>
 
               <div
-                className="mb-3 rounded-lg border-2 bg-[#0F3460]/90 p-3 transition-all duration-200 sm:mb-5 sm:p-5"
+                className="cute-question-card mb-3 rounded-lg border-2 bg-[#0F3460]/90 p-3 transition-all duration-200 sm:mb-5 sm:p-5"
                 style={{
                   borderColor: combat.studyFeedback ? "#FF4757" : "#E94560",
                 }}
@@ -7519,7 +7557,7 @@ export default function App() {
               </div>
 
               {combat.studyFeedback && (
-                <div className="mb-3 rounded-md border border-red-300/45 bg-red-500/12 p-3 shadow-lg sm:mb-4">
+                <div className="cute-feedback-card mb-3 rounded-md border border-red-300/45 bg-red-500/12 p-3 shadow-lg sm:mb-4">
                   <div className="text-[10px] font-black uppercase tracking-wide text-red-100/75">Correct Answer</div>
                   <div className="mt-1 flex flex-wrap items-baseline gap-2">
                     <span className="text-lg font-black text-white">{combat.studyFeedback.correct}</span>
@@ -7535,6 +7573,13 @@ export default function App() {
                 {(filteredOptions.length > 0 ? filteredOptions : combat.options || []).map((opt, i) => {
                   const isCorrectOption = combat.studyFeedback?.correct === opt;
                   const isSelectedWrongOption = combat.studyFeedback?.selected === opt && !isCorrectOption;
+                  const answerState = combat.studyFeedback
+                    ? isCorrectOption
+                      ? "correct"
+                      : isSelectedWrongOption
+                        ? "wrong"
+                        : "muted"
+                    : "idle";
                   const btnClass = combat.studyFeedback
                     ? isCorrectOption
                       ? "border-green-300 bg-green-500/18 text-green-50 shadow-[0_0_18px_rgba(46,204,113,0.22)]"
@@ -7548,7 +7593,8 @@ export default function App() {
                       key={`${opt}-${i}`}
                       onClick={() => handleAnswer(opt)}
                       disabled={combat.phase !== "answering" || combat.isPaused}
-                      className={`min-h-10 rounded-md border-2 px-3 py-2 text-left text-sm font-semibold transition-all duration-200 sm:min-h-12 sm:px-4 sm:py-3 sm:text-base ${btnClass}`}
+                      data-answer-state={answerState}
+                      className={`cute-answer-button min-h-10 rounded-md border-2 px-3 py-2 text-left text-sm font-semibold transition-all duration-200 sm:min-h-12 sm:px-4 sm:py-3 sm:text-base ${btnClass}`}
                     >
                       <span className="mr-2 text-gray-500">{String.fromCharCode(65 + i)}.</span>
                       {opt}
@@ -7573,7 +7619,7 @@ export default function App() {
     const isFirstRelicReward = combat.floor === 3 && combat.relicChoices.length > 0;
     
     return (
-      <div className="relative h-screen w-full overflow-auto bg-[#1A1A2E]">
+      <div className="cute-theme relative h-screen w-full overflow-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_combat_blob.png")} />
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6">
           <h2 
@@ -7618,7 +7664,7 @@ export default function App() {
           </div>
 
           {combat.recruitedCharacterIds.length > 0 && (
-            <div className="mb-5 flex w-full max-w-2xl items-center gap-3 rounded-lg border border-orange-300/55 bg-orange-300/14 px-4 py-3 text-left shadow-[0_0_24px_rgba(255,151,72,0.18)]">
+            <div className="cute-recruit-panel mb-5 flex w-full max-w-2xl items-center gap-3 rounded-lg border border-orange-300/55 bg-orange-300/14 px-4 py-3 text-left shadow-[0_0_24px_rgba(255,151,72,0.18)]">
               {combat.recruitedCharacterIds.map(characterId => {
                 const character = CHARACTER_DEFS.find(candidate => candidate.id === characterId);
                 if (!character) return null;
@@ -7655,7 +7701,7 @@ export default function App() {
                     <button
                       key={relic.id}
                       onClick={() => claimRelic(relic)}
-                      className="rounded-lg border-2 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
+                      className="cute-sticker rounded-lg border-2 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
                       style={{ borderColor: tile.color, boxShadow: `0 0 20px ${tile.glow}` }}
                     >
                       <div className="mb-2 flex items-center justify-between gap-2">
@@ -7683,7 +7729,7 @@ export default function App() {
               return (
                 <div
                   key={rewardWord.id}
-                  className={`reward-card-${i} bg-[#16213E] rounded-lg p-4 border-2 transition-all duration-200 text-left`}
+                  className={`reward-card-${i} cute-sticker bg-[#16213E] rounded-lg p-4 border-2 transition-all duration-200 text-left`}
                   style={{ borderColor: rarityColor }}
                 >
                   <div className="text-xs mb-1" style={{ color: rarityColor }}>
