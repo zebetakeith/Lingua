@@ -43,6 +43,7 @@ export function getEnemyApForTurn(enemy: EnemyLike): number {
 
 export function getEnemySpecialText(special: string | null): string {
   if (special === "shuffle_answers") return "scrambles answers";
+  if (special === "heavy_attack") return "winds up a heavy hit";
   if (special === "freeze_timer") return "adds 1 AP to the next study goal";
   if (special === "sequential") return "strikes faster after a hit";
   if (special === "self_heal") return "heals after attacking";
@@ -65,6 +66,19 @@ function getEnemyStrikeName(enemy: EnemyLike): string {
 function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): EnemyActionPreview | null {
   const special = enemy.def.special;
   const missingHp = Math.max(0, (enemy.maxHp || 0) - (enemy.hp || enemy.maxHp || 0));
+
+  if (special === "heavy_attack") {
+    const damage = Math.max(4, Math.floor(enemy.currentDamage * 0.7));
+    return {
+      id: "body_slam",
+      name: "Belly Flop",
+      apCost: 1,
+      damage,
+      description: `Spends a second AP for +${damage} damage.`,
+      counterplay: "Defend to soften both hits, or finish it before its turn.",
+      severity: "high",
+    };
+  }
 
   if (special === "shuffle_answers" && !context.nextStudyShuffle) {
     return {
@@ -212,6 +226,7 @@ export function getEnemyCounterplayText(enemy: EnemyLike, context: EnemyPlanCont
   })[0];
   if (mostSevere) return mostSevere.counterplay;
   if (enemy.def.special === "low_combo_punish") return "Spend at least 3 AP before it acts.";
+  if (enemy.def.special === "heavy_attack") return "Defend to soften both hits, or finish it before its turn.";
   if (enemy.def.special === "healing_check") return "Heal or defend before its turn.";
   if (enemy.def.special === "self_heal") return "Burst it down or break shield before it heals.";
   if (enemy.def.special === "timer_drain") return "Ward the hit or spend AP before Focus is drained.";

@@ -65,7 +65,7 @@ type PowerUpType = "surge" | "ward" | "mend" | "shuffle";
 type CombatMode = "studyReady" | "study" | "commandReady" | "command" | "enemyAction" | "boardReady" | "board" | "resolveReady" | "cinematic";
 type EnemyAnim = "hit" | "attack" | null;
 type PlayerAnim = "hit" | "heal" | null;
-type CombatActionEffectType = "shuffle" | "surge" | "ward" | "mend" | "skill";
+type CombatActionEffectType = "shuffle" | "surge" | "ward" | "mend" | "skill" | "attack" | "enemy";
 type TurnActorKind = "party" | "enemy";
 type PlayerActionId = "attack" | "defend" | "skill";
 
@@ -1143,6 +1143,42 @@ function getActionLabel(member: CharacterDef, action: PlayerActionId): string {
   return getSkillById(member.skillId)?.name || "Skill";
 }
 
+function getTimelineRelativeValue(entry: TurnQueueEntry, queue: TurnQueueEntry[]): number {
+  return Math.max(0, Math.round(entry.actionValue - (queue[0]?.actionValue || 0)));
+}
+
+function getNextEnemyTimelineDistance(queue: TurnQueueEntry[]): number | null {
+  const enemy = queue.find(entry => entry.kind === "enemy");
+  return enemy ? getTimelineRelativeValue(enemy, queue) : null;
+}
+
+function getTimelineOutcomeText(queue: TurnQueueEntry[], actorId: string): string {
+  const nextActor = queue[0];
+  if (!nextActor) return "room clear";
+  if (nextActor.kind === "enemy") return `${nextActor.name} next`;
+  if (nextActor.id === actorId) return "act again";
+  return `${nextActor.name} next`;
+}
+
+function getPlayerActionTimelinePreview(member: CharacterDef, action: PlayerActionId, state: CombatState): { delay: number; outcome: string } {
+  const actor = getCurrentActor(state);
+  const cost = getPlayerActionCost(member, action, state);
+  const extraDelay = action === "defend" && state.runRelics.includes("runic_tumbler") ? -14 : 0;
+  const delay = getTimelineActionDelay(member.speed, PLAYER_ACTION_DELAY, cost) + extraDelay;
+  if (!actor || actor.kind !== "party") return { delay, outcome: "timeline advances" };
+  const queue = advanceTimelineByCost(state.turnQueue, actor.id, cost, extraDelay);
+  return { delay, outcome: getTimelineOutcomeText(queue, actor.id) };
+}
+
+function getPlayerActionPreviewText(member: CharacterDef, action: PlayerActionId, state: CombatState, enemy?: EnemyInstance | null): string {
+  if (action === "defend") return "Reduce the next hit";
+  if (action === "skill") return getSkillById(member.skillId)?.description || member.passive;
+  const rawDamage = Math.max(5, member.attack + Math.floor(state.difficultyFloor * 1.15));
+  if (enemy?.def.weakTo.includes(member.element)) return `${rawDamage} base damage - weakness`;
+  if (enemy?.def.resists?.includes(member.element)) return `${rawDamage} base damage - resisted`;
+  return `${rawDamage} base damage`;
+}
+
 function getEnemyPlanContext(state: CombatState): EnemyPlanContext {
   return {
     actionPointsSpentThisWindow: state.actionPointsSpentThisWindow,
@@ -1191,6 +1227,7 @@ function getEnemyIntentShortLabel(enemy?: EnemyInstance | null, context?: EnemyP
   const specialAction = plan.find(action => action.id !== "strike");
   if (specialAction) {
     if (specialAction.id === "scramble_answers") return "SCRAMBLE";
+    if (specialAction.id === "body_slam") return "BELLY FLOP";
     if (specialAction.id === "study_tax") return "STUDY TAX";
     if (specialAction.id === "drain_focus") return "DRAIN";
     if (specialAction.id === "delay_actor") return "DELAY";
@@ -1267,6 +1304,9 @@ function getEnemyPuzzleHint(enemy?: EnemyInstance | null): { label: string; text
 
   if (enemy.def.special === "low_combo_punish") {
     return { label: "AP check", text: "Spend 3+ AP before it acts.", tone: "bad" };
+  }
+  if (enemy.def.special === "heavy_attack") {
+    return { label: "Big windup", text: "Defend to soften Belly Flop, or finish it first.", tone: "warn" };
   }
   if (enemy.def.special === "healing_check") {
     return { label: "Healing check", text: "Heal or defend before its turn.", tone: "good" };
@@ -3302,6 +3342,12 @@ export default function App() {
       skillCharge: nextSkillCharge,
       activeBuffs: nextBuffs,
       fragileDebuff: 0,
+      actionEffect: createCombatActionEffect("enemy", enemyActionName, "#ff7895", {
+        kind: enemy.def.element,
+        detail: `${enemyApSpent}/${enemyApBudget} AP - ${wardBlocked ? "blocked" : `${incomingDamage} damage`}`,
+        casterName: enemy.def.name,
+        casterSprite: enemy.def.sprite,
+      }),
       cinematic,
       cinematicStepIndex: 0,
       combatLog,
@@ -3446,6 +3492,7 @@ export default function App() {
     let enemyHpAfter = enemy.hp;
     let currentEnemyIndex = combat.currentEnemyIndex;
     let nextQueue = advanceTimelineByCost(combat.turnQueue, actor.id, baseCost, actionDelay);
+    const actionTimelineDelay = getTimelineActionDelay(actor.speed, PLAYER_ACTION_DELAY, baseCost) + actionDelay;
     let phaseBanner = combat.showPhaseBanner;
 
     if (defense.shieldDamage > 0 || defense.hpDamage > 0) {
@@ -3582,9 +3629,19 @@ export default function App() {
           isCrit: false,
         }] : []),
       ],
-      actionEffect: createCombatActionEffect(action === "defend" || member.skillId === "ward_word" && action === "skill" ? "ward" : "skill", actionLabel, TILE_DEFS[kind].color, {
+      actionEffect: createCombatActionEffect(
+        action === "defend" || member.skillId === "ward_word" && action === "skill"
+          ? "ward"
+          : action === "skill" && member.skillId === "verdant_shift"
+            ? "mend"
+            : action === "attack"
+              ? "attack"
+              : "skill",
+        actionLabel,
+        TILE_DEFS[kind].color,
+        {
         kind,
-        detail: action === "defend" ? "Next hit reduced" : baseCost === 1 ? "1 AP" : `${baseCost} AP`,
+        detail: `${baseCost} AP - +${actionTimelineDelay} time - ${getTimelineOutcomeText(nextQueue, actor.id)}`,
         casterName: member.name,
         casterSprite: member.sprite,
       }),
@@ -4664,6 +4721,10 @@ export default function App() {
   const enemyApBudgetDisplay = combat?.mode === "enemyAction" && combat.enemyActionPoints > 0
     ? combat.enemyActionPoints
     : enemyApBudget;
+  const timelineOrigin = combat?.turnQueue[0]?.actionValue || 0;
+  const nextEnemyTimelineDistance = combat ? getNextEnemyTimelineDistance(combat.turnQueue) : null;
+  const currentEnemyPlannedDamage = currentEnemyIntent?.actions.reduce((total, action) => total + action.damage, 0) || 0;
+  const currentEnemyPlanName = currentEnemyIntent?.actions.map(action => action.name).join(" + ") || "Waiting";
 
   // ─── RENDER: Main Menu ────────────────────────────────
   if (screen === "menu") {
@@ -5516,8 +5577,8 @@ export default function App() {
               return (
                 <div
                   key={`${entry.id}-${index}`}
-                  className={`flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-1 transition-all sm:gap-1.5 sm:px-2 ${
-                    isActive ? "bg-white/12 text-white" : "bg-white/5 text-gray-300"
+                  className={`timeline-chip flex min-w-0 items-center gap-1 rounded-md border px-1.5 py-1 transition-all sm:gap-1.5 sm:px-2 ${
+                    isActive ? "timeline-chip-active bg-white/12 text-white" : entry.kind === "enemy" ? "bg-red-500/10 text-red-50" : "bg-white/5 text-gray-300"
                   }`}
                   style={{
                     borderColor: isActive ? `${tile.color}88` : "rgba(255,255,255,0.1)",
@@ -5527,7 +5588,7 @@ export default function App() {
                 >
                   <img src={assetUrl(entry.avatar)} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" />
                   <span className="truncate text-[10px] font-bold sm:text-xs">{isActive ? "Now: " : ""}{entry.name}</span>
-                  <span className="hidden rounded bg-black/35 px-1 text-[9px] font-black text-gray-300 sm:inline">{Math.max(0, Math.round(entry.actionValue))}</span>
+                  <span className="rounded bg-black/35 px-1 text-[9px] font-black text-gray-300">{index === 0 ? "NOW" : `+${Math.max(0, Math.round(entry.actionValue - timelineOrigin))}`}</span>
                 </div>
               );
             })}
@@ -5804,6 +5865,20 @@ export default function App() {
                     />
                   ))}
                 </div>
+              </div>
+              <div
+                className="enemy-mobile-intent-ribbon relative z-30 mb-1 flex max-w-[94vw] items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-bold sm:hidden"
+                style={{
+                  borderColor: currentEnemyIntent?.severity === "high" ? "rgba(255,120,149,0.72)" : "rgba(255,255,255,0.18)",
+                  backgroundColor: currentEnemyIntent?.severity === "high" ? "rgba(126,39,73,0.78)" : "rgba(7,62,80,0.78)",
+                  color: "#fff9f0",
+                }}
+              >
+                <span className="max-w-[52vw] truncate">{currentEnemyPlanName}</span>
+                <span className="rounded-full bg-black/22 px-1.5 py-0.5 text-[9px]">{enemyApBudget} AP</span>
+                {currentEnemyPlannedDamage > 0 && (
+                  <span className="rounded-full bg-red-300/18 px-1.5 py-0.5 text-[9px] text-red-50">{currentEnemyPlannedDamage} DMG</span>
+                )}
               </div>
               <div
                 className="relative z-30 mb-1 hidden max-w-[92vw] rounded-md border px-2 py-1 text-center text-[11px] font-semibold sm:mb-2 sm:block sm:text-xs"
@@ -6275,6 +6350,13 @@ export default function App() {
                               <div className="text-[11px] font-semibold text-gray-400">{activeCommandSkill?.name || "Skill"} - {activeCommandSkill?.description || activeCommandCharacter.passive}</div>
                             </div>
                           </div>
+                          <div className="mt-1.5 flex flex-wrap gap-1 text-[10px] font-bold">
+                            <span className="rounded-full bg-white/8 px-2 py-0.5 text-cyan-100">SPD {activeCommandCharacter.speed}</span>
+                            <span className="rounded-full bg-white/8 px-2 py-0.5 text-yellow-100">{combat.actionPoints} AP ready</span>
+                            <span className="rounded-full bg-white/8 px-2 py-0.5 text-red-100">
+                              Enemy in {nextEnemyTimelineDistance ?? "--"} time
+                            </span>
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-2">
@@ -6282,6 +6364,8 @@ export default function App() {
                             const cost = getPlayerActionCost(activeCommandCharacter, action, combat);
                             const label = getActionLabel(activeCommandCharacter, action);
                             const canUse = combat.phase === "answering" && combat.actionPoints >= cost;
+                            const timing = getPlayerActionTimelinePreview(activeCommandCharacter, action, combat);
+                            const preview = getPlayerActionPreviewText(activeCommandCharacter, action, combat, currentEnemy);
                             const icon = action === "defend" ? <Shield className="h-4 w-4" /> : action === "skill" ? <Sparkles className="h-4 w-4" /> : <Sword className="h-4 w-4" />;
                             return (
                               <button
@@ -6289,11 +6373,16 @@ export default function App() {
                                 type="button"
                                 onClick={() => handlePlayerCommand(action)}
                                 disabled={!canUse}
-                                className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-2 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-20 sm:text-sm"
+                                className="command-action-button flex min-h-[5.4rem] flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-1.5 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[6.4rem] sm:px-2 sm:text-sm"
+                                title={preview}
                               >
                                 {icon}
                                 <span>{label}</span>
                                 <span className="rounded bg-yellow-300/15 px-1.5 py-0.5 text-[10px] text-yellow-100">{cost} AP</span>
+                                <span className="text-[9px] font-bold leading-tight text-cyan-100/80">+{timing.delay} time</span>
+                                <span className={`max-w-full truncate text-[9px] font-black leading-tight ${timing.outcome.includes("next") && timing.outcome !== `${activeCommandCharacter.name} next` ? "text-red-100" : "text-green-100"}`}>
+                                  {timing.outcome}
+                                </span>
                               </button>
                             );
                           })}
@@ -6871,6 +6960,9 @@ export default function App() {
                 <Sword className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
               <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Commands Ready</h3>
+              <div className="command-ap-burst mx-auto mb-2 w-fit rounded-full border border-yellow-200/35 bg-yellow-300/16 px-4 py-1.5 text-xl font-black text-yellow-100 shadow-[0_0_22px_rgba(255,216,77,0.25)] sm:mb-3 sm:text-2xl">
+                +{combat.actionPointsEarnedThisRush} AP
+              </div>
               <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
                 {formatStudyRushResult(combat.studyCorrectRound, combat.studyQuestionsTotal)}. You earned {combat.actionPointsEarnedThisRush}/{currentStudyApCap} AP. Spend it now; unspent AP disappears after the enemy acts.
               </p>
