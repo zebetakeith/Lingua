@@ -180,6 +180,7 @@ interface CombatState {
   powerPoints: number;
   actionPoints: number;
   actionPointsEarnedThisRush: number;
+  studyApOfferedThisRush: number;
   studyApGoal: number;
   actionPointsSpentThisWindow: number;
   actionPointCarryCap: number;
@@ -792,20 +793,25 @@ function getStudyRushApCap(_state?: CombatState | null): number {
 }
 
 function getRemainingStudyRushAp(state: CombatState): number {
-  return Math.max(0, getStudyRushApCap(state) - state.actionPointsEarnedThisRush);
+  return Math.max(0, getStudyRushApCap(state) - state.studyApOfferedThisRush);
 }
 
 function clampStudyRushAp(state: CombatState, rawAp: number): number {
   return Math.min(getRemainingStudyRushAp(state), Math.max(0, rawAp));
 }
 
-function getProjectedCorrectAnswerAp(state: CombatState, saveData: SaveData): number {
+function getProjectedStudyCardAp(state: CombatState, saveData: SaveData): number {
   if (!state.currentWord) return 0;
   const rating = getRatingFromBox(getCardProgress(state.currentWord, saveData).box);
   const hardEdgeBonus = state.runRelics.includes("hard_edge") && rating === "hard" ? 1 : 0;
   const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
-  const rawAp = getApForCorrectCard(state.currentWord, saveData) + hardEdgeBonus + steadyGripBonus - state.apPenaltyNextRush;
+  const rawAp = Math.max(1, getApForCorrectCard(state.currentWord, saveData) + hardEdgeBonus + steadyGripBonus);
   return clampStudyRushAp(state, rawAp);
+}
+
+function getProjectedCorrectAnswerAp(state: CombatState, saveData: SaveData): number {
+  const cardAp = getProjectedStudyCardAp(state, saveData);
+  return Math.max(0, cardAp - Math.min(cardAp, state.apPenaltyNextRush));
 }
 
 function updateCardProgressFromAnswer(saveData: SaveData, card: VocabWord, isCorrect: boolean): SaveData {
@@ -1323,7 +1329,7 @@ function getRelicChoiceReason(relic: RelicDef, combatState?: CombatState | null)
   const special = enemy?.def.special;
 
   if (relic.id === "clarity_lens") return { tag: "Study streak build", text: "Perfect rushes Expose the enemy for a stronger weakness hit." };
-  if (relic.id === "blood_quill") return { tag: "Risk economy", text: "Misses still make AP, but the next enemy hit hurts more." };
+  if (relic.id === "blood_quill") return { tag: "Risk economy", text: "Misses charge +2 Focus, but the next enemy hit hurts more." };
   if (relic.id === "combo_aegis") return { tag: "Rush defense", text: special === "low_combo_punish" ? "Protects strong AP windows." : "Turns excellent study into safety." };
   if (relic.id === "runic_tumbler") return { tag: "Timeline control", text: "Defend can delay enemy pressure." };
   if (relic.id === "fracture_notes" || relic.id === "clean_margin") return { tag: hasShield ? "Great now" : "Shield answer", text: "Best against shielded enemies and bosses." };
@@ -2012,6 +2018,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     powerPoints: 0,
     actionPoints: 0,
     actionPointsEarnedThisRush: 0,
+    studyApOfferedThisRush: 0,
     studyApGoal: STUDY_RUSH_AP_CAP,
     actionPointsSpentThisWindow: 0,
     actionPointCarryCap: 0,
@@ -2281,6 +2288,7 @@ export default function App() {
       activeBuffs: combat.activeBuffs.filter(buff => !["study_head_start", "study_tax", "timer_extend", "timer_slow"].includes(buff.type)),
       actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints) + headStartAp,
       actionPointsEarnedThisRush: headStartAp,
+      studyApOfferedThisRush: headStartAp,
       studyApGoal,
       actionPointsSpentThisWindow: 0,
       nextStudyShuffle: false,
@@ -2300,7 +2308,7 @@ export default function App() {
       dragTileStatus: null,
       pendingCinematic: null,
       cinematic: null,
-      boardMessage: `Study set started. Fill ${studyApGoal} AP to open commands${headStartAp ? " with a 1 AP head start" : ""}${hasStudyTax ? ". Enemy pressure added 1 AP to the goal" : ""}${combat.nextStudyShuffle ? ". Answers were scrambled" : ""}.`,
+      boardMessage: `Study set started. Resolve ${studyApGoal} AP worth of cards to open commands${headStartAp ? " with a 1 AP head start" : ""}${hasStudyTax ? ". Enemy pressure added 1 AP to the hand" : ""}${combat.nextStudyShuffle ? ". Answers were scrambled" : ""}.`,
     });
   };
 
@@ -2421,9 +2429,9 @@ export default function App() {
     const cardRating = getRatingFromBox(getCardProgress(state.currentWord, save).box);
     const hardEdgeBonus = state.runRelics.includes("hard_edge") && cardRating === "hard" ? 1 : 0;
     const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
-    const rawEarnedAp = Math.max(0, getApForCorrectCard(state.currentWord, save) + hardEdgeBonus + steadyGripBonus - state.apPenaltyNextRush);
-    const earnedAp = clampStudyRushAp(state, rawEarnedAp);
-    const apCapped = earnedAp < rawEarnedAp;
+    const offeredAp = getProjectedStudyCardAp(state, save);
+    const earnedAp = getProjectedCorrectAnswerAp(state, save);
+    const apCapped = offeredAp < getApForCorrectCard(state.currentWord, save) + hardEdgeBonus + steadyGripBonus;
     const difficultyFocusBonus = getFocusBonusForCorrectCard(state.currentWord);
     const nextSave = updateCardProgressFromAnswer(save, state.currentWord, true);
     const nextDeck = refillDeck(state.deck, nextSave);
@@ -2437,7 +2445,7 @@ export default function App() {
       ...(steadyGripBonus > 0 ? [createCombatNotice("Relic: Steady Grip", "First correct answer added +1 AP before cap.", "relic")] : []),
       ...(difficultyFocusBonus > 0 ? [createCombatNotice("Difficult Card", "Harder vocabulary charged +1 extra Focus.", "good")] : []),
       ...(state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? [createCombatNotice("Relic: Rush Spark", "4 correct in one study set: +2 Focus.", "relic")] : []),
-      ...(apCapped ? [createCombatNotice("AP Goal", `Study AP goal filled at ${getStudyRushApCap(state)}.`, "good")] : []),
+      ...(apCapped ? [createCombatNotice("Study Hand", `Study hand resolved at ${getStudyRushApCap(state)} possible AP.`, "good")] : []),
     ];
     setSave(nextSave);
 
@@ -2447,6 +2455,7 @@ export default function App() {
       powerPoints: state.powerPoints + earnedAp,
       actionPoints: state.actionPoints + earnedAp,
       actionPointsEarnedThisRush: state.actionPointsEarnedThisRush + earnedAp,
+      studyApOfferedThisRush: state.studyApOfferedThisRush + offeredAp,
       apPenaltyNextRush: 0,
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
@@ -2459,7 +2468,7 @@ export default function App() {
       flashColor: "rgba(46,204,113,0.18)",
     };
 
-    if (nextState.actionPointsEarnedThisRush >= getStudyRushApCap(nextState)) {
+    if (nextState.studyApOfferedThisRush >= getStudyRushApCap(nextState)) {
       finishStudyRound(nextState, nextSave);
       return;
     }
@@ -2473,20 +2482,18 @@ export default function App() {
     setSave(nextSave);
     const bloodQuill = state.runRelics.includes("blood_quill");
     const answered = state.studyQuestionsTotal + 1;
-    const bloodQuillAp = bloodQuill ? clampStudyRushAp(state, 1) : 0;
-    const bloodQuillCapped = bloodQuill && bloodQuillAp === 0;
+    const offeredAp = getProjectedStudyCardAp(state, save);
+    const bloodQuillFocus = bloodQuill ? 2 : 0;
     const tidalMemoryFocus = state.runRelics.includes("tidal_memory") && state.studyWrongRound === 0 ? 1 : 0;
     const nextState = {
       ...state,
       deck: refillDeck(state.deck, nextSave),
-      powerPoints: state.powerPoints + bloodQuillAp,
-      actionPoints: state.actionPoints + bloodQuillAp,
-      actionPointsEarnedThisRush: state.actionPointsEarnedThisRush + bloodQuillAp,
+      studyApOfferedThisRush: state.studyApOfferedThisRush + offeredAp,
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
       studyWrongRound: state.studyWrongRound + 1,
       wrongCount: state.wrongCount + 1,
-      skillCharge: Math.min(12, state.skillCharge + tidalMemoryFocus),
+      skillCharge: Math.min(12, state.skillCharge + tidalMemoryFocus + bloodQuillFocus),
       phase: "wrong" as const,
       studyFeedback: missedWord ? {
         selected: selectedOption,
@@ -2495,15 +2502,15 @@ export default function App() {
       } : null,
       fragileDebuff: state.fragileDebuff + (bloodQuill ? 1 : 0),
       eventNotices: bloodQuill
-        ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Blood Quill", bloodQuillCapped ? "AP cap blocked the miss AP, but Fragile still applies." : "+1 AP gained, but the next enemy hit hurts more.", bloodQuillCapped ? "warn" : "relic")])
+        ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Blood Quill", "Miss charged +2 Focus, but the next enemy hit hurts more.", "relic")])
         : tidalMemoryFocus > 0
           ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Tidal Memory", "First miss this study set still charged +1 Focus.", "relic")])
           : state.eventNotices,
       boardMessage: bloodQuill
-        ? `Missed card. Blood Quill ${bloodQuillCapped ? "hit the AP goal" : `gave +${bloodQuillAp} AP`} and made you fragile.`
+        ? `Missed card. Lost ${offeredAp} AP. Blood Quill charged +2 Focus and made you fragile.`
         : tidalMemoryFocus > 0
-          ? "Missed card. Tidal Memory charged +1 Focus."
-          : "Missed card. Review the answer and keep building AP.",
+          ? `Missed card. Lost ${offeredAp} AP. Tidal Memory charged +1 Focus.`
+          : `Missed card. Lost ${offeredAp} AP. Review the answer.`,
       flashColor: "rgba(255,71,87,0.2)",
     };
 
@@ -2513,7 +2520,7 @@ export default function App() {
       const latestCombat = combatRef.current;
       if (!latestCombat || latestCombat.mode !== "study" || latestCombat.phase !== "wrong" || latestCombat.currentWord?.id !== missedWord?.id) return;
 
-      if (nextState.actionPointsEarnedThisRush >= getStudyRushApCap(nextState)) {
+      if (nextState.studyApOfferedThisRush >= getStudyRushApCap(nextState)) {
         finishStudyRound({
           ...nextState,
           phase: "answering",
@@ -3100,11 +3107,24 @@ export default function App() {
     }
 
     if (combat.actionPoints <= 0) {
-      setCombat({
+      const yieldedQueue = currentActor?.kind === "party"
+        ? advanceTimelineByCost(combat.turnQueue, currentActor.id, 1)
+        : combat.turnQueue;
+      const yieldedState = {
         ...combat,
+        turnQueue: yieldedQueue,
+        actionPointsEarnedThisRush: 0,
+        studyApOfferedThisRush: 0,
+      };
+      if (getCurrentActor(yieldedState)?.kind === "enemy") {
+        resolveEnemyActionFromState(yieldedState);
+        return;
+      }
+      setCombat({
+        ...yieldedState,
         mode: "studyReady",
-        activeActorId: currentActor?.id || null,
-        boardMessage: "No AP earned. Study again before the enemy reaches the front.",
+        activeActorId: getCurrentActor(yieldedState)?.id || null,
+        boardMessage: "No AP earned. The party yielded initiative; start the next study set.",
       });
       return;
     }
@@ -3272,6 +3292,7 @@ export default function App() {
       turnQueue: nextQueue,
       actionPoints: Math.min(baseState.actionPointCarryCap, baseState.actionPoints),
       actionPointsEarnedThisRush: 0,
+      studyApOfferedThisRush: 0,
       actionPointsSpentThisWindow: 0,
       enemyActionPoints: enemyApBudget,
       enemyActionPointsSpentThisTurn: enemyApSpent,
@@ -3327,7 +3348,7 @@ export default function App() {
         enemyAnim: null,
         playerAnim: null,
         activeActorId: null,
-        boardMessage: "Study set ready. Fill the AP goal to open the next command window.",
+        boardMessage: "Study set ready. Resolve the fixed AP hand to open the next command window.",
       } : prev);
     }, 1150);
   };
@@ -3608,6 +3629,7 @@ export default function App() {
           activeActorId: getCurrentActor(prev)?.id || null,
           actionPoints: Math.min(prev.actionPointCarryCap, prev.actionPoints),
           actionPointsEarnedThisRush: 0,
+          studyApOfferedThisRush: 0,
           boardMessage: "AP spent. Study again before the enemy reaches the front.",
         } : prev);
       } else {
@@ -3637,6 +3659,7 @@ export default function App() {
       activeActorId: getCurrentActor(combat)?.id || null,
       actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints),
       actionPointsEarnedThisRush: 0,
+      studyApOfferedThisRush: 0,
       boardMessage: "Command window ended. Study again before the enemy reaches the front.",
     });
   };
@@ -4334,6 +4357,7 @@ export default function App() {
       powerPoints: 0,
       actionPoints: 0,
       actionPointsEarnedThisRush: 0,
+      studyApOfferedThisRush: 0,
       studyApGoal: STUDY_RUSH_AP_CAP,
       actionPointsSpentThisWindow: 0,
       actionPointCarryCap: combat.actionPointCarryCap || 0,
@@ -4580,6 +4604,7 @@ export default function App() {
   const canUsePowerUps = !!combat && combat.phase === "answering" && combat.mode === "boardReady" && !combat.isResolvingRunes;
   const canUseRuneSkills = !!combat && combat.phase === "answering" && combat.mode === "boardReady" && !combat.isPaused && !combat.isResolvingRunes;
   const currentCardPower = combat?.currentWord ? getProjectedCorrectAnswerAp(combat, save) : 0;
+  const currentCardStake = combat?.currentWord ? getProjectedStudyCardAp(combat, save) : 0;
   const currentCardFocusBonus = combat?.currentWord ? getFocusBonusForCorrectCard(combat.currentWord) : 0;
   const currentStudyApCap = combat ? getStudyRushApCap(combat) : STUDY_RUSH_AP_CAP;
   const activeTurnActor = combat ? getCurrentActor(combat) : null;
@@ -4777,7 +4802,7 @@ export default function App() {
                 <div className="p-2 bg-green-500/20 rounded-lg"><BookOpen className="w-6 h-6 text-green-400" /></div>
                 <div>
                   <h3 className="text-white font-semibold">Study Set</h3>
-                  <p className="text-sm">Answer flashcards until your AP goal is full. Misses show the correct answer so you can keep learning.</p>
+                  <p className="text-sm">Resolve a fixed AP hand of flashcards. Misses show the correct answer but permanently lose that card's AP.</p>
                 </div>
               </div>
               
@@ -5388,7 +5413,7 @@ export default function App() {
             <div className="w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
               <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Welcome to the Dungeon!</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-4 sm:text-sm">
-                Fill study AP goals with flashcards, then spend that AP on party commands before the enemy reaches you.
+                Resolve fixed AP hands of flashcards, then spend the AP you earned on party commands before the enemy reaches you.
               </p>
               <button
                 onClick={() => setShowTutorial(false)}
@@ -6224,7 +6249,7 @@ export default function App() {
 
                     {combat.mode === "studyReady" && (
                       <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-50">
-                        Tap Ready below to fill your AP goal with flashcards.
+                        Tap Ready below to resolve a fixed AP hand of flashcards.
                       </div>
                     )}
 
@@ -6555,7 +6580,7 @@ export default function App() {
                       </span>
                     </div>
                     <p className="mt-1 hidden text-xs text-gray-400 sm:block">
-                      {combat.mode === "studyReady" && "Answer cards until the AP goal is full."}
+                      {combat.mode === "studyReady" && "Resolve a fixed AP hand. Misses lose that card's AP."}
                       {combat.mode === "study" && `${studyAnswered} card${studyAnswered === 1 ? "" : "s"} answered.`}
                       {combat.mode === "boardReady" && `${formatBoardTime(combat.boardTimeMax)} and ${combat.powerPoints} power points ready.`}
                       {combat.mode === "board" && `${formatBoardTime(combat.boardTimeLeft)} left. Drag one rune fast.`}
@@ -6813,7 +6838,7 @@ export default function App() {
               </div>
               <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Study Set Ready</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
-                Fill your AP goal to open party commands. Hard cards are worth more AP, so they shorten the set.
+                Resolve a fixed AP hand to open party commands. Hard cards shorten the set, but every miss permanently loses that card's AP.
               </p>
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:mb-5 sm:gap-3 sm:text-sm">
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
@@ -7027,7 +7052,7 @@ export default function App() {
                     {combat.studyCorrectRound} correct
                   </span>
                   <span className="rounded-md bg-yellow-400/15 px-2 py-1.5 text-xs font-bold text-yellow-200 sm:px-3 sm:py-2 sm:text-sm">
-                    +{currentCardPower} AP
+                    {currentCardPower === currentCardStake ? `${currentCardStake} AP at stake` : `${currentCardPower}/${currentCardStake} AP available`}
                   </span>
                   {currentCardFocusBonus > 0 && (
                     <span className="rounded-md bg-purple-400/15 px-2 py-1.5 text-xs font-bold text-purple-100 sm:px-3 sm:py-2 sm:text-sm">
@@ -7035,21 +7060,21 @@ export default function App() {
                     </span>
                   )}
                   <span className="hidden rounded-md bg-black/30 px-2 py-1.5 text-xs font-bold text-gray-300 sm:inline-flex sm:px-3 sm:py-2 sm:text-sm">
-                    Goal {combat.actionPointsEarnedThisRush}/{currentStudyApCap}
+                    Hand {combat.studyApOfferedThisRush}/{currentStudyApCap}
                   </span>
                 </div>
               </div>
 
               <div className="mb-3 sm:mb-5">
                 <div className="mb-1 flex items-center justify-between text-xs">
-                  <span className="font-bold text-yellow-100">{combat.actionPointsEarnedThisRush} / {currentStudyApCap} AP prepared</span>
-                  <span className="text-gray-500">Fill the goal to continue</span>
+                  <span className="font-bold text-yellow-100">{combat.actionPointsEarnedThisRush} AP earned</span>
+                  <span className="text-gray-500">{combat.studyApOfferedThisRush} / {currentStudyApCap} AP hand resolved</span>
                 </div>
                 <div className="h-3 overflow-hidden rounded-full bg-gray-800">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-yellow-500 to-yellow-200 transition-all duration-300"
                     style={{
-                      width: `${Math.min(100, (combat.actionPointsEarnedThisRush / Math.max(1, currentStudyApCap)) * 100)}%`,
+                      width: `${Math.min(100, (combat.studyApOfferedThisRush / Math.max(1, currentStudyApCap)) * 100)}%`,
                     }}
                   />
                 </div>

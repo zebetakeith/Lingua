@@ -70,7 +70,7 @@ export const RELIC_DEFS: RelicDef[] = [
   { id: "fracture_notes", name: "Fracture Notes", element: "flame", rarity: "rare", description: "Breaking a shield spills bonus damage into HP and charges extra Focus." },
   { id: "clean_margin", name: "Clean Margin", element: "tide", rarity: "rare", description: "Breaking a shield also raises a Ward if you do not already have one." },
   { id: "clarity_lens", name: "Clarity Lens", element: "light", rarity: "uncommon", description: "A perfect study set applies Exposed to the enemy." },
-  { id: "blood_quill", name: "Blood Quill", element: "shadow", rarity: "uncommon", description: "Wrong answers grant +1 AP but apply a fragile self-debuff." },
+  { id: "blood_quill", name: "Blood Quill", element: "shadow", rarity: "uncommon", description: "Wrong answers charge +2 Focus but apply a fragile self-debuff." },
   { id: "combo_aegis", name: "Rush Aegis", element: "heart", rarity: "rare", description: "4+ correct in one study set raises a Ward once per floor." },
   { id: "runic_tumbler", name: "Runic Tumbler", element: "shadow", rarity: "rare", description: "Defending can delay one enemy action on the timeline." },
 ];
