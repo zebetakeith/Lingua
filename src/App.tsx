@@ -27,6 +27,25 @@ import {
 } from "./game/party";
 import type { CombatVisualPreset } from "./game/presentation";
 import {
+  DEFAULT_STUDY_SETTINGS,
+  chooseQuestionType,
+  createDirectionStudyProgress,
+  formatAp,
+  getCorrectAnswerAp,
+  getEnabledStudyDirections,
+  getInitialMastery,
+  getMasteryLabel,
+  getStudyDirectionKey,
+  getStudyProgressWeight,
+  normalizeDirectionStudyProgress,
+  normalizeStudySettings,
+  updateDirectionStudyProgress,
+  type DeckStudySettings,
+  type DirectionStudyProgress,
+  type StudyDirection,
+  type StudyQuestionType,
+} from "./game/study";
+import {
   BOARD_COLS,
   BOARD_ROWS,
   TILE_KINDS,
@@ -107,6 +126,9 @@ interface SavedDeck {
   cards: VocabWord[];
   cardRatings: Record<string, CardRating>;
   cardProgress: Record<string, CardProgress>;
+  introducedCardIds: string[];
+  directionProgress: Record<string, DirectionStudyProgress>;
+  studySettings: DeckStudySettings;
   stats: DeckStats;
   unlockedClasses: string[];
   unlockedCharacterIds: string[];
@@ -207,6 +229,9 @@ interface CombatState {
   studyWrongRound: number;
   studyBoardTimeBonus: number;
   currentWord: VocabWord | null;
+  currentStudyDirection: StudyDirection;
+  currentStudyQuestionType: StudyQuestionType;
+  studyRevealAnswer: boolean;
   studyFeedback: StudyFeedback | null;
   options: string[];
   timerMax: number;
@@ -355,7 +380,9 @@ interface CombatActionEffect {
 interface StudyFeedback {
   selected: string;
   correct: string;
+  prompt: string;
   definition: string;
+  lostAp: number;
 }
 
 // ─── Constants ───────────────────────────────────────────
@@ -366,7 +393,6 @@ const SAVE_BACKUP_VERSION = 1;
 const DEFAULT_DECK_ID = "starter-japanese";
 const MAX_DECK_CARDS = 2000;
 const RUN_START_CARD_TARGET = 6;
-const STARTER_DECK_SIZE = RUN_START_CARD_TARGET;
 const REWARD_CARD_COUNT = 3;
 const RELIC_CHOICE_COUNT = 3;
 const QUESTION_TIMER_BONUS = 8;
@@ -418,20 +444,6 @@ const CARD_RATINGS: { id: CardRating; label: string; shortLabel: string; color: 
   { id: "known", label: "I know already", shortLabel: "Known", color: "#95A5A6" },
 ];
 
-const CARD_RATING_WEIGHTS: Record<CardRating, number> = {
-  hard: 4,
-  medium: 2,
-  easy: 1,
-  known: 0,
-};
-
-const CARD_POWER_POINTS: Record<CardRating, number> = {
-  hard: 3,
-  medium: 2,
-  easy: 1,
-  known: 0,
-};
-
 const LEITNER_KNOWN_BOX = 6;
 const LEITNER_INTERVALS_MS = [0, 0, 5 * 60_000, 30 * 60_000, 6 * 60 * 60_000, 24 * 60 * 60_000, Number.MAX_SAFE_INTEGER];
 
@@ -448,6 +460,9 @@ function createSavedDeck(name: string, cards: VocabWord[], id = `deck-${Date.now
     cards: cards.slice(0, MAX_DECK_CARDS),
     cardRatings: {},
     cardProgress: {},
+    introducedCardIds: [],
+    directionProgress: {},
+    studySettings: DEFAULT_STUDY_SETTINGS,
     stats: createDeckStats(),
     unlockedClasses: ["linguist"],
     unlockedCharacterIds: ["linguist"],
@@ -466,6 +481,12 @@ function createDefaultDeck(): SavedDeck {
 
 function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck {
   const now = Date.now();
+  const cards = Array.isArray(deck.cards) ? deck.cards.slice(0, MAX_DECK_CARDS) : fallback.cards;
+  const cardIds = new Set(cards.map(card => card.id));
+  const legacyIntroducedIds = Array.from(new Set([
+    ...Object.keys(deck.cardProgress || {}),
+    ...Object.entries(deck.cardRatings || {}).filter(([, rating]) => rating !== "known").map(([cardId]) => cardId),
+  ])).filter(cardId => cardIds.has(cardId));
   const unlockedCharacterIds = Array.from(new Set([
     "linguist",
     ...(Array.isArray(deck.unlockedCharacterIds) ? deck.unlockedCharacterIds : fallback.unlockedCharacterIds),
@@ -479,9 +500,14 @@ function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck
     ...deck,
     id: typeof deck.id === "string" && deck.id ? deck.id : fallback.id,
     name: typeof deck.name === "string" && deck.name.trim() ? deck.name.trim() : fallback.name,
-    cards: Array.isArray(deck.cards) ? deck.cards.slice(0, MAX_DECK_CARDS) : fallback.cards,
+    cards,
     cardRatings: deck.cardRatings && typeof deck.cardRatings === "object" ? deck.cardRatings : {},
     cardProgress: deck.cardProgress && typeof deck.cardProgress === "object" ? deck.cardProgress : {},
+    introducedCardIds: Array.isArray(deck.introducedCardIds)
+      ? Array.from(new Set(deck.introducedCardIds)).filter(cardId => cardIds.has(cardId))
+      : legacyIntroducedIds,
+    directionProgress: deck.directionProgress && typeof deck.directionProgress === "object" ? deck.directionProgress : {},
+    studySettings: normalizeStudySettings(deck.studySettings),
     unlockedClasses: Array.isArray(deck.unlockedClasses) && deck.unlockedClasses.length > 0
       ? Array.from(new Set(["linguist", ...deck.unlockedClasses]))
       : fallback.unlockedClasses,
@@ -792,11 +818,23 @@ function normalizeCardKey(word: string, definition: string): string {
 
 function getAllCards(saveData: SaveData): VocabWord[] {
   const activeDeck = getActiveDeck(saveData);
-  return activeDeck.cards.length > 0 ? activeDeck.cards : VOCABULARY;
+  return activeDeck.cards;
 }
 
 function getStudyLibrary(saveData: SaveData): VocabWord[] {
   return getAllCards(saveData).filter(card => !isKnownCard(card, saveData));
+}
+
+function getIntroducedStudyCards(saveData: SaveData): VocabWord[] {
+  const activeDeck = getActiveDeck(saveData);
+  const introduced = new Set(activeDeck.introducedCardIds || []);
+  return activeDeck.cards.filter(card => introduced.has(card.id) && !isKnownCard(card, saveData));
+}
+
+function getUnintroducedStudyCards(saveData: SaveData): VocabWord[] {
+  const activeDeck = getActiveDeck(saveData);
+  const introduced = new Set(activeDeck.introducedCardIds || []);
+  return activeDeck.cards.filter(card => !introduced.has(card.id) && !isKnownCard(card, saveData));
 }
 
 function getBoxFromRating(rating: CardRating): number {
@@ -840,24 +878,25 @@ function getCardProgress(card: VocabWord, saveData: SaveData): CardProgress {
 
 function isKnownCard(card: VocabWord, saveData: SaveData): boolean {
   const activeDeck = getActiveDeck(saveData);
-  return activeDeck.cardRatings?.[card.id] === "known" || saveData.cardRatings?.[card.id] === "known" || getCardProgress(card, saveData).box >= LEITNER_KNOWN_BOX;
+  return activeDeck.cardRatings?.[card.id] === "known" || saveData.cardRatings?.[card.id] === "known";
 }
 
-function getCardWeight(card: VocabWord, saveData: SaveData): number {
-  const progress = getCardProgress(card, saveData);
-  if (progress.box >= LEITNER_KNOWN_BOX) return 0;
-  const rating = getRatingFromBox(progress.box);
-  const dueBoost = progress.dueAt <= Date.now() ? 1.7 : 0.7;
-  return CARD_RATING_WEIGHTS[rating] * dueBoost;
+function getDirectionProgress(card: VocabWord, saveData: SaveData, direction: StudyDirection): DirectionStudyProgress {
+  const activeDeck = getActiveDeck(saveData);
+  const key = getStudyDirectionKey(card.id, direction);
+  const rating = activeDeck.cardRatings?.[card.id] || saveData.cardRatings?.[card.id] || getRatingFromBox(getCardProgress(card, saveData).box);
+  return normalizeDirectionStudyProgress(activeDeck.directionProgress?.[key], getInitialMastery(rating));
 }
 
-function getPowerPointsForCard(card: VocabWord, saveData: SaveData): number {
-  return CARD_POWER_POINTS[getRatingFromBox(getCardProgress(card, saveData).box)];
+function getCardMastery(card: VocabWord, saveData: SaveData): number {
+  const settings = normalizeStudySettings(getActiveDeck(saveData).studySettings);
+  const directions = getEnabledStudyDirections(settings);
+  const total = directions.reduce((sum, direction) => sum + getDirectionProgress(card, saveData, direction).mastery, 0);
+  return total / Math.max(1, directions.length);
 }
 
-function getApForCorrectCard(card: VocabWord, saveData: SaveData): number {
-  const base = getPowerPointsForCard(card, saveData);
-  return Math.min(MAX_STUDY_AP_PER_CARD, base);
+function getApForCorrectCard(card: VocabWord, saveData: SaveData, direction: StudyDirection, questionType: StudyQuestionType): number {
+  return Math.min(MAX_STUDY_AP_PER_CARD, getCorrectAnswerAp(getDirectionProgress(card, saveData, direction), questionType));
 }
 
 function getFocusBonusForCorrectCard(card: VocabWord): number {
@@ -873,7 +912,7 @@ function getRemainingStudyRushAp(state: CombatState): number {
 }
 
 function clampStudyRushAp(state: CombatState, rawAp: number): number {
-  return Math.min(getRemainingStudyRushAp(state), Math.max(0, rawAp));
+  return Math.round(Math.min(getRemainingStudyRushAp(state), Math.max(0, rawAp)) * 100) / 100;
 }
 
 function getProjectedStudyCardAp(state: CombatState, saveData: SaveData): number {
@@ -881,7 +920,7 @@ function getProjectedStudyCardAp(state: CombatState, saveData: SaveData): number
   const rating = getRatingFromBox(getCardProgress(state.currentWord, saveData).box);
   const hardEdgeBonus = state.runRelics.includes("hard_edge") && rating === "hard" ? 1 : 0;
   const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
-  const rawAp = Math.max(1, getApForCorrectCard(state.currentWord, saveData) + hardEdgeBonus + steadyGripBonus);
+  const rawAp = Math.max(0.1, getApForCorrectCard(state.currentWord, saveData, state.currentStudyDirection, state.currentStudyQuestionType) + hardEdgeBonus + steadyGripBonus);
   return clampStudyRushAp(state, rawAp);
 }
 
@@ -890,11 +929,11 @@ function getProjectedCorrectAnswerAp(state: CombatState, saveData: SaveData): nu
   return Math.max(0, cardAp - Math.min(cardAp, state.apPenaltyNextRush));
 }
 
-function updateCardProgressFromAnswer(saveData: SaveData, card: VocabWord, isCorrect: boolean): SaveData {
+function updateCardProgressFromAnswer(saveData: SaveData, card: VocabWord, direction: StudyDirection, questionType: StudyQuestionType, isCorrect: boolean): SaveData {
   const now = Date.now();
   const current = getCardProgress(card, saveData);
   const nextBox = isCorrect
-    ? Math.min(LEITNER_KNOWN_BOX, current.box + 1)
+    ? Math.min(LEITNER_KNOWN_BOX - 1, current.box + 1)
     : Math.max(1, current.box - (current.wrongStreak >= 1 ? 2 : 1));
   const nextProgress: CardProgress = {
     box: nextBox,
@@ -903,9 +942,10 @@ function updateCardProgressFromAnswer(saveData: SaveData, card: VocabWord, isCor
     seen: current.seen + 1,
     correct: current.correct + (isCorrect ? 1 : 0),
     wrong: current.wrong + (isCorrect ? 0 : 1),
-    dueAt: nextBox >= LEITNER_KNOWN_BOX ? Number.MAX_SAFE_INTEGER : now + LEITNER_INTERVALS_MS[nextBox],
+    dueAt: now + LEITNER_INTERVALS_MS[nextBox],
   };
-  const nextRating = getRatingFromBox(nextBox);
+  const directionKey = getStudyDirectionKey(card.id, direction);
+  const nextDirectionProgress = updateDirectionStudyProgress(getDirectionProgress(card, saveData, direction), isCorrect, questionType, now);
 
   return updateActiveDeck(saveData, deck => ({
     ...deck,
@@ -913,9 +953,9 @@ function updateCardProgressFromAnswer(saveData: SaveData, card: VocabWord, isCor
       ...(deck.cardProgress || {}),
       [card.id]: nextProgress,
     },
-    cardRatings: {
-      ...(deck.cardRatings || {}),
-      [card.id]: nextRating,
+    directionProgress: {
+      ...(deck.directionProgress || {}),
+      [directionKey]: nextDirectionProgress,
     },
   }));
 }
@@ -924,6 +964,9 @@ function updateCardProgressFromRating(saveData: SaveData, card: VocabWord, ratin
   const box = getBoxFromRating(rating);
   return updateActiveDeck(saveData, deck => ({
     ...deck,
+    introducedCardIds: rating === "known"
+      ? (deck.introducedCardIds || []).filter(cardId => cardId !== card.id)
+      : deck.introducedCardIds,
     cardRatings: {
       ...(deck.cardRatings || {}),
       [card.id]: rating,
@@ -943,47 +986,106 @@ function updateCardProgressFromRating(saveData: SaveData, card: VocabWord, ratin
   }));
 }
 
-function refillDeck(deck: VocabWord[], saveData: SaveData): VocabWord[] {
-  const playableDeck = deck.filter(card => !isKnownCard(card, saveData));
-  const deckIds = new Set(playableDeck.map(card => card.id));
-  const needed = STARTER_DECK_SIZE - playableDeck.length;
-  if (needed <= 0) return playableDeck;
-
-  const fillers = getStudyLibrary(saveData).filter(card => !deckIds.has(card.id));
-  return [...playableDeck, ...shuffleCards(fillers).slice(0, needed)];
+function introduceCard(saveData: SaveData, card: VocabWord, rating: CardRating): SaveData {
+  const ratedSave = updateCardProgressFromRating(saveData, card, rating);
+  if (rating === "known") return ratedSave;
+  const mastery = getInitialMastery(rating);
+  return updateActiveDeck(ratedSave, deck => {
+    const nextDirectionProgress = { ...(deck.directionProgress || {}) };
+    for (const direction of getEnabledStudyDirections(normalizeStudySettings(deck.studySettings))) {
+      const key = getStudyDirectionKey(card.id, direction);
+      if (!nextDirectionProgress[key]) {
+        nextDirectionProgress[key] = createDirectionStudyProgress(mastery);
+      }
+    }
+    return {
+      ...deck,
+      introducedCardIds: Array.from(new Set([...(deck.introducedCardIds || []), card.id])),
+      directionProgress: nextDirectionProgress,
+    };
+  });
 }
 
-function drawWordFromDeck(deck: VocabWord[], saveData: SaveData, previousId?: string): VocabWord {
-  const playable = deck.filter(card => getCardWeight(card, saveData) > 0);
-  const withoutPrevious = playable.length > 1 ? playable.filter(card => card.id !== previousId) : playable;
-  const pool = withoutPrevious.length > 0 ? withoutPrevious : playable;
-  if (pool.length === 0) return shuffleCards(getStudyLibrary(saveData))[0] || getRandomWord(1);
+function refillDeck(deck: VocabWord[], saveData: SaveData): VocabWord[] {
+  const introduced = new Set(getActiveDeck(saveData).introducedCardIds || []);
+  return deck.filter(card => introduced.has(card.id) && !isKnownCard(card, saveData));
+}
 
-  const totalWeight = pool.reduce((sum, card) => sum + getCardWeight(card, saveData), 0);
-  let roll = Math.random() * totalWeight;
+interface StudyQuestionData {
+  currentWord: VocabWord;
+  currentStudyDirection: StudyDirection;
+  currentStudyQuestionType: StudyQuestionType;
+  studyRevealAnswer: boolean;
+  options: string[];
+}
 
-  for (const card of pool) {
-    roll -= getCardWeight(card, saveData);
-    if (roll <= 0) return card;
+function getStudyPrompt(card: VocabWord, direction: StudyDirection): string {
+  return direction === "term_to_definition" ? card.word : card.definition;
+}
+
+function getStudyAnswer(card: VocabWord, direction: StudyDirection): string {
+  return direction === "term_to_definition" ? card.definition : card.word;
+}
+
+function generateStudyOptions(card: VocabWord, direction: StudyDirection, saveData: SaveData, shuffleAnswers = true): string[] {
+  if (direction === "definition_to_term") {
+    const options = generateDistractors(card, getAllCards(saveData));
+    return shuffleAnswers ? options : [card.word, ...options.filter(option => option !== card.word)];
   }
+  const answer = card.definition;
+  const distractors = shuffleCards(getAllCards(saveData)
+    .filter(candidate => candidate.id !== card.id && candidate.definition !== answer)
+    .map(candidate => candidate.definition))
+    .slice(0, 3);
+  return shuffleAnswers ? shuffleCards([answer, ...distractors]) : [answer, ...distractors];
+}
 
-  return pool[pool.length - 1];
+function drawStudyQuestionFromDeck(deck: VocabWord[], saveData: SaveData, previousKey?: string): StudyQuestionData {
+  const settings = normalizeStudySettings(getActiveDeck(saveData).studySettings);
+  const directions = getEnabledStudyDirections(settings);
+  const candidates = deck
+    .filter(card => !isKnownCard(card, saveData))
+    .flatMap(card => directions.map(direction => ({
+      card,
+      direction,
+      key: getStudyDirectionKey(card.id, direction),
+      progress: getDirectionProgress(card, saveData, direction),
+    })));
+  const withoutPrevious = candidates.length > 1 ? candidates.filter(candidate => candidate.key !== previousKey) : candidates;
+  const pool = withoutPrevious.length > 0 ? withoutPrevious : candidates;
+  const fallbackCard = deck[0] || getIntroducedStudyCards(saveData)[0] || getStudyLibrary(saveData)[0] || getRandomWord(1);
+  if (pool.length === 0) {
+    const fallbackDirection = directions[0] || "definition_to_term";
+    return {
+      currentWord: fallbackCard,
+      currentStudyDirection: fallbackDirection,
+      currentStudyQuestionType: "multiple_choice",
+      studyRevealAnswer: false,
+      options: generateStudyOptions(fallbackCard, fallbackDirection, saveData, settings.shuffleAnswers),
+    };
+  }
+  const totalWeight = pool.reduce((sum, candidate) => sum + getStudyProgressWeight(candidate.progress), 0);
+  let roll = Math.random() * totalWeight;
+  let selected = pool[pool.length - 1];
+  for (const candidate of pool) {
+    roll -= getStudyProgressWeight(candidate.progress);
+    if (roll <= 0) {
+      selected = candidate;
+      break;
+    }
+  }
+  const questionType = chooseQuestionType(settings, selected.progress);
+  return {
+    currentWord: selected.card,
+    currentStudyDirection: selected.direction,
+    currentStudyQuestionType: questionType,
+    studyRevealAnswer: false,
+    options: questionType === "multiple_choice" ? generateStudyOptions(selected.card, selected.direction, saveData, settings.shuffleAnswers) : [],
+  };
 }
 
 function createStarterDeck(saveData: SaveData): VocabWord[] {
-  const deckCards = getAllCards(saveData);
-  const activeStudyCards = deckCards.filter(card => !isKnownCard(card, saveData));
-  const easyCards = activeStudyCards.filter(card => card.difficulty <= 2);
-  const preferredCards = easyCards.length >= Math.min(4, STARTER_DECK_SIZE) ? easyCards : activeStudyCards;
-  const deck = shuffleCards(preferredCards).slice(0, STARTER_DECK_SIZE);
-  const deckIds = new Set(deck.map(card => card.id));
-
-  if (deck.length < Math.min(4, STARTER_DECK_SIZE)) {
-    const fillers = shuffleCards(activeStudyCards).filter(card => !deckIds.has(card.id));
-    deck.push(...fillers.slice(0, Math.min(4, STARTER_DECK_SIZE) - deck.length));
-  }
-
-  return deck.length > 0 ? deck : shuffleCards(getStudyLibrary(saveData)).slice(0, STARTER_DECK_SIZE);
+  return getIntroducedStudyCards(saveData);
 }
 
 function createRewardChoices(saveData: SaveData, deck: VocabWord[], floor: number, excludedIds = new Set<string>()): VocabWord[] {
@@ -1000,7 +1102,7 @@ function createRewardChoices(saveData: SaveData, deck: VocabWord[], floor: numbe
 
 function createStarterDraftChoices(saveData: SaveData, draftDeck: VocabWord[], excludedIds = new Set<string>()): VocabWord[] {
   const draftIds = new Set(draftDeck.map(card => card.id));
-  const library = getStudyLibrary(saveData).filter(card => !draftIds.has(card.id) && !excludedIds.has(card.id));
+  const library = getUnintroducedStudyCards(saveData).filter(card => !draftIds.has(card.id) && !excludedIds.has(card.id));
   return shuffleCards(library).slice(0, REWARD_CARD_COUNT);
 }
 
@@ -2182,8 +2284,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
   
   const enemies: EnemyInstance[] = enemyDefs.map(def => createEnemyInstance(def, hpMult, encounter));
 
-  const word = drawWordFromDeck(deck, saveData);
-  const options = generateDistractors(word, getAllCards(saveData));
+  const studyQuestion = drawStudyQuestionFromDeck(deck, saveData);
 
   return {
     deckId: getActiveDeckId(saveData),
@@ -2256,9 +2357,8 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     studyCorrectRound: 0,
     studyWrongRound: 0,
     studyBoardTimeBonus: 0,
-    currentWord: word,
+    ...studyQuestion,
     studyFeedback: null,
-    options,
     timerMax,
     timerLeft: timerMax,
     phase: "answering",
@@ -2289,12 +2389,17 @@ export default function App() {
   const [starterDraftDeck, setStarterDraftDeck] = useState<VocabWord[]>([]);
   const [starterDraftChoices, setStarterDraftChoices] = useState<VocabWord[]>([]);
   const [starterDraftMessage, setStarterDraftMessage] = useState("");
+  const [typedStudyAnswer, setTypedStudyAnswer] = useState("");
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const combatRef = useRef<CombatState | null>(null);
   const advancingCinematicRef = useRef<number | null>(null);
 
   combatRef.current = combat;
+
+  useEffect(() => {
+    setTypedStudyAnswer("");
+  }, [combat?.currentWord?.id, combat?.currentStudyDirection, combat?.currentStudyQuestionType]);
 
   // Keep save synced
   useEffect(() => {
@@ -2479,11 +2584,11 @@ export default function App() {
 
   // ─── Core Combat Functions ────────────────────────────
   const drawNextStudyCard = (state: CombatState, saveData: SaveData = save) => {
-    const word = drawWordFromDeck(state.deck, saveData, state.currentWord?.id);
-    const options = generateDistractors(word, getAllCards(saveData));
+    const previousKey = state.currentWord ? getStudyDirectionKey(state.currentWord.id, state.currentStudyDirection) : undefined;
+    const question = drawStudyQuestionFromDeck(state.deck, saveData, previousKey);
     return {
-      currentWord: word,
-      options: state.nextStudyShuffle ? shuffleCards(options) : options,
+      ...question,
+      options: state.nextStudyShuffle ? shuffleCards(question.options) : question.options,
       studyFeedback: null,
     };
   };
@@ -2584,7 +2689,7 @@ export default function App() {
       pendingCinematic: null,
       cinematic: null,
       eventNotices: appendCombatNotices(adjustedState.eventNotices, studyNotices),
-      boardMessage: `Study set complete: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${adjustedState.actionPointsEarnedThisRush} AP and ${adjustedState.skillCharge}/12 Focus is ready.${studyStatusMessage}`,
+      boardMessage: `Study set complete: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${formatAp(adjustedState.actionPointsEarnedThisRush)} AP and ${adjustedState.skillCharge}/12 Focus is ready.${studyStatusMessage}`,
     });
   };
 
@@ -2646,12 +2751,12 @@ export default function App() {
     const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
     const offeredAp = getProjectedStudyCardAp(state, save);
     const earnedAp = getProjectedCorrectAnswerAp(state, save);
-    const apCapped = offeredAp < getApForCorrectCard(state.currentWord, save) + hardEdgeBonus + steadyGripBonus;
+    const apCapped = offeredAp < getApForCorrectCard(state.currentWord, save, state.currentStudyDirection, state.currentStudyQuestionType) + hardEdgeBonus + steadyGripBonus;
     const difficultyFocusBonus = getFocusBonusForCorrectCard(state.currentWord);
-    const nextSave = updateCardProgressFromAnswer(save, state.currentWord, true);
+    const nextSave = updateCardProgressFromAnswer(save, state.currentWord, state.currentStudyDirection, state.currentStudyQuestionType, true);
     const nextDeck = refillDeck(state.deck, nextSave);
     const answered = state.studyQuestionsTotal + 1;
-    const nextScore = state.score + 20 + earnedAp * 5;
+    const nextScore = Math.round(state.score + 20 + earnedAp * 5);
     const learnedMessage = getActiveDeck(nextSave).cardRatings?.[state.currentWord.id] === "known" ? " Mastered and removed from study." : "";
     const comboSparkFocus = state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? 2 : 0;
     const focusGain = (state.runRelics.includes("deep_focus") ? 2 : 1) + hardEdgeBonus + comboSparkFocus + difficultyFocusBonus;
@@ -2693,7 +2798,7 @@ export default function App() {
 
   const handleWrongAnswer = (state: CombatState, selectedOption: string) => {
     const missedWord = state.currentWord;
-    const nextSave = state.currentWord ? updateCardProgressFromAnswer(save, state.currentWord, false) : save;
+    const nextSave = state.currentWord ? updateCardProgressFromAnswer(save, state.currentWord, state.currentStudyDirection, state.currentStudyQuestionType, false) : save;
     setSave(nextSave);
     const bloodQuill = state.runRelics.includes("blood_quill");
     const answered = state.studyQuestionsTotal + 1;
@@ -2712,8 +2817,10 @@ export default function App() {
       phase: "wrong" as const,
       studyFeedback: missedWord ? {
         selected: selectedOption,
-        correct: missedWord.word,
+        correct: getStudyAnswer(missedWord, state.currentStudyDirection),
+        prompt: getStudyPrompt(missedWord, state.currentStudyDirection),
         definition: missedWord.definition,
+        lostAp: offeredAp,
       } : null,
       fragileDebuff: state.fragileDebuff + (bloodQuill ? 1 : 0),
       eventNotices: bloodQuill
@@ -2722,10 +2829,10 @@ export default function App() {
           ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Tidal Memory", "First miss this study set still charged +1 Focus.", "relic")])
           : state.eventNotices,
       boardMessage: bloodQuill
-        ? `Missed card. Lost ${offeredAp} AP. Blood Quill charged +2 Focus and made you fragile.`
+        ? `Missed card. Lost ${formatAp(offeredAp)} AP. Blood Quill charged +2 Focus and made you fragile.`
         : tidalMemoryFocus > 0
-          ? `Missed card. Lost ${offeredAp} AP. Tidal Memory charged +1 Focus.`
-          : `Missed card. Lost ${offeredAp} AP. Review the answer.`,
+          ? `Missed card. Lost ${formatAp(offeredAp)} AP. Tidal Memory charged +1 Focus.`
+          : `Missed card. Lost ${formatAp(offeredAp)} AP. Review the answer.`,
       flashColor: "rgba(255,71,87,0.2)",
     };
 
@@ -3351,7 +3458,7 @@ export default function App() {
       mode: "command",
       activeActorId: currentActor?.id || null,
       cinematic: null,
-      boardMessage: `${combat.actionPoints} AP ready. Spend it before the enemy acts.`,
+      boardMessage: `${formatAp(combat.actionPoints)} AP ready. Spend it before the enemy acts.`,
     });
   };
 
@@ -4080,7 +4187,7 @@ export default function App() {
       flashColor: TILE_DEFS[ultimate.element].glow,
       showPhaseBanner: allDead ? combat.showPhaseBanner : enemy.def.special === "enrage_at_50" && enemyHpAfter / enemy.maxHp <= 0.5 && enemy.phase === 1 ? "ENRAGED" : defense.shieldBroken ? "SHIELD BROKEN" : combat.showPhaseBanner,
       score: combat.score + defense.hpDamage + defense.shieldDamage + healAmount + 24,
-      boardMessage: allDead ? "Room cleared. Choose a reward." : `${ultimate.name} resolved. ${combat.actionPoints} AP remains.`,
+      boardMessage: allDead ? "Room cleared. Choose a reward." : `${ultimate.name} resolved. ${formatAp(combat.actionPoints)} AP remains.`,
     };
 
     setCombat(nextState);
@@ -4609,7 +4716,9 @@ export default function App() {
   const handleAnswer = (selectedOption: string) => {
     if (!combat || combat.phase !== "answering" || combat.mode !== "study") return;
 
-    const isCorrect = combat.currentWord?.word === selectedOption;
+    const expectedAnswer = combat.currentWord ? getStudyAnswer(combat.currentWord, combat.currentStudyDirection) : "";
+    const normalizeAnswer = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+    const isCorrect = normalizeAnswer(expectedAnswer) === normalizeAnswer(selectedOption);
     
     if (isCorrect) {
       handleCorrectAnswer(combat);
@@ -4618,40 +4727,67 @@ export default function App() {
     }
   };
 
-  const beginCombatRun = (draftDeck: VocabWord[], saveOverride: SaveData = save) => {
-    const initial = createInitialCombat(1, STARTING_HP, saveOverride, draftDeck);
+  const revealSelfGradeAnswer = () => {
+    if (!combat || combat.mode !== "study" || combat.currentStudyQuestionType !== "self_grade" || combat.phase !== "answering") return;
+    setCombat({ ...combat, studyRevealAnswer: true });
+  };
 
-    setSave(saveOverride);
+  const gradeSelfAnswer = (isCorrect: boolean) => {
+    if (!combat || combat.mode !== "study" || combat.currentStudyQuestionType !== "self_grade" || !combat.studyRevealAnswer || combat.phase !== "answering") return;
+    if (isCorrect) {
+      handleCorrectAnswer(combat);
+      return;
+    }
+    handleWrongAnswer(combat, "Self-graded miss");
+  };
+
+  const beginCombatRun = (draftDeck: VocabWord[], saveOverride: SaveData = save) => {
+    const preparedSave = draftDeck.reduce((currentSave, card) => {
+      const activeDeck = getActiveDeck(currentSave);
+      return activeDeck.introducedCardIds.includes(card.id)
+        ? currentSave
+        : introduceCard(currentSave, card, activeDeck.cardRatings?.[card.id] || "medium");
+    }, saveOverride);
+    const activeStudyDeck = getIntroducedStudyCards(preparedSave);
+    const initial = createInitialCombat(1, STARTING_HP, preparedSave, activeStudyDeck);
+
+    setSave(preparedSave);
     setCombat(initial);
     setStarterDraftDeck([]);
     setStarterDraftChoices([]);
     setStarterDraftMessage("");
     setScreen("combat");
 
-    if (getActiveDeck(saveOverride).stats.totalRuns === 0) {
+    if (getActiveDeck(preparedSave).stats.totalRuns === 0) {
       setShowTutorial(true);
     }
   };
 
   const startRun = () => {
-    const studyLibrary = getStudyLibrary(save);
-    if (studyLibrary.length === 0) {
+    const library = getStudyLibrary(save);
+    const introducedCards = getIntroducedStudyCards(save);
+    if (library.length === 0) {
       setImportMessage("Add cards to this deck before starting a run.");
       setScreen("flashcards");
       return;
     }
 
-    setStarterDraftDeck(studyLibrary.length <= RUN_START_CARD_TARGET ? studyLibrary : []);
-    setStarterDraftChoices(studyLibrary.length <= RUN_START_CARD_TARGET ? [] : createStarterDraftChoices(save, []));
-    setStarterDraftMessage(studyLibrary.length <= RUN_START_CARD_TARGET
-      ? `This deck has ${studyLibrary.length} study card${studyLibrary.length === 1 ? "" : "s"}. Start with all available cards.`
+    if (introducedCards.length > 0) {
+      beginCombatRun(introducedCards);
+      return;
+    }
+
+    setStarterDraftDeck([]);
+    setStarterDraftChoices(createStarterDraftChoices(save, []));
+    setStarterDraftMessage(library.length <= RUN_START_CARD_TARGET
+      ? `This deck has ${library.length} available card${library.length === 1 ? "" : "s"}. Give each one a starting rank.`
       : "Choose your starting study cards for this run."
     );
     setScreen("starterDraft");
   };
 
   const handleStarterDraftPick = (card: VocabWord, rating: CardRating) => {
-    const baseSave = updateCardProgressFromRating(save, card, rating);
+    const baseSave = introduceCard(save, card, rating);
     const nextDraft = rating === "known" || starterDraftDeck.some(existing => existing.id === card.id)
       ? starterDraftDeck
       : [...starterDraftDeck, card];
@@ -4664,9 +4800,7 @@ export default function App() {
       return;
     }
 
-    const excludedIds = new Set(starterDraftChoices.map(choice => choice.id));
-    excludedIds.delete(card.id);
-    const nextChoices = createStarterDraftChoices(baseSave, nextDraft, excludedIds);
+    const nextChoices = createStarterDraftChoices(baseSave, nextDraft);
     setStarterDraftChoices(nextChoices);
     setStarterDraftMessage(rating === "known"
       ? "Marked known and replaced. Pick another starting card."
@@ -4691,8 +4825,8 @@ export default function App() {
     
     const enemies: EnemyInstance[] = enemyDefs.map(def => createEnemyInstance(def, hpMult, encounter));
     
-    const word = drawWordFromDeck(nextDeck, nextSave, combat.currentWord?.id);
-    const options = generateDistractors(word, getAllCards(nextSave));
+    const previousKey = combat.currentWord ? getStudyDirectionKey(combat.currentWord.id, combat.currentStudyDirection) : undefined;
+    const studyQuestion = drawStudyQuestionFromDeck(nextDeck, nextSave, previousKey);
     const nextGuestCharacterIds = getRunGuestCharacterIds(
       nextFloorNum,
       combat.runPartyCharacterIds,
@@ -4777,8 +4911,7 @@ export default function App() {
       studyCorrectRound: 0,
       studyWrongRound: 0,
       studyBoardTimeBonus: 0,
-      currentWord: word,
-      options,
+      ...studyQuestion,
       timerMax,
       timerLeft: timerMax,
       phase: "answering",
@@ -4823,7 +4956,7 @@ export default function App() {
 
     const orbsEarned = combat.floor * 10;
     const alreadyInDeck = combat.deck.some(card => card.id === rewardWord.id);
-    const nextSave = updateCardProgressFromRating({
+    const nextSave = introduceCard({
       ...save,
       wisdomOrbs: save.wisdomOrbs + orbsEarned,
     }, rewardWord, rating);
@@ -4917,14 +5050,19 @@ export default function App() {
       return updateActiveDeck(prev, deck => {
         const nextRatings = { ...(deck.cardRatings || {}) };
         const nextProgress = { ...(deck.cardProgress || {}) };
+        const nextDirectionProgress = { ...(deck.directionProgress || {}) };
         delete nextRatings[cardId];
         delete nextProgress[cardId];
+        delete nextDirectionProgress[getStudyDirectionKey(cardId, "term_to_definition")];
+        delete nextDirectionProgress[getStudyDirectionKey(cardId, "definition_to_term")];
 
         return {
           ...deck,
           cards: deck.cards.filter(card => card.id !== cardId),
+          introducedCardIds: (deck.introducedCardIds || []).filter(id => id !== cardId),
           cardRatings: nextRatings,
           cardProgress: nextProgress,
+          directionProgress: nextDirectionProgress,
         };
       });
     });
@@ -4933,7 +5071,24 @@ export default function App() {
   const rateCard = (cardId: string, rating: CardRating) => {
     const card = getAllCards(save).find(candidate => candidate.id === cardId);
     if (!card) return;
-    setSave(prev => updateCardProgressFromRating(prev, card, rating));
+    setSave(prev => introduceCard(prev, card, rating));
+  };
+
+  const pauseStudyCard = (cardId: string) => {
+    setSave(prev => updateActiveDeck(prev, deck => ({
+      ...deck,
+      introducedCardIds: (deck.introducedCardIds || []).filter(id => id !== cardId),
+    })));
+  };
+
+  const updateStudySetting = (key: keyof DeckStudySettings, value: boolean) => {
+    setSave(prev => updateActiveDeck(prev, deck => ({
+      ...deck,
+      studySettings: normalizeStudySettings({
+        ...deck.studySettings,
+        [key]: value,
+      }),
+    })));
   };
 
   const createDeck = () => {
@@ -5067,7 +5222,7 @@ export default function App() {
 
   // Filter wrong answers if scholar buff is active
   const filteredOptions = combat?.activeBuffs.some(b => b.type === "reveal_answer")
-    ? combat.options.filter((opt, i) => opt === combat.currentWord?.word || i < 3)
+    ? combat.options.filter((opt, i) => opt === (combat.currentWord ? getStudyAnswer(combat.currentWord, combat.currentStudyDirection) : "") || i < 3)
     : combat?.options || [];
   const hasBoardSurge = combat?.activeBuffs.some(b => b.type === "board_surge") || false;
   const hasWard = combat?.activeBuffs.some(b => b.type === "ward") || false;
@@ -5221,7 +5376,7 @@ export default function App() {
                 <div className="p-2 bg-green-500/20 rounded-lg"><BookOpen className="w-6 h-6 text-green-400" /></div>
                 <div>
                   <h3 className="text-white font-semibold">Study Set</h3>
-                  <p className="text-sm">Resolve a fixed AP hand of flashcards. Misses show the correct answer but permanently lose that card's AP.</p>
+                  <p className="text-sm">Resolve an adaptive AP hand of flashcards. Familiar cards and repeated practice award less AP, while misses show the correct answer and lose that card's AP.</p>
                 </div>
               </div>
               
@@ -5282,8 +5437,28 @@ export default function App() {
   // ─── RENDER: Class Select ─────────────────────────────
   if (screen === "flashcards") {
     const knownCount = Object.values(activeDeck.cardRatings).filter(rating => rating === "known").length;
-    const ratedCount = Object.keys(activeDeck.cardRatings).length;
-    const studyCount = getStudyLibrary(save).length;
+    const introducedCards = getIntroducedStudyCards(save);
+    const introducedIds = new Set(activeDeck.introducedCardIds || []);
+    const studyCount = introducedCards.length;
+    const masteredCount = introducedCards.filter(card => getCardMastery(card, save) >= 0.88).length;
+    const studySettings = normalizeStudySettings(activeDeck.studySettings);
+    const studySettingGroups: { title: string; options: { key: keyof DeckStudySettings; label: string; detail: string }[] }[] = [
+      {
+        title: "Question sides",
+        options: [
+          { key: "askTermToDefinition", label: "Term to definition", detail: "See the term and recall its meaning." },
+          { key: "askDefinitionToTerm", label: "Definition to term", detail: "See the meaning and recall the term." },
+        ],
+      },
+      {
+        title: "Question types",
+        options: [
+          { key: "useMultipleChoice", label: "Multiple choice", detail: "Recognition prompts for newer cards." },
+          { key: "useTypedAnswer", label: "Typed answers", detail: "Write the answer as familiarity grows." },
+          { key: "useSelfGrade", label: "Flip and grade", detail: "Recall freely, flip the card, then grade yourself." },
+        ],
+      },
+    ];
 
     return (
       <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
@@ -5394,6 +5569,54 @@ export default function App() {
                   )}
                 </div>
 
+                <div className="mb-5 rounded-lg border border-[#0F3460] bg-[#0B1024]/80 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-cyan-300" />
+                    <h3 className="text-lg font-bold text-white">Study Rules</h3>
+                  </div>
+                  <p className="mb-3 text-xs leading-relaxed text-gray-400">
+                    Cards stay in your library until you add them to study. Practice never runs out, but familiar cards gradually award less AP.
+                  </p>
+                  <div className="space-y-4">
+                    {studySettingGroups.map(group => (
+                      <div key={group.title}>
+                        <div className="mb-2 text-xs font-black uppercase tracking-wide text-cyan-100/70">{group.title}</div>
+                        <div className="space-y-2">
+                          {group.options.map(option => {
+                            const enabled = Boolean(studySettings[option.key]);
+                            return (
+                              <label key={option.key} className="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                                <span>
+                                  <span className="block text-sm font-bold text-white">{option.label}</span>
+                                  <span className="block text-xs text-gray-500">{option.detail}</span>
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={enabled}
+                                  onChange={event => updateStudySetting(option.key, event.target.checked)}
+                                  className="mt-1 h-4 w-4 accent-cyan-400"
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                    <label className="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                      <span>
+                        <span className="block text-sm font-bold text-white">Shuffle choices</span>
+                        <span className="block text-xs text-gray-500">Randomize multiple-choice answer order.</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={studySettings.shuffleAnswers}
+                        onChange={event => updateStudySetting("shuffleAnswers", event.target.checked)}
+                        className="mt-1 h-4 w-4 accent-cyan-400"
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-2 mb-4">
                   <Upload className="w-5 h-5 text-cyan-300" />
                   <h3 className="text-lg font-bold text-white">Import to {activeDeck.name}</h3>
@@ -5432,11 +5655,11 @@ export default function App() {
                   </div>
                   <div className="bg-[#16213E] rounded-lg p-4 border border-[#0F3460]">
                     <div className="text-2xl font-bold text-white">{studyCount}</div>
-                    <div className="text-xs text-gray-500">Study Pool</div>
+                    <div className="text-xs text-gray-500">Introduced</div>
                   </div>
                   <div className="bg-[#16213E] rounded-lg p-4 border border-[#0F3460]">
-                    <div className="text-2xl font-bold text-white">{ratedCount}</div>
-                    <div className="text-xs text-gray-500">Rated</div>
+                    <div className="text-2xl font-bold text-white">{masteredCount}</div>
+                    <div className="text-xs text-gray-500">Mastered</div>
                   </div>
                   <div className="bg-[#16213E] rounded-lg p-4 border border-[#0F3460]">
                     <div className="text-2xl font-bold text-white">{MAX_DECK_CARDS.toLocaleString()}</div>
@@ -5462,6 +5685,8 @@ export default function App() {
                     ) : (
                       [...activeDeck.cards].reverse().map(card => {
                         const currentRating = activeDeck.cardRatings?.[card.id];
+                        const isIntroduced = introducedIds.has(card.id) && currentRating !== "known";
+                        const mastery = getCardMastery(card, save);
 
                         return (
                           <div key={card.id} className="border-b border-[#0F3460]/70 p-4 last:border-b-0">
@@ -5478,26 +5703,42 @@ export default function App() {
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {CARD_RATINGS.map(rating => {
-                                const isSelected = currentRating === rating.id;
-
-                                return (
-                                  <button
-                                    key={rating.id}
-                                    onClick={() => rateCard(card.id, rating.id)}
-                                    className="px-3 py-1.5 rounded-md border text-xs font-bold transition-all"
-                                    style={{
-                                      borderColor: rating.color,
-                                      color: isSelected ? "#0B1024" : rating.color,
-                                      backgroundColor: isSelected ? rating.color : `${rating.color}18`,
-                                    }}
-                                  >
-                                    {rating.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                            {isIntroduced ? (
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <span className="rounded-full border border-cyan-300/35 bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-100">
+                                  Studying · {getMasteryLabel(mastery)}
+                                </span>
+                                <span className="text-xs text-gray-500">{Math.round(mastery * 100)}% mastery</span>
+                                <button
+                                  onClick={() => pauseStudyCard(card.id)}
+                                  className="rounded-md border border-white/15 bg-black/20 px-3 py-1 text-xs font-bold text-gray-300 transition-all hover:bg-white/10"
+                                >
+                                  Pause study
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="mt-3">
+                                <div className="mb-2 text-[10px] font-black uppercase tracking-wide text-gray-500">
+                                  {currentRating === "known" ? "Known already · add again with a starting rank" : "Add to study with a starting rank"}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {CARD_RATINGS.map(rating => (
+                                    <button
+                                      key={rating.id}
+                                      onClick={() => rateCard(card.id, rating.id)}
+                                      className="px-3 py-1.5 rounded-md border text-xs font-bold transition-all"
+                                      style={{
+                                        borderColor: rating.color,
+                                        color: rating.color,
+                                        backgroundColor: `${rating.color}18`,
+                                      }}
+                                    >
+                                      {rating.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         );
                       })
@@ -5515,7 +5756,8 @@ export default function App() {
 
   if (screen === "starterDraft") {
     const selectedDraftParty = getRunParty(save);
-    const canStartDraftRun = starterDraftDeck.length > 0;
+    const draftTarget = Math.min(RUN_START_CARD_TARGET, starterDraftDeck.length + getUnintroducedStudyCards(save).length);
+    const canStartDraftRun = starterDraftDeck.length > 0 && starterDraftDeck.length >= draftTarget;
 
     return (
       <div className="cute-theme relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
@@ -5540,7 +5782,7 @@ export default function App() {
               Choose Starting Cards
             </h2>
             <p className="mt-2 text-sm text-gray-400">
-              Pick {RUN_START_CARD_TARGET} vocab cards for this run. The rest can appear as rewards later.
+              Pick up to {draftTarget || RUN_START_CARD_TARGET} vocab cards for this run. The rest can appear as rewards later.
             </p>
           </div>
 
@@ -5553,7 +5795,7 @@ export default function App() {
                   ))}
                 </div>
                 <div className="font-bold text-white">{selectedDraftParty.map(member => member.name).join(", ")}</div>
-                <div className="text-xs text-gray-500">{starterDraftDeck.length}/{RUN_START_CARD_TARGET} cards chosen</div>
+                <div className="text-xs text-gray-500">{starterDraftDeck.length}/{draftTarget || RUN_START_CARD_TARGET} cards chosen</div>
               </div>
               <div className="space-y-2">
                 {starterDraftDeck.map(card => (
@@ -5710,7 +5952,7 @@ export default function App() {
               className="flex items-center gap-2 rounded-lg bg-[#E94560] px-6 py-3 font-bold text-white transition-all hover:bg-[#ff5b72]"
             >
               <Sword className="h-5 w-5" />
-              Draft Starting Cards
+              {getIntroducedStudyCards(save).length > 0 ? "Start Run" : "Draft Starting Cards"}
             </button>
           </div>
         </div>
@@ -5906,7 +6148,7 @@ export default function App() {
             <div className="cute-sheet w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
               <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Welcome to the Dungeon!</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-4 sm:text-sm">
-                Resolve fixed AP hands of flashcards, then spend the AP you earned on party commands before the enemy reaches you.
+                Resolve adaptive AP hands of flashcards, then spend the AP you earned on party commands before the enemy reaches you.
               </p>
               <button
                 onClick={() => setShowTutorial(false)}
@@ -6692,7 +6934,7 @@ export default function App() {
                     </div>
                     <div className="shrink-0 rounded-md border border-yellow-300/35 bg-yellow-300/12 px-2 py-1 text-center">
                       <div className="text-[9px] font-black uppercase tracking-wide text-yellow-100/70">AP</div>
-                      <div className="text-lg font-black text-yellow-100">{combat.actionPoints}</div>
+                      <div className="text-lg font-black text-yellow-100">{formatAp(combat.actionPoints)}</div>
                     </div>
                   </div>
 
@@ -6765,7 +7007,7 @@ export default function App() {
                         <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 sm:text-xs">
                           {combat.mode === "studyReady" && "Answer cards to build AP for this turn."}
                           {combat.mode === "study" && `${studyAnswered} answered.`}
-                          {combat.mode === "commandReady" && `${combat.actionPointsEarnedThisRush} AP earned. Inspect intent, then command the party.`}
+                          {combat.mode === "commandReady" && `${formatAp(combat.actionPointsEarnedThisRush)} AP earned. Inspect intent, then command the party.`}
                           {combat.mode === "command" && activeCommandCharacter && `${activeCommandCharacter.name} is acting now.`}
                           {combat.mode === "enemyAction" && "The enemy is resolving its intent."}
                         </p>
@@ -6777,7 +7019,7 @@ export default function App() {
 
                     {combat.mode === "studyReady" && (
                       <div className="rounded-md border border-cyan-300/25 bg-cyan-300/10 px-3 py-2 text-sm font-semibold text-cyan-50">
-                        Tap Ready below to resolve a fixed AP hand of flashcards.
+                        Tap Ready below to resolve an adaptive AP hand of flashcards.
                       </div>
                     )}
 
@@ -6805,20 +7047,22 @@ export default function App() {
                           </div>
                           <div className="mt-1.5 flex flex-wrap gap-1 text-[10px] font-bold">
                             <span className="rounded-full bg-white/8 px-2 py-0.5 text-cyan-100">SPD {activeCommandCharacter.speed}</span>
-                            <span className="rounded-full bg-white/8 px-2 py-0.5 text-yellow-100">{combat.actionPoints} AP ready</span>
+                            <span className="rounded-full bg-white/8 px-2 py-0.5 text-yellow-100">{formatAp(combat.actionPoints)} AP ready</span>
                             <span className="rounded-full bg-white/8 px-2 py-0.5 text-red-100">
                               Enemy in {nextEnemyTimelineDistance ?? "--"} time
                             </span>
                           </div>
-                          <div className="command-ap-meter mt-1.5" aria-label={`${combat.actionPoints} action points ready`}>
+                          <div className="command-ap-meter mt-1.5" aria-label={`${formatAp(combat.actionPoints)} action points ready`}>
                             <Zap className="h-3 w-3" />
-                            {Array.from({ length: Math.min(8, Math.max(1, combat.actionPoints)) }).map((_, index) => (
+                            {Array.from({ length: Math.min(8, Math.max(1, Math.ceil(combat.actionPoints))) }).map((_, index) => (
                               <span
                                 key={`command-ap-${index}`}
-                                className={index < combat.actionPoints ? "command-ap-pip command-ap-pip-ready" : "command-ap-pip"}
+                                className={index < combat.actionPoints
+                                  ? `command-ap-pip command-ap-pip-ready${index >= Math.floor(combat.actionPoints) && !Number.isInteger(combat.actionPoints) ? " command-ap-pip-partial" : ""}`
+                                  : "command-ap-pip"}
                               />
                             ))}
-                            {combat.actionPoints > 8 && <strong>+{combat.actionPoints - 8}</strong>}
+                            {combat.actionPoints > 8 && <strong>+{formatAp(combat.actionPoints - 8)}</strong>}
                           </div>
                         </div>
 
@@ -7157,7 +7401,7 @@ export default function App() {
                       </span>
                     </div>
                     <p className="mt-1 hidden text-xs text-gray-400 sm:block">
-                      {combat.mode === "studyReady" && "Resolve a fixed AP hand. Misses lose that card's AP."}
+                      {combat.mode === "studyReady" && "Resolve an adaptive AP hand. Familiar cards award smaller fractions; misses lose that card's AP."}
                       {combat.mode === "study" && `${studyAnswered} card${studyAnswered === 1 ? "" : "s"} answered.`}
                       {combat.mode === "boardReady" && `${formatBoardTime(combat.boardTimeMax)} and ${combat.powerPoints} power points ready.`}
                       {combat.mode === "board" && `${formatBoardTime(combat.boardTimeLeft)} left. Drag one rune fast.`}
@@ -7397,7 +7641,7 @@ export default function App() {
               </div>
               <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Study Set Ready</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
-                Resolve a fixed AP hand to open party commands. Hard cards shorten the set, but every miss permanently loses that card's AP.
+                Resolve an adaptive AP hand to open party commands. Hard cards are worth more; familiar cards and repeated practice gradually award smaller fractions.
               </p>
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:mb-5 sm:gap-3 sm:text-sm">
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
@@ -7406,7 +7650,7 @@ export default function App() {
                 </div>
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
                   <div className="text-xs text-gray-500">Card Value</div>
-                  <div className="font-bold text-white">Easy 1 / Hard 3</div>
+                  <div className="font-bold text-white">Adaptive · 0.1 to 2.1</div>
                 </div>
               </div>
               <button
@@ -7428,10 +7672,10 @@ export default function App() {
               </div>
               <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Commands Ready</h3>
               <div className="command-ap-burst mx-auto mb-2 w-fit rounded-full border border-yellow-200/35 bg-yellow-300/16 px-4 py-1.5 text-xl font-black text-yellow-100 shadow-[0_0_22px_rgba(255,216,77,0.25)] sm:mb-3 sm:text-2xl">
-                +{combat.actionPointsEarnedThisRush} AP
+                +{formatAp(combat.actionPointsEarnedThisRush)} AP
               </div>
               <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
-                {formatStudyRushResult(combat.studyCorrectRound, combat.studyQuestionsTotal)}. You earned {combat.actionPointsEarnedThisRush}/{currentStudyApCap} AP. Spend it now; unspent AP disappears after the enemy acts.
+                {formatStudyRushResult(combat.studyCorrectRound, combat.studyQuestionsTotal)}. You earned {formatAp(combat.actionPointsEarnedThisRush)}/{formatAp(currentStudyApCap)} AP. Spend it now; unspent AP disappears after the enemy acts.
               </p>
               <div className="mb-3 grid grid-cols-4 gap-1.5 text-xs sm:mb-5 sm:gap-2 sm:text-sm">
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
@@ -7444,7 +7688,7 @@ export default function App() {
                 </div>
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
                   <div className="text-xs text-gray-500">AP</div>
-                  <div className="font-bold text-yellow-100">{combat.actionPoints}</div>
+                  <div className="font-bold text-yellow-100">{formatAp(combat.actionPoints)}</div>
                 </div>
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
                   <div className="text-xs text-gray-500">Focus</div>
@@ -7614,7 +7858,11 @@ export default function App() {
                     {combat.studyCorrectRound} correct
                   </span>
                   <span className="rounded-md bg-yellow-400/15 px-2 py-1.5 text-xs font-bold text-yellow-200 sm:px-3 sm:py-2 sm:text-sm">
-                    {currentCardPower === currentCardStake ? `${currentCardStake} AP at stake` : `${currentCardPower}/${currentCardStake} AP available`}
+                    {combat.studyFeedback
+                      ? `${formatAp(combat.studyFeedback.lostAp)} AP lost`
+                      : currentCardPower === currentCardStake
+                        ? `${formatAp(currentCardStake)} AP at stake`
+                        : `${formatAp(currentCardPower)}/${formatAp(currentCardStake)} AP available`}
                   </span>
                   {currentCardFocusBonus > 0 && (
                     <span className="rounded-md bg-purple-400/15 px-2 py-1.5 text-xs font-bold text-purple-100 sm:px-3 sm:py-2 sm:text-sm">
@@ -7622,15 +7870,15 @@ export default function App() {
                     </span>
                   )}
                   <span className="hidden rounded-md bg-black/30 px-2 py-1.5 text-xs font-bold text-gray-300 sm:inline-flex sm:px-3 sm:py-2 sm:text-sm">
-                    Hand {combat.studyApOfferedThisRush}/{currentStudyApCap}
+                    Hand {formatAp(combat.studyApOfferedThisRush)}/{formatAp(currentStudyApCap)}
                   </span>
                 </div>
               </div>
 
               <div className="mb-3 sm:mb-5">
                 <div className="mb-1 flex items-center justify-between text-xs">
-                  <span className="font-bold text-yellow-100">{combat.actionPointsEarnedThisRush} AP earned</span>
-                  <span className="text-gray-500">{combat.studyApOfferedThisRush} / {currentStudyApCap} AP hand resolved</span>
+                  <span className="font-bold text-yellow-100">{formatAp(combat.actionPointsEarnedThisRush)} AP earned</span>
+                  <span className="text-gray-500">{formatAp(combat.studyApOfferedThisRush)} / {formatAp(currentStudyApCap)} AP hand resolved</span>
                 </div>
                 <div className="h-3 overflow-hidden rounded-full bg-gray-800">
                   <div
@@ -7648,8 +7896,15 @@ export default function App() {
                   borderColor: combat.studyFeedback ? "#FF4757" : "#E94560",
                 }}
               >
-                <p className="mb-1 text-[10px] uppercase tracking-wider text-gray-400 sm:mb-2 sm:text-xs">Definition</p>
-                <p className="text-base leading-relaxed text-white sm:text-xl">{combat.currentWord.definition}</p>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[10px] uppercase tracking-wider text-gray-400 sm:text-xs">
+                    {combat.currentStudyDirection === "term_to_definition" ? "Term" : "Definition"}
+                  </p>
+                  <span className="rounded-full border border-cyan-200/20 bg-cyan-200/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-cyan-100">
+                    {combat.currentStudyQuestionType === "multiple_choice" ? "Multiple choice" : combat.currentStudyQuestionType === "typed" ? "Type answer" : "Recall and flip"}
+                  </span>
+                </div>
+                <p className="text-base leading-relaxed text-white sm:text-xl">{getStudyPrompt(combat.currentWord, combat.currentStudyDirection)}</p>
               </div>
 
               {combat.studyFeedback && (
@@ -7657,7 +7912,9 @@ export default function App() {
                   <div className="text-[10px] font-black uppercase tracking-wide text-red-100/75">Correct Answer</div>
                   <div className="mt-1 flex flex-wrap items-baseline gap-2">
                     <span className="text-lg font-black text-white">{combat.studyFeedback.correct}</span>
-                    <span className="text-xs font-semibold text-red-100/80">{combat.studyFeedback.definition}</span>
+                    {combat.studyFeedback.definition !== combat.studyFeedback.correct && (
+                      <span className="text-xs font-semibold text-red-100/80">{combat.studyFeedback.definition}</span>
+                    )}
                   </div>
                   <div className="mt-1 text-xs font-semibold text-red-100/70">
                     You chose {combat.studyFeedback.selected}.
@@ -7665,8 +7922,9 @@ export default function App() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-                {(filteredOptions.length > 0 ? filteredOptions : combat.options || []).map((opt, i) => {
+              {combat.currentStudyQuestionType === "multiple_choice" && (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
+                  {(filteredOptions.length > 0 ? filteredOptions : combat.options || []).map((opt, i) => {
                   const isCorrectOption = combat.studyFeedback?.correct === opt;
                   const isSelectedWrongOption = combat.studyFeedback?.selected === opt && !isCorrectOption;
                   const answerState = combat.studyFeedback
@@ -7696,8 +7954,71 @@ export default function App() {
                       {opt}
                     </button>
                   );
-                })}
-              </div>
+                  })}
+                </div>
+              )}
+
+              {combat.currentStudyQuestionType === "typed" && (
+                <form
+                  onSubmit={event => {
+                    event.preventDefault();
+                    if (typedStudyAnswer.trim()) handleAnswer(typedStudyAnswer);
+                  }}
+                  className="space-y-2"
+                >
+                  <input
+                    value={typedStudyAnswer}
+                    onChange={event => setTypedStudyAnswer(event.target.value)}
+                    disabled={combat.phase !== "answering" || combat.isPaused}
+                    autoFocus
+                    placeholder="Type your answer"
+                    className="w-full rounded-md border-2 border-cyan-300/35 bg-[#071225] px-3 py-3 text-base font-semibold text-white outline-none transition-all placeholder:text-gray-600 focus:border-cyan-300"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!typedStudyAnswer.trim() || combat.phase !== "answering" || combat.isPaused}
+                    className="flex w-full items-center justify-center gap-2 rounded-md bg-cyan-600 px-3 py-3 font-bold text-white transition-all hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
+                  >
+                    <Check className="h-4 w-4" />
+                    Check answer
+                  </button>
+                </form>
+              )}
+
+              {combat.currentStudyQuestionType === "self_grade" && (
+                <div className="space-y-3">
+                  {combat.studyRevealAnswer ? (
+                    <>
+                      <div className="rounded-lg border border-green-300/35 bg-green-300/10 p-3 text-center">
+                        <div className="text-[10px] font-black uppercase tracking-wide text-green-100/70">Answer</div>
+                        <div className="mt-1 text-lg font-black text-white">{getStudyAnswer(combat.currentWord, combat.currentStudyDirection)}</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => gradeSelfAnswer(false)}
+                          className="rounded-md border border-red-300/45 bg-red-400/12 px-3 py-3 font-bold text-red-100 transition-all hover:bg-red-400/20"
+                        >
+                          Missed it
+                        </button>
+                        <button
+                          onClick={() => gradeSelfAnswer(true)}
+                          className="rounded-md border border-green-300/45 bg-green-400/12 px-3 py-3 font-bold text-green-100 transition-all hover:bg-green-400/20"
+                        >
+                          Got it
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      onClick={revealSelfGradeAnswer}
+                      className="flex w-full items-center justify-center gap-2 rounded-md bg-purple-600 px-3 py-3 font-bold text-white transition-all hover:bg-purple-500"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Flip card
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

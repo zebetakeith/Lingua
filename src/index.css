@@ -1932,6 +1932,10 @@ img[src*="enemy_"] {
   animation: commandApPipReady 1.2s ease-in-out infinite;
 }
 
+.command-ap-pip-partial {
+  opacity: 0.52;
+}
+
 .command-ap-pip-ready:nth-of-type(2n) {
   animation-delay: 120ms;
 }
