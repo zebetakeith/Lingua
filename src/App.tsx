@@ -2980,7 +2980,7 @@ export default function App() {
           ? appendCombatNotices(state.eventNotices, [createCombatNotice("Mutation: Puddle Memory", "First miss this study set still charged +1 Gusto.", "relic")])
           : state.eventNotices,
       boardMessage: bloodQuill
-        ? `Missed card. Lost ${formatAp(offeredAp)} AP. Sour Berry charged +2 Gusto and made Pip tender.`
+        ? `Missed card. Lost ${formatAp(offeredAp)} AP. Sour Berry charged +2 Gusto and made Pipplo tender.`
         : tidalMemoryFocus > 0
           ? `Missed card. Lost ${formatAp(offeredAp)} AP. Puddle Memory charged +1 Gusto.`
           : `Missed card. Lost ${formatAp(offeredAp)} AP. Review the answer.`,
@@ -4952,8 +4952,16 @@ export default function App() {
   const resumeActiveExpedition = () => {
     const snapshot = getActiveDeck(save).activeExpedition;
     if (!snapshot?.combat) return;
+    const refreshedTurnQueue = snapshot.combat.turnQueue.map(entry => {
+      if (entry.kind !== "party") return entry;
+      const character = CHARACTER_DEFS.find(candidate => candidate.id === entry.refId);
+      return character
+        ? { ...entry, name: character.name, avatar: character.sprite, element: character.element, speed: character.speed }
+        : entry;
+    });
     setCombat({
       ...snapshot.combat,
+      turnQueue: refreshedTurnQueue,
       isPaused: false,
       actionEffect: null,
       damageNumbers: [],
@@ -5213,7 +5221,7 @@ export default function App() {
       ...combat,
       runRelics: nextRelics,
       relicChoices: [],
-      boardMessage: `${relic.name} mutation added to Pip for this expedition.`,
+      boardMessage: `${relic.name} mutation added to Pipplo for this expedition.`,
     });
   };
 
@@ -5228,7 +5236,7 @@ export default function App() {
       ...combat,
       runCurioIds: nextCurios,
       curioChoices: [],
-      boardMessage: `${curio.name} tucked into Pip's curio pocket.`,
+      boardMessage: `${curio.name} tucked into Pipplo's curio pocket.`,
     });
   };
 
@@ -5274,11 +5282,11 @@ export default function App() {
       activeBuffs: raisesBubble ? [...combat.activeBuffs, { type: "ward", remaining: 1 }] : combat.activeBuffs,
       actionEffect: createCombatActionEffect("mend", snack.name, "#ff7895", {
         detail: `Snack time - +${heal} HP${raisesBubble ? " - Bubble raised" : ""}`,
-        casterName: "Pip",
+        casterName: "Pipplo",
         casterSprite: CHARACTER_DEFS[0].sprite,
       }),
       eventNotices: appendCombatNotices(combat.eventNotices, [
-        createCombatNotice(snack.name, `Pip recovered ${heal} HP${raisesBubble ? " and raised a Bubble" : ""}.`, "good"),
+        createCombatNotice(snack.name, `Pipplo recovered ${heal} HP${raisesBubble ? " and raised a Bubble" : ""}.`, "good"),
       ]),
       boardMessage: `${snack.name} eaten. No AP spent.`,
     });
@@ -5696,7 +5704,7 @@ export default function App() {
                 <div className="p-2 bg-orange-500/20 rounded-lg"><Flame className="w-6 h-6 text-orange-400" /></div>
                 <div>
                   <h3 className="text-white font-semibold">Body Tricks</h3>
-                  <p className="text-sm">Spend AP on Bop, Brace, or strange tricks. Each action moves Pip or a helper along the timeline.</p>
+                  <p className="text-sm">Spend AP on Bop, Brace, or strange tricks. Each action moves Pipplo or a helper along the timeline.</p>
                 </div>
               </div>
               
@@ -6085,7 +6093,7 @@ export default function App() {
               Choose Starting Cards
             </h2>
             <p className="mt-2 text-sm text-gray-400">
-              Preview up to {draftTarget || RUN_START_CARD_TARGET} starting cards. Pip will meet the rest gradually during this deck-world&apos;s expedition.
+              Preview up to {draftTarget || RUN_START_CARD_TARGET} starting cards. Pipplo will meet the rest gradually during this deck-world&apos;s expedition.
             </p>
           </div>
 
@@ -6181,10 +6189,10 @@ export default function App() {
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_menu_blob.png")} />
         <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col items-center justify-start px-4 py-6 sm:justify-center">
           <h2 className="mb-2 text-2xl font-bold text-white sm:text-3xl" style={{ fontFamily: "Cinzel, Georgia, serif", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
-            Prepare Pip&apos;s Expedition
+            Prepare Pipplo&apos;s Expedition
           </h2>
           <div className="mb-5 max-w-xl rounded-lg border border-cyan-400/30 bg-black/35 px-4 py-2 text-center text-sm text-cyan-100">
-            Each deck is its own paused world. Pip leads every expedition; pick up to {MAX_HELPER_SIZE} unlocked helpers and choose how much new vocabulary to meet.
+            Each deck is its own paused world. Pipplo leads every expedition; pick up to {MAX_HELPER_SIZE} unlocked helpers and choose how much new vocabulary to meet.
           </div>
 
           {activeDeck.activeExpedition && (
@@ -6501,9 +6509,9 @@ export default function App() {
         {showTutorial && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pb-3 pt-28 sm:inset-0 sm:items-center sm:bg-black/60 sm:p-4">
             <div className="cute-sheet w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
-              <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Pip is hungry for words!</h3>
+              <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Pipplo is hungry for words!</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-4 sm:text-sm">
-                Resolve adaptive AP hands of flashcards, then spend the AP you earned on Pip&apos;s body tricks and helper commands before trouble reaches you.
+                Resolve adaptive AP hands of flashcards, then spend the AP you earned on Pipplo&apos;s body tricks and helper commands before trouble reaches you.
               </p>
               <button
                 onClick={() => setShowTutorial(false)}
@@ -7283,7 +7291,7 @@ export default function App() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 text-white">
                         <Sword className="h-4 w-4 text-cyan-200" />
-                        <span className="font-bold">Pip & Helpers</span>
+                        <span className="font-bold">Pipplo & Helpers</span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-400 sm:text-xs">{combat.boardMessage}</p>
                     </div>
@@ -7362,7 +7370,7 @@ export default function App() {
                         <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 sm:text-xs">
                           {combat.mode === "studyReady" && "Answer cards to build AP for this turn."}
                           {combat.mode === "study" && `${studyAnswered} answered.`}
-                          {combat.mode === "commandReady" && `${formatAp(combat.actionPointsEarnedThisRush)} AP earned. Inspect intent, then choose Pip's next trick.`}
+                          {combat.mode === "commandReady" && `${formatAp(combat.actionPointsEarnedThisRush)} AP earned. Inspect intent, then choose Pipplo's next trick.`}
                           {combat.mode === "command" && activeCommandCharacter && `${activeCommandCharacter.name} is acting now.`}
                           {combat.mode === "enemyAction" && "The enemy is resolving its intent."}
                         </p>
@@ -8428,7 +8436,7 @@ export default function App() {
               <div className="text-xs text-yellow-100/75">
                 {pendingCharacterUnlocks.length > 0
                   ? `${pendingCharacterUnlocks.map(character => character.name).join(", ")} will become helper discoveries after the expedition.`
-                  : `Region ${combat.region} · Pip keeps growing until this expedition ends.`}
+                  : `Region ${combat.region} · Pipplo keeps growing until this expedition ends.`}
               </div>
             </div>
           </div>
@@ -8447,7 +8455,7 @@ export default function App() {
             <div className="mb-5 w-full max-w-3xl rounded-lg border border-lime-300/45 bg-lime-300/14 px-4 py-3 text-lime-50 shadow-lg">
               <div className="flex items-center gap-2 font-black">
                 <Utensils className="h-5 w-5" />
-                Pip absorbed {combat.lastMeal.enemyNames.join(" + ")}
+                Pipplo absorbed {combat.lastMeal.enemyNames.join(" + ")}
               </div>
               <div className="mt-1 text-sm font-bold text-lime-50/80">
                 +{combat.lastMeal.growth.bulk} Bulk · +{combat.lastMeal.growth.bop} Bop · +{combat.lastMeal.growth.bounce} Bounce · +{combat.lastMeal.growth.gusto} Gusto
@@ -8456,7 +8464,7 @@ export default function App() {
           )}
 
           <div className="mb-5 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3 py-2 text-xs font-bold text-white/85">
-            <span className="flex items-center gap-1 text-lime-100"><CircleDot className="h-3.5 w-3.5" /> Pip</span>
+            <span className="flex items-center gap-1 text-lime-100"><CircleDot className="h-3.5 w-3.5" /> Pipplo</span>
             <span>Bulk {combat.blobStats.bulk}</span>
             <span>Bop {combat.blobStats.bop}</span>
             <span>Bounce {combat.blobStats.bounce}</span>
