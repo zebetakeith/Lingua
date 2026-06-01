@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Award,
   Beaker,
   CircleDot,
   Droplets,
@@ -18,8 +19,11 @@ import {
 import {
   BLOB_BOARD_COLS,
   BLOB_BOARD_ROWS,
+  BLOB_RUN_ROOMS,
+  MUTATION_DEFS,
   STICKER_INFO,
   applyFakeStudyResult,
+  claimBlobMutation,
   createInitialBlobTacticsState,
   endBlobTacticsTurn,
   getBlobletAt,
@@ -33,6 +37,7 @@ import {
   selectSticker,
   tapBoardTile,
   type BlobPosition,
+  type BlobMutationId,
   type BlobSticker,
   type BlobStickerType,
   type BlobStudyGrade,
@@ -45,8 +50,10 @@ interface BlobTacticsLabProps {
 
 const STICKER_ICONS: Record<BlobStickerType, ReactNode> = {
   move: <Move />,
+  hop: <Move />,
   slap: <Swords />,
   stretch: <ArrowRight />,
+  bellyFlop: <CircleDot />,
   split: <CircleDot />,
   rejoin: <Droplets />,
   spit: <Target />,
@@ -61,18 +68,18 @@ const STUDY_GRADES: Array<{
   detail: string;
   accent: string;
 }> = [
-  { grade: "bad", title: "Messy", detail: "2 stickers + sour", accent: "#d982ba" },
-  { grade: "good", title: "Good", detail: "3 stickers + Mass", accent: "#54bfb4" },
-  { grade: "great", title: "Great", detail: "4 stickers + upgrade", accent: "#ff866c" },
+  { grade: "bad", title: "Messy", detail: "3 stickers + sour", accent: "#d982ba" },
+  { grade: "good", title: "Good", detail: "4 stickers + Mass", accent: "#54bfb4" },
+  { grade: "great", title: "Great", detail: "5 stickers + upgrade", accent: "#ff866c" },
 ];
 
-function getStickerPrompt(type: BlobStickerType, hasSource: boolean): string {
-  if (type === "slap") return hasSource ? "Tap Shell Slime" : "Tap Pipplo or an adjacent bloblet";
-  if (type === "spit") return hasSource ? "Tap Shell Slime" : "Tap a bloblet to sacrifice";
+function getStickerPrompt(type: BlobStickerType, hasSource: boolean, enemyName: string): string {
+  if (type === "slap") return hasSource ? `Tap ${enemyName}` : "Tap Pipplo or an adjacent bloblet";
+  if (type === "spit") return hasSource ? `Tap ${enemyName}` : "Tap a bloblet to sacrifice";
   if (type === "goo") return hasSource ? "Tap a neighboring empty tile" : "Tap a bloblet";
   if (type === "rejoin") return "Tap an adjacent bloblet";
   if (type === "split" || type === "bubble" || type === "sourSplit") return "Tap an empty tile beside Pipplo";
-  if (type === "stretch") return "Tap Shell Slime";
+  if (type === "stretch" || type === "bellyFlop") return `Tap ${enemyName}`;
   return "Tap a highlighted tile";
 }
 
@@ -149,6 +156,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
   const chooseStudyGrade = (grade: BlobStudyGrade) => setState(current => applyFakeStudyResult(current, grade));
   const chooseSticker = (sticker: BlobSticker) => setState(current => selectSticker(current, sticker.id));
   const tapTile = (position: BlobPosition) => setState(current => tapBoardTile(current, position));
+  const claimMutation = (mutationId: BlobMutationId) => setState(current => claimBlobMutation(current, mutationId));
 
   const boardTiles = Array.from({ length: BLOB_BOARD_ROWS * BLOB_BOARD_COLS }, (_, index) => ({
     row: Math.floor(index / BLOB_BOARD_COLS),
@@ -172,6 +180,18 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
         </button>
       </header>
 
+      <section className="blob-lab-route" aria-label="Micro-run route">
+        <span>Run</span>
+        {Array.from({ length: BLOB_RUN_ROOMS }, (_, index) => (
+          <i
+            key={index}
+            className={`${index + 1 === state.room ? "is-current" : ""} ${index + 1 <= state.roomsCleared ? "is-cleared" : ""} ${index + 1 === BLOB_RUN_ROOMS ? "is-guardian" : ""}`}
+            aria-label={`Room ${index + 1}${index + 1 === BLOB_RUN_ROOMS ? ", guardian" : ""}`}
+          />
+        ))}
+        <strong>{state.mutations.length} traits</strong>
+      </section>
+
       <section className="blob-lab-status-row" aria-label="Battle status">
         <div className="blob-lab-status-pill blob-lab-health">
           <Heart />
@@ -185,15 +205,16 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
         </div>
         <div className="blob-lab-room-pill">
           <span>Room</span>
-          <strong>{state.room}</strong>
+          <strong>{state.room}/{BLOB_RUN_ROOMS}</strong>
         </div>
       </section>
 
       <section className="blob-lab-enemy-strip" aria-label="Enemy status">
         <div className="blob-lab-enemy-copy">
-          <strong>Shell Slime</strong>
+          <strong>{state.enemy.name}{state.enemy.boss && <b> Guardian</b>}</strong>
           <span>{state.enemy.hp}/{state.enemy.maxHp} HP</span>
-          <span>{state.enemy.shell}/{state.enemy.maxShell} Shell</span>
+          {state.enemy.maxShell > 0 && <span>{state.enemy.shell}/{state.enemy.maxShell} Shell</span>}
+          {state.enemy.enraged && <span className="blob-lab-enraged">Furious</span>}
         </div>
         <div className={`blob-lab-intent is-${enemyIntent.tone}`}>
           <span>Next</span>
@@ -218,9 +239,9 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
                 type="button"
                 className={`blob-lab-tile ${valid ? "is-valid" : ""} ${isSource ? "is-source" : ""}`}
                 onClick={() => tapTile(position)}
-                aria-label={`Tile ${position.row + 1}, ${position.col + 1}${pipplo ? ", Pipplo" : ""}${enemy ? ", Shell Slime" : ""}${bloblet ? `, ${bloblet.kind} bloblet` : ""}`}
+                aria-label={`Tile ${position.row + 1}, ${position.col + 1}${pipplo ? ", Pipplo" : ""}${enemy ? `, ${state.enemy.name}` : ""}${bloblet ? `, ${bloblet.kind} bloblet` : ""}${tileEffect ? `, ${tileEffect.type}` : ""}`}
               >
-                {tileEffect && <span className="blob-lab-goo" />}
+                {tileEffect && <span className={`blob-lab-tile-effect is-${tileEffect.type}`} />}
                 {pipplo && (
                   <span className="blob-lab-pipplo" aria-hidden="true">
                     <i className="blob-lab-antenna" />
@@ -232,8 +253,11 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
                   </span>
                 )}
                 {enemy && (
-                  <span className="blob-lab-shell-slime" aria-hidden="true">
-                    <i className="blob-lab-shell-plate" />
+                  <span className={`blob-lab-shell-slime is-${state.enemy.kind} ${state.enemy.enraged ? "is-enraged" : ""}`} aria-hidden="true">
+                    {state.enemy.kind === "shellSlime" && <i className="blob-lab-shell-plate" />}
+                    {state.enemy.kind === "nibbleImp" && <><i className="blob-lab-imp-horn left" /><i className="blob-lab-imp-horn right" /></>}
+                    {state.enemy.kind === "sporeBud" && <i className="blob-lab-spore-cap" />}
+                    {state.enemy.kind === "rootLump" && <><i className="blob-lab-root-horn left" /><i className="blob-lab-root-horn right" /></>}
                     <i className="blob-lab-slime-face"><b /><b /><em /></i>
                   </span>
                 )}
@@ -261,7 +285,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
           <div className="blob-lab-tray-heading">
             <div>
               <p className="blob-lab-eyebrow">Sticker hand</p>
-              <strong>{selectedSticker ? getStickerPrompt(selectedSticker.type, Boolean(state.actionSourceId)) : "Pick a sticker, then tap highlighted tiles"}</strong>
+              <strong>{selectedSticker ? getStickerPrompt(selectedSticker.type, Boolean(state.actionSourceId), state.enemy.name) : "Pick a sticker, then tap highlighted tiles"}</strong>
             </div>
             <button type="button" className="blob-lab-end-button" onClick={() => setState(endBlobTacticsTurn)}>
               End Turn
@@ -283,14 +307,41 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
         </section>
       )}
 
+      {state.phase === "reward" && (
+        <aside className="blob-lab-reward-backdrop">
+          <section className="blob-lab-reward-sheet">
+            <Award />
+            <p className="blob-lab-eyebrow">Room {state.room} absorbed</p>
+            <h2>Pick one body mutation</h2>
+            <p>Pipplo carries it through the remaining rooms.</p>
+            <div className="blob-lab-mutation-grid">
+              {state.rewardChoices.map(mutationId => {
+                const mutation = MUTATION_DEFS[mutationId];
+                return (
+                  <button
+                    key={mutationId}
+                    type="button"
+                    style={{ "--mutation-accent": mutation.accent } as React.CSSProperties}
+                    onClick={() => claimMutation(mutationId)}
+                  >
+                    <strong>{mutation.name}</strong>
+                    <span>{mutation.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
+      )}
+
       {(state.phase === "won" || state.phase === "lost") && (
         <section className={`blob-lab-result is-${state.phase}`}>
           <Sparkles />
-          <p className="blob-lab-eyebrow">{state.phase === "won" ? "Room cleared" : "Experiment over"}</p>
-          <h2>{state.phase === "won" ? "Shell Slime absorbed!" : "Pipplo needs another try"}</h2>
+          <p className="blob-lab-eyebrow">{state.phase === "won" ? "Micro-run cleared" : "Experiment over"}</p>
+          <h2>{state.phase === "won" ? "Root Lump absorbed!" : "Pipplo needs another try"}</h2>
           <p>{state.phase === "won"
-            ? "This is where Pipplo could bounce into the next room with whatever Mass and body tricks survived."
-            : "Try using bloblets as disposable shields while you crack its Shell."}</p>
+            ? `Pipplo cleared all ${BLOB_RUN_ROOMS} rooms with ${state.mutations.length} body mutations.`
+            : `Pipplo reached Room ${state.room}. Try splitting helpers to block danger and reclaiming survivors for Mass.`}</p>
           <div>
             <button type="button" onClick={reset}><RefreshCcw /> Restart Lab</button>
             <button type="button" onClick={onExit}><ArrowLeft /> Main Menu</button>
@@ -306,9 +357,9 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             </button>
             <p className="blob-lab-eyebrow">Tiny tactics primer</p>
             <h2>Split yourself to make options</h2>
-            <p>Study creates temporary Stickers. Stickers move Pipplo, crack Shell, or bud off little helpers.</p>
-            <p>Bloblets protect Pipplo because Shell Slime pops adjacent helpers before slamming the main body. Rejoin surviving helpers to recover Mass.</p>
-            <p>This room is intentionally small. The next version can connect several rooms into one expedition map.</p>
+            <p>Study creates temporary Stickers. Stickers move Pipplo, crack Shell, or bud off little helpers. Use every useful sticker, then end the turn.</p>
+            <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors to recover Mass.</p>
+            <p>This micro-run has five rooms. Absorb each defeated enemy, pick a body mutation, and adapt to new enemy intents.</p>
           </section>
         </aside>
       )}

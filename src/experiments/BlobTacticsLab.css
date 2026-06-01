@@ -11,10 +11,12 @@
   isolation: isolate;
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto auto;
   gap: 0.42rem;
-  min-height: 100dvh;
-  overflow: hidden;
+  height: 100dvh;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 18% 10%, rgba(255, 255, 255, 0.86) 0 7rem, transparent 7.1rem),
     linear-gradient(165deg, #c7f4ee 0%, #9de4d8 48%, #7bcfb7 100%);
@@ -53,6 +55,7 @@
 .blob-lab-cloud-two { bottom: 35%; left: -4rem; transform: scale(0.85); }
 
 .blob-lab-topbar,
+.blob-lab-route,
 .blob-lab-status-row,
 .blob-lab-enemy-strip,
 .blob-lab-notice,
@@ -102,6 +105,34 @@
 .blob-lab-title span svg { width: 0.78rem; height: 0.78rem; }
 .blob-lab-title strong { display: block; margin-top: 0.22rem; color: #27596a; font-size: 1.16rem; }
 
+.blob-lab-route {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.34rem;
+  min-height: 1rem;
+}
+.blob-lab-route span,
+.blob-lab-route strong {
+  color: #477985;
+  font-size: 0.56rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.blob-lab-route strong { margin-left: 0.14rem; }
+.blob-lab-route i {
+  display: block;
+  width: 0.6rem;
+  height: 0.6rem;
+  border: 1px solid rgba(42, 127, 133, 0.46);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+}
+.blob-lab-route i.is-current { background: #ffdf5d; box-shadow: 0 0 0 0.16rem rgba(255, 223, 93, 0.26); }
+.blob-lab-route i.is-cleared { background: #54bfb4; }
+.blob-lab-route i.is-guardian { border-radius: 0.16rem; transform: rotate(45deg); }
+
 .blob-lab-status-row {
   display: grid;
   grid-template-columns: 1fr 1fr auto;
@@ -148,13 +179,24 @@
 
 .blob-lab-enemy-copy { display: flex; flex-direction: column; min-width: 7rem; line-height: 1.05; }
 .blob-lab-enemy-copy strong { font-size: 0.78rem; }
+.blob-lab-enemy-copy strong b {
+  margin-left: 0.22rem;
+  border-radius: 999px;
+  background: #ff866c;
+  color: #fff;
+  padding: 0.06rem 0.22rem;
+  font-size: 0.5rem;
+  text-transform: uppercase;
+}
 .blob-lab-enemy-copy span { margin-top: 0.18rem; color: #4b7a82; font-size: 0.63rem; font-weight: 800; }
+.blob-lab-enemy-copy .blob-lab-enraged { color: #d4514d; text-transform: uppercase; }
 .blob-lab-intent { display: grid; grid-template-columns: auto 1fr; gap: 0.05rem 0.34rem; min-width: 0; }
 .blob-lab-intent span { grid-row: span 2; align-self: center; color: #b36e43; font-size: 0.55rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
 .blob-lab-intent strong { overflow: hidden; color: #945738; font-size: 0.73rem; text-overflow: ellipsis; white-space: nowrap; }
 .blob-lab-intent small { overflow: hidden; color: #657c80; font-size: 0.59rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .blob-lab-intent.is-attack { border-color: rgba(255, 134, 108, 0.64); background: rgba(255, 240, 224, 0.92); }
 .blob-lab-intent.is-shell { border-color: rgba(169, 135, 231, 0.48); background: rgba(242, 235, 255, 0.92); }
+.blob-lab-intent.is-hazard { border-color: rgba(106, 190, 91, 0.6); background: rgba(235, 255, 219, 0.92); }
 
 .blob-lab-playfield-wrap {
   display: grid;
@@ -165,7 +207,7 @@
 .blob-lab-board {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  width: min(100%, 30rem, calc((100dvh - 23rem) * 1.25));
+  width: min(100%, 30rem, calc((100dvh - 24rem) * 1.25));
   min-width: min(100%, 17.3rem);
   aspect-ratio: 5 / 4;
   border: 0.3rem solid rgba(255, 255, 255, 0.62);
@@ -340,7 +382,7 @@
   font-weight: 900;
 }
 
-.blob-lab-goo {
+.blob-lab-tile-effect {
   position: absolute;
   bottom: 9%;
   width: 64%;
@@ -348,6 +390,74 @@
   border-radius: 50%;
   background: rgba(106, 190, 91, 0.62);
   box-shadow: 0 0 0 0.22rem rgba(148, 228, 105, 0.18);
+}
+.blob-lab-tile-effect.is-spore {
+  bottom: 18%;
+  width: 54%;
+  height: 45%;
+  border-radius: 48%;
+  background:
+    radial-gradient(circle at 25% 72%, #f287a7 0 0.16rem, transparent 0.18rem),
+    radial-gradient(circle at 52% 25%, #f287a7 0 0.18rem, transparent 0.2rem),
+    radial-gradient(circle at 76% 64%, #f287a7 0 0.15rem, transparent 0.17rem),
+    #9bd16b;
+  box-shadow: 0 0 0 0.18rem rgba(122, 180, 83, 0.18);
+}
+
+.blob-lab-shell-slime.is-nibbleImp {
+  border-radius: 50% 50% 43% 43%;
+  background: #a8d941;
+  box-shadow: inset -0.32rem -0.28rem 0 rgba(79, 139, 45, 0.18), 0 0.32rem 0 rgba(28, 97, 99, 0.14);
+}
+.blob-lab-shell-slime.is-sporeBud {
+  width: 62%;
+  height: 62%;
+  border-radius: 50% 50% 42% 42%;
+  background: #f0d78c;
+  box-shadow: inset -0.24rem -0.25rem 0 rgba(180, 124, 79, 0.18), 0 0.32rem 0 rgba(28, 97, 99, 0.14);
+}
+.blob-lab-shell-slime.is-rootLump {
+  width: 82%;
+  height: 68%;
+  border-radius: 48% 48% 38% 38%;
+  background: #8fbd57;
+  box-shadow: inset -0.34rem -0.3rem 0 rgba(73, 123, 60, 0.2), 0 0.32rem 0 rgba(28, 97, 99, 0.18);
+}
+.blob-lab-shell-slime.is-rootLump.is-enraged { animation: blobLabBossPulse 680ms ease-in-out infinite; filter: saturate(1.18); }
+.blob-lab-imp-horn,
+.blob-lab-root-horn {
+  position: absolute;
+  top: -24%;
+  width: 22%;
+  height: 34%;
+  border-radius: 82% 12% 54% 20%;
+  background: #f5d16f;
+}
+.blob-lab-imp-horn.left,
+.blob-lab-root-horn.left { left: 14%; transform: rotate(-24deg); }
+.blob-lab-imp-horn.right,
+.blob-lab-root-horn.right { right: 14%; transform: scaleX(-1) rotate(-24deg); }
+.blob-lab-root-horn { top: -30%; height: 48%; background: #795b43; }
+.blob-lab-spore-cap {
+  position: absolute;
+  top: -27%;
+  left: -13%;
+  width: 126%;
+  height: 49%;
+  border-radius: 50% 50% 22% 22%;
+  background: #a987e7;
+  box-shadow: inset -0.2rem -0.12rem 0 rgba(86, 65, 154, 0.22);
+}
+.blob-lab-spore-cap::after {
+  position: absolute;
+  top: 34%;
+  left: 24%;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: #ffd9ec;
+  box-shadow: 1rem -0.18rem 0 #ffd9ec, 1.8rem 0.18rem 0 #ffd9ec;
+  content: "";
 }
 
 .animation-pipplo .blob-lab-pipplo,
@@ -474,7 +584,8 @@
 .blob-lab-study-buttons span { color: #718b8d; font-size: 0.56rem; font-weight: 800; }
 
 .blob-lab-result,
-.blob-lab-help-backdrop {
+.blob-lab-help-backdrop,
+.blob-lab-reward-backdrop {
   position: fixed;
   z-index: 20;
   inset: 0;
@@ -517,6 +628,39 @@
   background: rgba(30, 69, 80, 0.26);
   padding: 0.6rem;
 }
+.blob-lab-reward-backdrop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 69, 80, 0.28);
+  padding: 0.65rem;
+}
+.blob-lab-reward-sheet {
+  width: min(100%, 32rem);
+  border: 0.18rem solid rgba(22, 143, 153, 0.34);
+  border-radius: 0.94rem;
+  background: rgba(255, 255, 255, 0.97);
+  padding: 0.86rem;
+  box-shadow: 0 1rem 3rem rgba(29, 93, 102, 0.24);
+  text-align: center;
+}
+.blob-lab-reward-sheet > svg { width: 1.8rem; height: 1.8rem; color: #f5aa49; }
+.blob-lab-reward-sheet h2 { margin: 0.14rem 0 0; color: #2b5e6c; font-size: 1rem; }
+.blob-lab-reward-sheet > p:not(.blob-lab-eyebrow) { margin: 0.25rem 0 0; color: #5c8084; font-size: 0.68rem; font-weight: 700; }
+.blob-lab-mutation-grid { display: grid; gap: 0.44rem; margin-top: 0.72rem; }
+.blob-lab-mutation-grid button {
+  display: grid;
+  gap: 0.16rem;
+  border: 0.16rem solid var(--mutation-accent);
+  border-radius: 0.72rem;
+  background: #fff;
+  color: #3b6873;
+  padding: 0.6rem;
+  text-align: left;
+  box-shadow: 0 0.2rem 0 color-mix(in srgb, var(--mutation-accent) 52%, #6a8b8d);
+}
+.blob-lab-mutation-grid strong { font-size: 0.78rem; }
+.blob-lab-mutation-grid span { color: #66868a; font-size: 0.67rem; font-weight: 700; line-height: 1.18; }
 .blob-lab-help-sheet {
   position: relative;
   border: 1px solid rgba(22, 143, 153, 0.3);
@@ -553,6 +697,10 @@
   0%, 100% { filter: brightness(1); }
   50% { filter: brightness(1.09); }
 }
+@keyframes blobLabBossPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.07, 0.94); }
+}
 
 @media (min-width: 640px) {
   .blob-lab-shell { gap: 0.62rem; padding: 0.82rem; }
@@ -565,7 +713,7 @@
   .blob-lab-intent strong { font-size: 0.84rem; }
   .blob-lab-enemy-copy span,
   .blob-lab-intent small { font-size: 0.68rem; }
-  .blob-lab-board { width: min(100%, 30rem, calc((100dvh - 23.5rem) * 1.25)); }
+  .blob-lab-board { width: min(100%, 30rem, calc((100dvh - 24.5rem) * 1.25)); }
   .blob-lab-notice { min-height: 2.55rem; padding: 0.55rem 0.7rem; font-size: 0.75rem; }
   .blob-lab-command-tray,
   .blob-lab-study-sheet { padding: 0.68rem; }
