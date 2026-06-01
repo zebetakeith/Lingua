@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot } from "lucide-react";
+import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot, Beaker } from "lucide-react";
 import VOCABULARY, { generateDistractors, type VocabWord } from "./data/vocabulary";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
 import { getClassById } from "./data/classes";
@@ -91,6 +91,7 @@ import {
   type RuneStatus,
   type TileKind,
 } from "./game/runes";
+import BlobTacticsLab from "./experiments/BlobTacticsLab";
 
 const assetUrl = (path?: string | null) => {
   if (!path) return "";
@@ -2723,6 +2724,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
 
 // ─── Main App ────────────────────────────────────────────
 export default function App() {
+  const blobTacticsLabOpen = new URLSearchParams(window.location.search).get("lab") === "blob-tactics";
   const [screen, setScreen] = useState<GameScreen>("menu");
   const [save, setSave] = useState<SaveData>(loadSave);
   const [combat, setCombat] = useState<CombatState | null>(null);
@@ -5974,6 +5976,16 @@ export default function App() {
   const currentEnemyPlanName = currentEnemyIntent?.actions.map(action => action.name).join(" + ") || "Waiting";
 
   // ─── RENDER: Main Menu ────────────────────────────────
+  if (blobTacticsLabOpen) {
+    return (
+      <BlobTacticsLab
+        onExit={() => {
+          window.location.href = window.location.pathname;
+        }}
+      />
+    );
+  }
+
   if (screen === "menu") {
     return (
       <div className="cute-theme relative h-screen w-full overflow-hidden">
@@ -6045,6 +6057,15 @@ export default function App() {
           
           {/* Menu buttons */}
           <div className="flex flex-wrap justify-center gap-4 mt-4">
+            <button
+              onClick={() => {
+                window.location.href = `${window.location.pathname}?lab=blob-tactics`;
+              }}
+              className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-[#fff6bd]/90 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#fff9d8]"
+            >
+              <Beaker className="w-5 h-5 text-teal-600" />
+              Combat Lab
+            </button>
             <button
               onClick={() => setScreen("howToPlay")}
               className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
