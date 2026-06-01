@@ -2337,6 +2337,135 @@ img[src*="enemy_"] {
   45% { transform: scale(1.12, 1.02); filter: saturate(1.25) hue-rotate(-10deg); }
 }
 
+@keyframes pipploTransform {
+  0%, 100% { transform: scale(1); }
+  22% { transform: scale(1.14, 0.88) translateY(8%); }
+  48% { transform: scale(0.9, 1.16) translateY(-8%); }
+  72% { transform: scale(1.08, 0.94) translateY(3%); }
+}
+
+.pipplo-sprite {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  isolation: isolate;
+}
+
+.pipplo-base {
+  display: block;
+  height: 100%;
+  width: 100%;
+  object-fit: contain;
+}
+
+.pipplo-transforming {
+  animation: pipploTransform 780ms ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.pipplo-trait {
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+}
+
+.pipplo-trait-horns {
+  inset: 21% 19% auto;
+  display: flex;
+  justify-content: space-between;
+}
+
+.pipplo-trait-horns span {
+  height: 0;
+  width: 0;
+  border-bottom: 12px solid #ff866c;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  filter: drop-shadow(0 2px 1px rgba(173, 78, 89, 0.28));
+}
+
+.pipplo-trait-horns span:first-child { transform: rotate(-17deg); }
+.pipplo-trait-horns span:last-child { transform: rotate(17deg); }
+
+.pipplo-trait-bubbles {
+  bottom: 19%;
+  right: 18%;
+  height: 30%;
+  width: 28%;
+}
+
+.pipplo-trait-bubbles span {
+  position: absolute;
+  border: 2px solid rgba(79, 201, 214, 0.86);
+  border-radius: 999px;
+  background: rgba(200, 252, 255, 0.34);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.pipplo-trait-bubbles span:nth-child(1) { bottom: 0; left: 0; height: 34%; width: 34%; }
+.pipplo-trait-bubbles span:nth-child(2) { bottom: 31%; right: 5%; height: 47%; width: 47%; }
+.pipplo-trait-bubbles span:nth-child(3) { right: 42%; top: 0; height: 24%; width: 24%; }
+
+.pipplo-trait-sprout {
+  left: 18%;
+  top: 17%;
+  height: 26%;
+  width: 28%;
+}
+
+.pipplo-trait-sprout i {
+  position: absolute;
+  bottom: 0;
+  left: 49%;
+  height: 67%;
+  width: 3px;
+  border-radius: 999px;
+  background: #55b574;
+  transform: rotate(7deg);
+}
+
+.pipplo-trait-sprout span {
+  position: absolute;
+  top: 0;
+  height: 47%;
+  width: 53%;
+  border-radius: 88% 15% 88% 15%;
+  background: #8ed06d;
+  box-shadow: inset -2px -2px 0 rgba(55, 126, 85, 0.22);
+}
+
+.pipplo-trait-sprout span:first-child { left: 3%; transform: rotate(18deg); }
+.pipplo-trait-sprout span:nth-child(2) { right: 0; transform: rotate(78deg); }
+
+.pipplo-trait-tail {
+  bottom: 18%;
+  right: -2%;
+  height: 29%;
+  width: 29%;
+  border: 6px solid #ffb94f;
+  border-left-color: transparent;
+  border-radius: 999px;
+  transform: rotate(-18deg);
+  z-index: -1;
+}
+
+.pipplo-trait-freckles {
+  bottom: 26%;
+  left: 19%;
+  color: #a987e7;
+  text-shadow: 0 1px 0 rgba(76, 49, 138, 0.32);
+}
+
+.pipplo-trait-freckles span {
+  position: absolute;
+  font-size: clamp(0.55rem, 18%, 0.9rem);
+  line-height: 1;
+}
+
+.pipplo-trait-freckles span:nth-child(1) { left: 0; top: 0; }
+.pipplo-trait-freckles span:nth-child(2) { left: 0.8rem; top: 0.62rem; }
+.pipplo-trait-freckles span:nth-child(3) { left: 1.36rem; top: -0.18rem; }
+
 .cute-theme {
   color: var(--blob-ink);
   background: #b9eee2;
@@ -2558,6 +2687,7 @@ img[src*="enemy_"] {
 @media (prefers-reduced-motion: reduce) {
   .mascot-motion,
   .mascot-enraged,
+  .pipplo-transforming,
   .battlefield-party-current::before,
   .battlefield-turn-marker,
   .battlefield-party-protection,

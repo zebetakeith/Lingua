@@ -1,4 +1,5 @@
 import type { EnemyDef } from "../data/enemies";
+import type { TileKind } from "./runes";
 
 export interface BlobStats {
   bulk: number;
@@ -16,6 +17,7 @@ export interface StudyContract {
 
 export interface MealSummary {
   enemyNames: string[];
+  elements: TileKind[];
   growth: BlobStats;
 }
 
@@ -31,6 +33,14 @@ export interface SnackDef {
   name: string;
   description: string;
   heal: number;
+}
+
+export interface PipploTraitDef {
+  id: string;
+  name: string;
+  element: TileKind;
+  visual: "horns" | "bubbles" | "sprout" | "tail" | "freckles";
+  description: string;
 }
 
 export interface ExpeditionSnapshot<TCombat = unknown> {
@@ -60,6 +70,14 @@ export const CURIO_DEFS: CurioDef[] = [
 export const SNACK_DEFS: SnackDef[] = [
   { id: "berry_pop", name: "Berry Pop", description: "Restore 28 HP during a command window.", heal: 28 },
   { id: "bubble_bun", name: "Bubble Bun", description: "Restore 18 HP and raise a Bubble.", heal: 18 },
+];
+
+export const PIPPLO_TRAIT_DEFS: PipploTraitDef[] = [
+  { id: "imp_horns", name: "Imp Horns", element: "flame", visual: "horns", description: "The first Pipplo Bop each floor deals +8 damage." },
+  { id: "bubble_belly", name: "Bubble Belly", element: "tide", visual: "bubbles", description: "The first Brace each floor also raises a Bubble." },
+  { id: "sprout_tuft", name: "Sprout Tuft", element: "leaf", visual: "sprout", description: "Recover 6 extra HP while traveling to the next floor." },
+  { id: "spring_tail", name: "Spring Tail", element: "light", visual: "tail", description: "Pipplo's actions move slightly faster on the timeline." },
+  { id: "star_freckles", name: "Star Freckles", element: "shadow", visual: "freckles", description: "Pipplo's first weakness hit each floor charges +1 Gusto." },
 ];
 
 export function createBlobStats(): BlobStats {
@@ -118,7 +136,7 @@ export function getMealGrowth(enemies: EnemyDef[], curioIds: string[] = []): Mea
   }
   if (curioIds.includes("pocket_pebble")) growth.bop += 1;
   if (curioIds.includes("lucky_fork")) growth.gusto += 1;
-  return { enemyNames: enemies.map(enemy => enemy.name), growth };
+  return { enemyNames: enemies.map(enemy => enemy.name), elements: enemies.map(enemy => enemy.element), growth };
 }
 
 export function applyMealGrowth(current: BlobStats, meal: MealSummary): BlobStats {
@@ -141,8 +159,22 @@ export function createSnackChoices(floor: number): SnackDef[] {
   return isCampFloor(floor) ? shuffle(SNACK_DEFS).slice(0, 2) : [];
 }
 
+export function createPipploTraitChoices(currentIds: string[], absorbedElements: TileKind[], floor: number): PipploTraitDef[] {
+  if (!isCampFloor(floor)) return [];
+  const owned = new Set(currentIds);
+  const available = PIPPLO_TRAIT_DEFS.filter(trait => !owned.has(trait.id));
+  const recentlyAbsorbed = new Set(absorbedElements.slice(-10));
+  const shapedByMeals = shuffle(available.filter(trait => recentlyAbsorbed.has(trait.element)));
+  const shapedIds = new Set(shapedByMeals.map(trait => trait.id));
+  return [...shapedByMeals, ...shuffle(available.filter(trait => !shapedIds.has(trait.id)))].slice(0, 3);
+}
+
 export function getCurioById(id: string): CurioDef | undefined {
   return CURIO_DEFS.find(curio => curio.id === id);
+}
+
+export function getPipploTraitById(id: string): PipploTraitDef | undefined {
+  return PIPPLO_TRAIT_DEFS.find(trait => trait.id === id);
 }
 
 export function getSnackById(id?: string | null): SnackDef | undefined {

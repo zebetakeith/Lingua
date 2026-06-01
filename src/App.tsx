@@ -51,10 +51,12 @@ import {
   applyMealGrowth,
   createBlobStats,
   createCurioChoices,
+  createPipploTraitChoices,
   createSnackChoices,
   createStudyContract,
   getCurioById,
   getMealGrowth,
+  getPipploTraitById,
   getRegionForFloor,
   getSnackById,
   getVocabularyPicksForFloor,
@@ -63,6 +65,7 @@ import {
   type CurioDef,
   type ExpeditionSnapshot,
   type MealSummary,
+  type PipploTraitDef,
   type SnackDef,
   type StudyContract,
 } from "./game/expedition";
@@ -157,6 +160,7 @@ interface SavedDeck {
   unlockedRelicIds: string[];
   relicHistory: string[];
   unlockedCurioIds: string[];
+  unlockedTraitIds: string[];
   unlockedRegionStartFloors: number[];
   lastStudyContract: StudyContract;
   activeExpedition: ExpeditionSnapshot<CombatState> | null;
@@ -225,6 +229,11 @@ interface CombatState {
   runRelics: string[];
   curioChoices: CurioDef[];
   runCurioIds: string[];
+  traitChoices: PipploTraitDef[];
+  runTraitIds: string[];
+  absorbedElementHistory: TileKind[];
+  lastClaimedTraitId: string | null;
+  showTraitTransformation: boolean;
   snackChoices: SnackDef[];
   snackId: string | null;
   blobStats: BlobStats;
@@ -447,6 +456,7 @@ const ENEMY_ACTION_DELAY = 70;
 const MAX_ACTIVE_PARTY_SIZE = 3;
 const MAX_HELPER_SIZE = 2;
 const MAX_CURIO_SLOTS = 3;
+const MAX_BODY_TRAITS = 3;
 const EARLY_GUEST_FLOOR = 2;
 const EARLY_GUEST_CHARACTER_ID = "scholar";
 const FIRST_BOSS_FLOOR = 5;
@@ -508,6 +518,7 @@ function createSavedDeck(name: string, cards: VocabWord[], id = `deck-${Date.now
     unlockedRelicIds: [],
     relicHistory: [],
     unlockedCurioIds: [],
+    unlockedTraitIds: [],
     unlockedRegionStartFloors: [1],
     lastStudyContract: createStudyContract(),
     activeExpedition: null,
@@ -558,6 +569,7 @@ function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck
     unlockedRelicIds: Array.isArray(deck.unlockedRelicIds) ? deck.unlockedRelicIds : fallback.unlockedRelicIds,
     relicHistory: Array.isArray(deck.relicHistory) ? deck.relicHistory : fallback.relicHistory,
     unlockedCurioIds: Array.isArray(deck.unlockedCurioIds) ? deck.unlockedCurioIds : fallback.unlockedCurioIds,
+    unlockedTraitIds: Array.isArray(deck.unlockedTraitIds) ? deck.unlockedTraitIds : fallback.unlockedTraitIds,
     unlockedRegionStartFloors: Array.isArray(deck.unlockedRegionStartFloors)
       ? Array.from(new Set([1, ...deck.unlockedRegionStartFloors.filter(floor => typeof floor === "number" && floor >= 1)]))
       : fallback.unlockedRegionStartFloors,
@@ -957,8 +969,16 @@ function getRemainingStudyRushAp(state: CombatState): number {
   return Math.max(0, getStudyRushApCap(state) - state.studyApOfferedThisRush);
 }
 
+function roundCombatAp(value: number): number {
+  return Math.round(Math.max(0, value) * 100) / 100;
+}
+
+function isStudyRushComplete(state: CombatState): boolean {
+  return getRemainingStudyRushAp(state) <= 0.01;
+}
+
 function clampStudyRushAp(state: CombatState, rawAp: number): number {
-  return Math.round(Math.min(getRemainingStudyRushAp(state), Math.max(0, rawAp)) * 100) / 100;
+  return roundCombatAp(Math.min(getRemainingStudyRushAp(state), Math.max(0, rawAp)));
 }
 
 function getProjectedStudyCardAp(state: CombatState, saveData: SaveData): number {
@@ -1179,12 +1199,13 @@ function createExpeditionSnapshot(state: CombatState, screen: "combat" | "reward
   };
 }
 
-function digestRoom(state: CombatState, enemies: EnemyInstance[]): Pick<CombatState, "blobStats" | "lastMeal" | "mealDigested" | "playerHp" | "playerMaxHp" | "eventNotices"> {
+function digestRoom(state: CombatState, enemies: EnemyInstance[]): Pick<CombatState, "blobStats" | "lastMeal" | "mealDigested" | "absorbedElementHistory" | "playerHp" | "playerMaxHp" | "eventNotices"> {
   if (state.mealDigested) {
     return {
       blobStats: state.blobStats,
       lastMeal: state.lastMeal,
       mealDigested: state.mealDigested,
+      absorbedElementHistory: state.absorbedElementHistory || [],
       playerHp: state.playerHp,
       playerMaxHp: state.playerMaxHp,
       eventNotices: state.eventNotices,
@@ -1192,6 +1213,7 @@ function digestRoom(state: CombatState, enemies: EnemyInstance[]): Pick<CombatSt
   }
   const meal = getMealGrowth(enemies.map(enemy => enemy.def), state.runCurioIds);
   const nextBlobStats = applyMealGrowth(state.blobStats, meal);
+  const absorbedElementHistory = [...(state.absorbedElementHistory || []), ...meal.elements].slice(-20);
   const bulkGain = meal.growth.bulk * 3;
   const growthLabels = [
     meal.growth.bulk > 0 ? `+${meal.growth.bulk} Bulk` : "",
@@ -1203,6 +1225,7 @@ function digestRoom(state: CombatState, enemies: EnemyInstance[]): Pick<CombatSt
     blobStats: nextBlobStats,
     lastMeal: meal,
     mealDigested: true,
+    absorbedElementHistory,
     playerHp: state.playerHp + bulkGain,
     playerMaxHp: state.playerMaxHp + bulkGain,
     eventNotices: appendCombatNotices(state.eventNotices, [
@@ -1469,10 +1492,20 @@ function getTimelineOutcomeText(queue: TurnQueueEntry[], actorId: string): strin
   return `${nextActor.name} next`;
 }
 
+function getPlayerActionTimelineAdjustment(member: CharacterDef, action: PlayerActionId, state: CombatState): number {
+  let adjustment = action === "defend" && state.runRelics.includes("runic_tumbler") ? -14 : 0;
+  if (member.id === "linguist") {
+    adjustment -= Math.min(12, state.blobStats.bounce);
+    if (state.runCurioIds.includes("springy_spoon")) adjustment -= 6;
+    if (state.runTraitIds.includes("spring_tail")) adjustment -= 6;
+  }
+  return adjustment;
+}
+
 function getPlayerActionTimelinePreview(member: CharacterDef, action: PlayerActionId, state: CombatState): { delay: number; outcome: string } {
   const actor = getCurrentActor(state);
   const cost = getPlayerActionCost(member, action, state);
-  const extraDelay = action === "defend" && state.runRelics.includes("runic_tumbler") ? -14 : 0;
+  const extraDelay = getPlayerActionTimelineAdjustment(member, action, state);
   const delay = getTimelineActionDelay(member.speed, PLAYER_ACTION_DELAY, cost) + extraDelay;
   if (!actor || actor.kind !== "party") return { delay, outcome: "timeline advances" };
   const queue = advanceTimelineByCost(state.turnQueue, actor.id, cost, extraDelay);
@@ -2299,6 +2332,71 @@ function ElementPip({ kind, className = "" }: { kind: TileKind; className?: stri
   );
 }
 
+function PipploSprite({
+  traitIds = [],
+  className = "",
+  imageClassName = "",
+  transforming = false,
+}: {
+  traitIds?: string[];
+  className?: string;
+  imageClassName?: string;
+  transforming?: boolean;
+}) {
+  const traits = new Set(traitIds);
+  return (
+    <span className={`pipplo-sprite ${transforming ? "pipplo-transforming" : ""} ${className}`}>
+      <img src={assetUrl("/cute/char_pipplo_original.png")} alt="Pipplo" className={`pipplo-base ${imageClassName}`} />
+      {traits.has("imp_horns") && (
+        <span className="pipplo-trait pipplo-trait-horns" aria-hidden="true">
+          <span />
+          <span />
+        </span>
+      )}
+      {traits.has("bubble_belly") && (
+        <span className="pipplo-trait pipplo-trait-bubbles" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+      )}
+      {traits.has("sprout_tuft") && (
+        <span className="pipplo-trait pipplo-trait-sprout" aria-hidden="true">
+          <span />
+          <span />
+          <i />
+        </span>
+      )}
+      {traits.has("spring_tail") && <span className="pipplo-trait pipplo-trait-tail" aria-hidden="true" />}
+      {traits.has("star_freckles") && (
+        <span className="pipplo-trait pipplo-trait-freckles" aria-hidden="true">
+          <span>✦</span>
+          <span>✧</span>
+          <span>✦</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+function PipploTraitChips({ traitIds, className = "" }: { traitIds: string[]; className?: string }) {
+  if (traitIds.length === 0) {
+    return <span className={`rounded-full bg-white/8 px-2 py-1 text-white/65 ${className}`}>No body traits yet</span>;
+  }
+  return (
+    <>
+      {traitIds.map(traitId => {
+        const trait = getPipploTraitById(traitId);
+        return trait ? (
+          <span key={trait.id} title={trait.description} className={`rounded-full bg-pink-300/14 px-2 py-1 text-pink-50 ${className}`}>
+            {trait.name}
+          </span>
+        ) : null;
+      })}
+    </>
+  );
+}
+
 function RuneOrb({ kind, status }: { kind: TileKind; status?: RuneStatus | null }) {
   return (
     <>
@@ -2442,6 +2540,11 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     runRelics: [],
     curioChoices: [],
     runCurioIds: [],
+    traitChoices: [],
+    runTraitIds: [],
+    absorbedElementHistory: [],
+    lastClaimedTraitId: null,
+    showTraitTransformation: false,
     snackChoices: [],
     snackId: "berry_pop",
     blobStats: starterBlobStats,
@@ -2756,7 +2859,7 @@ export default function App() {
       ...nextCardData,
       mode: "study",
       activeBuffs: combat.activeBuffs.filter(buff => !["study_head_start", "study_tax", "timer_extend", "timer_slow"].includes(buff.type)),
-      actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints) + headStartAp,
+      actionPoints: roundCombatAp(Math.min(combat.actionPointCarryCap, combat.actionPoints) + headStartAp),
       actionPointsEarnedThisRush: headStartAp,
       studyApOfferedThisRush: headStartAp,
       studyApGoal,
@@ -2924,9 +3027,9 @@ export default function App() {
       ...state,
       deck: nextDeck,
       powerPoints: state.powerPoints + earnedAp,
-      actionPoints: state.actionPoints + earnedAp,
-      actionPointsEarnedThisRush: state.actionPointsEarnedThisRush + earnedAp,
-      studyApOfferedThisRush: state.studyApOfferedThisRush + offeredAp,
+      actionPoints: roundCombatAp(state.actionPoints + earnedAp),
+      actionPointsEarnedThisRush: roundCombatAp(state.actionPointsEarnedThisRush + earnedAp),
+      studyApOfferedThisRush: roundCombatAp(state.studyApOfferedThisRush + offeredAp),
       apPenaltyNextRush: 0,
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
@@ -2939,7 +3042,7 @@ export default function App() {
       flashColor: "rgba(46,204,113,0.18)",
     };
 
-    if (nextState.studyApOfferedThisRush >= getStudyRushApCap(nextState)) {
+    if (isStudyRushComplete(nextState)) {
       finishStudyRound(nextState, nextSave);
       return;
     }
@@ -2959,7 +3062,7 @@ export default function App() {
     const nextState = {
       ...state,
       deck: refillDeck(state.deck, nextSave),
-      studyApOfferedThisRush: state.studyApOfferedThisRush + offeredAp,
+      studyApOfferedThisRush: roundCombatAp(state.studyApOfferedThisRush + offeredAp),
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
       studyWrongRound: state.studyWrongRound + 1,
@@ -2993,7 +3096,7 @@ export default function App() {
       const latestCombat = combatRef.current;
       if (!latestCombat || latestCombat.mode !== "study" || latestCombat.phase !== "wrong" || latestCombat.currentWord?.id !== missedWord?.id) return;
 
-      if (nextState.studyApOfferedThisRush >= getStudyRushApCap(nextState)) {
+      if (isStudyRushComplete(nextState)) {
         finishStudyRound({
           ...nextState,
           phase: "answering",
@@ -3765,7 +3868,7 @@ export default function App() {
       enemies: nextEnemies,
       playerHp: nextPlayerHp,
       turnQueue: nextQueue,
-      actionPoints: Math.min(baseState.actionPointCarryCap, baseState.actionPoints),
+      actionPoints: roundCombatAp(Math.min(baseState.actionPointCarryCap, baseState.actionPoints)),
       actionPointsEarnedThisRush: 0,
       studyApOfferedThisRush: 0,
       actionPointsSpentThisWindow: 0,
@@ -3844,7 +3947,7 @@ export default function App() {
     if (!actor || !member || !enemy || enemy.isDead) return;
 
     const baseCost = getPlayerActionCost(member, action, combat);
-    if (combat.actionPoints < baseCost) return;
+    if (roundCombatAp(combat.actionPoints) < baseCost) return;
 
     const playerHpBefore = combat.playerHp;
     const enemyHpBefore = enemy.hp;
@@ -3857,22 +3960,30 @@ export default function App() {
     let nextExposedTurns = combat.exposedTurns;
     let nextFlameDiscount = combat.flameDiscountNext && !(member.element === "flame" && action === "skill");
     let healedOrDefended = combat.healedOrDefendedThisWindow;
-    let actionDelay = 0;
+    let actionDelay = getPlayerActionTimelineAdjustment(member, action, combat);
     const actionNotices: CombatNotice[] = [];
     const actionLabel = getActionLabel(member, action);
 
     if (action === "attack") {
       rawDamage = Math.max(5, member.attack + (member.id === "linguist" ? combat.blobStats.bop : 0) + Math.floor(combat.difficultyFloor * 1.15));
+      if (member.id === "linguist" && combat.runTraitIds.includes("imp_horns") && !nextBuffs.some(buff => buff.type === "imp_horns_used")) {
+        rawDamage += 8;
+        nextBuffs = [...nextBuffs, { type: "imp_horns_used", remaining: 1 }];
+        actionNotices.push(createCombatNotice("Trait: Imp Horns", "First Pipplo Bop this floor dealt +8 damage.", "good"));
+      }
     } else if (action === "defend") {
       nextBuffs = [...nextBuffs, { type: "guard", remaining: 1 }];
       nextSkillCharge = Math.min(12, nextSkillCharge + 1);
       healedOrDefended = true;
+      if (combat.runTraitIds.includes("bubble_belly") && !nextBuffs.some(buff => buff.type === "bubble_belly_used")) {
+        nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }, { type: "bubble_belly_used", remaining: 1 }];
+        actionNotices.push(createCombatNotice("Trait: Bubble Belly", "First Brace this floor also raised a Bubble.", "good"));
+      }
       if (combat.runCurioIds.includes("bubble_cup") && !nextBuffs.some(buff => buff.type === "bubble_cup_used")) {
         nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }, { type: "bubble_cup_used", remaining: 1 }];
         actionNotices.push(createCombatNotice("Curio: Bubble Cup", "First Brace this floor also raised a Bubble.", "good"));
       }
       if (combat.runRelics.includes("runic_tumbler")) {
-        actionDelay = -14;
         actionNotices.push(createCombatNotice("Mutation: Tumble Toes", "Bracing nudged the timeline in your favor.", "relic"));
       }
     } else if (member.skillId === "steady_hand") {
@@ -3906,11 +4017,6 @@ export default function App() {
       }
     }
 
-    if (member.id === "linguist") {
-      actionDelay -= Math.min(12, combat.blobStats.bounce);
-      if (combat.runCurioIds.includes("springy_spoon")) actionDelay -= 6;
-    }
-
     if (rawDamage > 0 && enemy.def.weakTo.includes(kind) && combat.exposedTurns > 0) {
       rawDamage = Math.floor(rawDamage * 1.35);
       nextExposedTurns = Math.max(0, nextExposedTurns - 1);
@@ -3924,6 +4030,11 @@ export default function App() {
 
     const stats = createDirectActionStats(kind, rawDamage, healAmount, rawDamage > 0 ? member.name : undefined, action === "skill" ? 5 : action === "attack" ? 3 : 0);
     const defense = resolveEnemyDefense(enemy, stats, combat.runRelics);
+    if (member.id === "linguist" && defense.weaknessHits.length > 0 && combat.runTraitIds.includes("star_freckles") && !nextBuffs.some(buff => buff.type === "star_freckles_used")) {
+      nextSkillCharge = Math.min(12, nextSkillCharge + 1);
+      nextBuffs = [...nextBuffs, { type: "star_freckles_used", remaining: 1 }];
+      actionNotices.push(createCombatNotice("Trait: Star Freckles", "First Pipplo weakness hit this floor charged +1 Gusto.", "good"));
+    }
     stats.rawDamage = defense.rawDamage;
     stats.damage = defense.hpDamage;
     stats.shieldDamage = defense.shieldDamage;
@@ -4002,7 +4113,7 @@ export default function App() {
       }
     }
 
-    const nextActionPoints = combat.actionPoints - baseCost;
+    const nextActionPoints = roundCombatAp(combat.actionPoints - baseCost);
     const nextSpent = combat.actionPointsSpentThisWindow + baseCost;
     const combatLog = buildCombatLog(
       stats,
@@ -4023,6 +4134,7 @@ export default function App() {
     const vocabPicksRemaining = allDead ? getRoomVocabularyPicks(save, combat) : combat.vocabPicksRemaining;
     const relicChoices = allDead && combat.encounter.offersRelic ? createRelicChoices(combat.runRelics, combat.encounter) : combat.relicChoices;
     const curioChoices = allDead ? createCurioChoices(combat.runCurioIds, combat.floor) : combat.curioChoices;
+    const traitChoices = allDead ? createPipploTraitChoices(combat.runTraitIds, digestion?.absorbedElementHistory ?? combat.absorbedElementHistory, combat.floor) : combat.traitChoices;
     const snackChoices = allDead ? createSnackChoices(combat.floor) : combat.snackChoices;
     const cinematic = createActionCinematic(
       stats,
@@ -4067,11 +4179,13 @@ export default function App() {
       rewardChoices,
       relicChoices,
       curioChoices,
+      traitChoices,
       snackChoices,
       vocabPicksRemaining,
       blobStats: digestion?.blobStats ?? combat.blobStats,
       lastMeal: digestion?.lastMeal ?? combat.lastMeal,
       mealDigested: digestion?.mealDigested ?? combat.mealDigested,
+      absorbedElementHistory: digestion?.absorbedElementHistory ?? combat.absorbedElementHistory,
       cinematic,
       cinematicStepIndex: 0,
       combatLog,
@@ -4154,7 +4268,7 @@ export default function App() {
           enemyAnim: null,
           playerAnim: null,
           activeActorId: getCurrentActor(prev)?.id || null,
-          actionPoints: Math.min(prev.actionPointCarryCap, prev.actionPoints),
+          actionPoints: roundCombatAp(Math.min(prev.actionPointCarryCap, prev.actionPoints)),
           actionPointsEarnedThisRush: 0,
           studyApOfferedThisRush: 0,
           boardMessage: "AP spent. Study again before the enemy reaches the front.",
@@ -4237,6 +4351,11 @@ export default function App() {
       nextQueue = delayNextEnemyAction(nextQueue);
       actionNotices.push(createCombatNotice("Shell Break", `Counter delayed. +${nextSkillCharge} Gusto.`, "good"));
     }
+    if (member.id === "linguist" && defense.weaknessHits.length > 0 && combat.runTraitIds.includes("star_freckles") && !nextBuffs.some(buff => buff.type === "star_freckles_used")) {
+      nextSkillCharge = Math.min(12, nextSkillCharge + 1);
+      nextBuffs = [...nextBuffs, { type: "star_freckles_used", remaining: 1 }];
+      actionNotices.push(createCombatNotice("Trait: Star Freckles", "First Pipplo weakness hit this floor charged +1 Gusto.", "good"));
+    }
 
     const enemyHpAfter = Math.max(0, enemy.hp - defense.hpDamage);
     const nextEnemies = [...combat.enemies];
@@ -4283,6 +4402,7 @@ export default function App() {
     const vocabPicksRemaining = allDead ? getRoomVocabularyPicks(save, combat) : combat.vocabPicksRemaining;
     const relicChoices = allDead && combat.encounter.offersRelic ? createRelicChoices(combat.runRelics, combat.encounter) : combat.relicChoices;
     const curioChoices = allDead ? createCurioChoices(combat.runCurioIds, combat.floor) : combat.curioChoices;
+    const traitChoices = allDead ? createPipploTraitChoices(combat.runTraitIds, digestion?.absorbedElementHistory ?? combat.absorbedElementHistory, combat.floor) : combat.traitChoices;
     const snackChoices = allDead ? createSnackChoices(combat.floor) : combat.snackChoices;
     const cinematic = createActionCinematic(
       stats,
@@ -4321,11 +4441,13 @@ export default function App() {
       rewardChoices,
       relicChoices,
       curioChoices,
+      traitChoices,
       snackChoices,
       vocabPicksRemaining,
       blobStats: digestion?.blobStats ?? combat.blobStats,
       lastMeal: digestion?.lastMeal ?? combat.lastMeal,
       mealDigested: digestion?.mealDigested ?? combat.mealDigested,
+      absorbedElementHistory: digestion?.absorbedElementHistory ?? combat.absorbedElementHistory,
       runPartyCharacterIds: nextRunPartyCharacterIds,
       guestCharacterIds: nextGuestCharacterIds,
       recruitedCharacterIds: Array.from(new Set([...combat.recruitedCharacterIds, ...immediateRecruitIds])),
@@ -4400,7 +4522,7 @@ export default function App() {
       ...combat,
       mode: "studyReady",
       activeActorId: getCurrentActor(combat)?.id || null,
-      actionPoints: Math.min(combat.actionPointCarryCap, combat.actionPoints),
+      actionPoints: roundCombatAp(Math.min(combat.actionPointCarryCap, combat.actionPoints)),
       actionPointsEarnedThisRush: 0,
       studyApOfferedThisRush: 0,
       boardMessage: "Command window ended. Study again before the enemy reaches the front.",
@@ -4961,6 +5083,11 @@ export default function App() {
     });
     setCombat({
       ...snapshot.combat,
+      traitChoices: snapshot.combat.traitChoices || [],
+      runTraitIds: snapshot.combat.runTraitIds || [],
+      absorbedElementHistory: snapshot.combat.absorbedElementHistory || [],
+      lastClaimedTraitId: snapshot.combat.lastClaimedTraitId || null,
+      showTraitTransformation: Boolean(snapshot.combat.showTraitTransformation),
       turnQueue: refreshedTurnQueue,
       isPaused: false,
       actionEffect: null,
@@ -5046,7 +5173,9 @@ export default function App() {
     // A guest contributes their HP immediately, then the party recovers between floors.
     const nextPlayerMaxHp = getPartyMaxHp(nextRunParty, combat.playerMaxHp);
     const joinedPartyHp = Math.max(0, nextPlayerMaxHp - combat.playerMaxHp);
-    const healAmount = Math.floor(combat.playerMaxHp * (combat.encounter.isBoss ? 0.3 : 0.2)) + (combat.runCurioIds.includes("mossy_button") ? 8 : 0);
+    const healAmount = Math.floor(combat.playerMaxHp * (combat.encounter.isBoss ? 0.3 : 0.2))
+      + (combat.runCurioIds.includes("mossy_button") ? 8 : 0)
+      + (combat.runTraitIds.includes("sprout_tuft") ? 6 : 0);
     const newHp = Math.min(nextPlayerMaxHp, combat.playerHp + joinedPartyHp + healAmount);
     const floorLesson = getFloorLessonNotice(nextFloorNum);
 
@@ -5093,9 +5222,12 @@ export default function App() {
       cinematicStepIndex: 0,
       relicChoices: [],
       curioChoices: [],
+      traitChoices: [],
       snackChoices: [],
       lastMeal: null,
       mealDigested: false,
+      lastClaimedTraitId: null,
+      showTraitTransformation: false,
       vocabPicksRemaining: 0,
       studyContract: contractOverride || combat.studyContract,
       region: getRegionForFloor(nextFloorNum),
@@ -5152,7 +5284,7 @@ export default function App() {
 
   const claimRewardCard = (rewardWord: VocabWord, rating: CardRating) => {
     if (!combat) return;
-    if (combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0) {
+    if (combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.traitChoices.length > 0 || combat.snackChoices.length > 0) {
       setCombat({
         ...combat,
         boardMessage: "Choose the expedition rewards before previewing more vocabulary.",
@@ -5240,6 +5372,31 @@ export default function App() {
     });
   };
 
+  const claimTrait = (trait: PipploTraitDef) => {
+    if (!combat) return;
+    const nextTraits = [...combat.runTraitIds.filter(id => id !== trait.id), trait.id].slice(-MAX_BODY_TRAITS);
+    setSave(prev => updateActiveDeck(prev, deck => ({
+      ...deck,
+      unlockedTraitIds: Array.from(new Set([...(deck.unlockedTraitIds || []), trait.id])),
+    })));
+    setCombat({
+      ...combat,
+      runTraitIds: nextTraits,
+      traitChoices: [],
+      lastClaimedTraitId: trait.id,
+      showTraitTransformation: true,
+      boardMessage: `${trait.name} grew onto Pipplo.`,
+    });
+  };
+
+  const dismissTraitTransformation = () => {
+    if (!combat) return;
+    setCombat({
+      ...combat,
+      showTraitTransformation: false,
+    });
+  };
+
   const claimSnack = (snack: SnackDef) => {
     if (!combat) return;
     setCombat({
@@ -5251,7 +5408,7 @@ export default function App() {
   };
 
   const skipVocabularyBatch = () => {
-    if (!combat || combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0) return;
+    if (!combat || combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.traitChoices.length > 0 || combat.snackChoices.length > 0) return;
     setCombat({ ...combat, rewardChoices: [], vocabPicksRemaining: 0 });
     nextFloor();
   };
@@ -6102,7 +6259,9 @@ export default function App() {
               <div className="mb-3">
                 <div className="mb-2 flex -space-x-2">
                   {selectedDraftParty.map(member => (
-                    <img key={member.id} src={assetUrl(member.sprite)} alt="" className="h-12 w-12 rounded-full border border-white/15 bg-black/20 object-contain" />
+                    member.id === "linguist"
+                      ? <PipploSprite key={member.id} className="h-12 w-12 rounded-full border border-white/15 bg-black/20" />
+                      : <img key={member.id} src={assetUrl(member.sprite)} alt="" className="h-12 w-12 rounded-full border border-white/15 bg-black/20 object-contain" />
                   ))}
                 </div>
                 <div className="font-bold text-white">{selectedDraftParty.map(member => member.name).join(", ")}</div>
@@ -6184,6 +6343,7 @@ export default function App() {
 
   if (screen === "classSelect") {
     const selectedPartyIds = getDeckSelectedPartyIds(activeDeck);
+    const pausedPipploTraits = activeDeck.activeExpedition?.combat.runTraitIds || [];
     return (
       <div className="cute-theme relative min-h-[100dvh] w-full overflow-y-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_menu_blob.png")} />
@@ -6281,7 +6441,9 @@ export default function App() {
                     </div>
                   )}
                   <div className="flex h-24 items-center justify-center">
-                    <img src={assetUrl(character.sprite)} alt={character.name} className="h-24 object-contain drop-shadow-lg" />
+                    {isPip
+                      ? <PipploSprite traitIds={pausedPipploTraits} className="h-24 w-24 drop-shadow-lg" />
+                      : <img src={assetUrl(character.sprite)} alt={character.name} className="h-24 object-contain drop-shadow-lg" />}
                   </div>
                   <div className="mt-2">
                     <div className="flex items-center justify-between gap-2">
@@ -6620,7 +6782,9 @@ export default function App() {
                   }}
                   title={`${entry.name} - Speed ${entry.speed}`}
                 >
-                  <img src={assetUrl(entry.avatar)} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" />
+                  {entry.kind === "party" && entry.refId === "linguist"
+                    ? <PipploSprite traitIds={combat.runTraitIds} className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
+                    : <img src={assetUrl(entry.avatar)} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" />}
                   <span className="truncate text-[10px] font-bold sm:text-xs">{isActive ? "Now: " : ""}{entry.name}</span>
                   <span className="rounded bg-black/35 px-1 text-[9px] font-black text-gray-300">{index === 0 ? "NOW" : `+${Math.max(0, Math.round(entry.actionValue - timelineOrigin))}`}</span>
                 </div>
@@ -6661,12 +6825,16 @@ export default function App() {
                       >
                         {isCurrentActor && <div className="battlefield-turn-marker">Act</div>}
                         <div className={`mascot-motion motion-${member.motionPreset}`}>
-                          <img
-                            src={assetUrl(member.sprite)}
-                            alt={member.name}
-                            className="mascot-art h-20 w-20 object-contain sm:h-16 sm:w-16 md:h-20 md:w-20"
-                            style={{ "--mascot-scale": member.battleScale || 1 } as CSSProperties}
-                          />
+                          {member.id === "linguist"
+                            ? <PipploSprite traitIds={combat.runTraitIds} className="mascot-art h-20 w-20 sm:h-16 sm:w-16 md:h-20 md:w-20" />
+                            : (
+                              <img
+                                src={assetUrl(member.sprite)}
+                                alt={member.name}
+                                className="mascot-art h-20 w-20 object-contain sm:h-16 sm:w-16 md:h-20 md:w-20"
+                                style={{ "--mascot-scale": member.battleScale || 1 } as CSSProperties}
+                              />
+                            )}
                         </div>
                         <div
                           className="battlefield-member-chip"
@@ -7312,7 +7480,9 @@ export default function App() {
                           className={`flex items-center gap-2 rounded-md border bg-black/22 px-2 py-1.5 ${isNow ? "ring-1 ring-white/45" : ""}`}
                           style={{ borderColor: isNow ? `${tile.color}99` : `${tile.color}44`, boxShadow: isNow ? `0 0 16px ${tile.glow}` : undefined }}
                         >
-                          <img src={assetUrl(member.sprite)} alt="" className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" />
+                          {member.id === "linguist"
+                            ? <PipploSprite traitIds={combat.runTraitIds} className="h-9 w-9 shrink-0 sm:h-11 sm:w-11" />
+                            : <img src={assetUrl(member.sprite)} alt="" className="h-9 w-9 shrink-0 object-contain sm:h-11 sm:w-11" />}
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
                               <span className="truncate text-sm font-bold text-white">{member.name}</span>
@@ -7393,19 +7563,21 @@ export default function App() {
                     )}
 
                     {combat.mode === "command" && activeCommandCharacter && (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5 sm:space-y-2">
                         <div
-                          className="command-current-card rounded-md border bg-black/25 p-2"
+                          className="command-current-card rounded-md border bg-black/25 p-1.5 sm:p-2"
                           style={{ borderColor: `${TILE_DEFS[activeCommandCharacter.element].color}66` }}
                         >
                           <div className="flex items-center gap-2">
-                            <img src={assetUrl(activeCommandCharacter.sprite)} alt="" className="h-10 w-10 object-contain" />
+                            {activeCommandCharacter.id === "linguist"
+                              ? <PipploSprite traitIds={combat.runTraitIds} className="h-9 w-9 sm:h-10 sm:w-10" />
+                              : <img src={assetUrl(activeCommandCharacter.sprite)} alt="" className="h-9 w-9 object-contain sm:h-10 sm:w-10" />}
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 truncate text-sm font-bold text-white">
                                 <span>{activeCommandCharacter.name}</span>
                                 {combat.guestCharacterIds.includes(activeCommandCharacter.id) && <span className="rounded bg-green-300/14 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-green-100">Guest</span>}
                               </div>
-                              <div className="text-[11px] font-semibold text-gray-400">{activeCommandSkill?.name || "Skill"} - {activeCommandSkill?.description || activeCommandCharacter.passive}</div>
+                              <div className="line-clamp-1 text-[11px] font-semibold text-gray-400 sm:line-clamp-2">{activeCommandSkill?.name || "Skill"} - {activeCommandSkill?.description || activeCommandCharacter.passive}</div>
                             </div>
                           </div>
                           <div className="mt-1.5 flex flex-wrap gap-1 text-[10px] font-bold">
@@ -7430,20 +7602,28 @@ export default function App() {
                         </div>
 
                         <div className="flex flex-wrap gap-1 text-[10px] font-bold text-lime-50/90">
-                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Bulk {combat.blobStats.bulk}</span>
-                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Bop {combat.blobStats.bop}</span>
-                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Bounce {combat.blobStats.bounce}</span>
-                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Gusto {combat.blobStats.gusto}</span>
+                          <span className="rounded-full bg-lime-300/12 px-2 py-0.5 sm:py-1">Bulk {combat.blobStats.bulk}</span>
+                          <span className="rounded-full bg-lime-300/12 px-2 py-0.5 sm:py-1">Bop {combat.blobStats.bop}</span>
+                          <span className="rounded-full bg-lime-300/12 px-2 py-0.5 sm:py-1">Bounce {combat.blobStats.bounce}</span>
+                          <span className="rounded-full bg-lime-300/12 px-2 py-0.5 sm:py-1">Gusto {combat.blobStats.gusto}</span>
                           {combat.runCurioIds.length > 0 && (
-                            <span className="rounded-full bg-cyan-300/12 px-2 py-1 text-cyan-100">{combat.runCurioIds.length} curios</span>
+                            <span className="rounded-full bg-cyan-300/12 px-2 py-0.5 text-cyan-100 sm:py-1">{combat.runCurioIds.length} curios</span>
                           )}
                         </div>
+                        <details className="rounded-md border border-pink-200/20 bg-pink-300/8 px-2 py-1 text-[10px] text-pink-50 sm:py-1.5">
+                          <summary className="cursor-pointer font-black">
+                            Pipplo body - {combat.runTraitIds.length}/{MAX_BODY_TRAITS} visible traits
+                          </summary>
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            <PipploTraitChips traitIds={combat.runTraitIds} />
+                          </div>
+                        </details>
 
                         <div className="grid grid-cols-3 gap-2">
                           {(["attack", "defend", "skill"] as PlayerActionId[]).map(action => {
                             const cost = getPlayerActionCost(activeCommandCharacter, action, combat);
                             const label = getActionLabel(activeCommandCharacter, action);
-                            const canUse = combat.phase === "answering" && combat.actionPoints >= cost;
+                            const canUse = combat.phase === "answering" && roundCombatAp(combat.actionPoints) >= cost;
                             const timing = getPlayerActionTimelinePreview(activeCommandCharacter, action, combat);
                             const preview = getPlayerActionPreviewText(activeCommandCharacter, action, combat, currentEnemy);
                             const icon = action === "defend" ? <Shield className="h-4 w-4" /> : action === "skill" ? <Sparkles className="h-4 w-4" /> : <Sword className="h-4 w-4" />;
@@ -7453,7 +7633,7 @@ export default function App() {
                                 type="button"
                                 onClick={() => handlePlayerCommand(action)}
                                 disabled={!canUse}
-                                className={`command-action-button command-action-${action} cute-action-button flex min-h-[5.4rem] flex-col items-center justify-center gap-1 rounded-md border border-white/12 bg-black/24 px-1.5 py-2 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[6.4rem] sm:px-2 sm:text-sm`}
+                                className={`command-action-button command-action-${action} cute-action-button flex min-h-[4.65rem] flex-col items-center justify-center gap-0.5 rounded-md border border-white/12 bg-black/24 px-1.5 py-1.5 text-center text-xs font-bold text-white transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-[6.4rem] sm:gap-1 sm:px-2 sm:py-2 sm:text-sm`}
                                 title={preview}
                               >
                                 {icon}
@@ -7473,7 +7653,7 @@ export default function App() {
                             type="button"
                             onClick={handleUltimate}
                             disabled={combat.phase !== "answering" || combat.skillCharge < activeCommandUltimate.focusCost}
-                            className={`ultimate-command-button cute-ultimate-button flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-all ${
+                            className={`ultimate-command-button cute-ultimate-button flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition-all sm:px-3 sm:py-2 ${
                               combat.skillCharge >= activeCommandUltimate.focusCost
                                 ? "ultimate-command-ready border-yellow-200/70 bg-yellow-300/14 text-yellow-50 shadow-[0_0_20px_rgba(255,216,77,0.2)] hover:bg-yellow-300/22"
                                 : "cursor-not-allowed border-white/10 bg-white/4 text-gray-500 opacity-70"
@@ -7495,7 +7675,7 @@ export default function App() {
                             type="button"
                             onClick={useSnack}
                             disabled={combat.phase !== "answering"}
-                            className="flex w-full items-center justify-between gap-2 rounded-md border border-pink-200/35 bg-pink-300/10 px-3 py-2 text-left text-pink-50 transition-all hover:bg-pink-300/18 disabled:opacity-45"
+                            className="flex w-full items-center justify-between gap-2 rounded-md border border-pink-200/35 bg-pink-300/10 px-2 py-1.5 text-left text-pink-50 transition-all hover:bg-pink-300/18 disabled:opacity-45 sm:px-3 sm:py-2"
                           >
                             <span className="flex min-w-0 items-center gap-2">
                               <Cookie className="h-4 w-4 shrink-0" />
@@ -7509,7 +7689,7 @@ export default function App() {
                           type="button"
                           onClick={endCommandWindow}
                           disabled={combat.phase !== "answering"}
-                          className="flex w-full items-center justify-center rounded-md border border-white/10 bg-white/6 py-2 text-xs font-bold text-gray-200 transition-all hover:bg-white/10 disabled:opacity-45"
+                          className="flex w-full items-center justify-center rounded-md border border-white/10 bg-white/6 py-1.5 text-xs font-bold text-gray-200 transition-all hover:bg-white/10 disabled:opacity-45 sm:py-2"
                         >
                           End Window
                         </button>
@@ -7524,7 +7704,7 @@ export default function App() {
                   </div>
 
                   <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 sm:gap-4">
-                    <img src={assetUrl(runParty[0]?.sprite)} alt="Player" className="h-8 w-8 object-contain sm:h-12 sm:w-12" />
+                    <PipploSprite traitIds={combat.runTraitIds} className="h-8 w-8 sm:h-12 sm:w-12" />
                     <div className="flex-1">
                       <div className="mb-1 flex justify-between text-xs">
                         <span className="flex items-center gap-1 text-gray-300">
@@ -8394,11 +8574,30 @@ export default function App() {
     const rewardChoices = combat.rewardChoices;
     const pendingCharacterUnlocks = getPendingCharacterUnlocks(save, combat);
     const isFirstRelicReward = combat.floor === 3 && combat.relicChoices.length > 0;
+    const claimedTrait = combat.lastClaimedTraitId ? getPipploTraitById(combat.lastClaimedTraitId) : null;
+    const hasPendingExpeditionRewards = combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.traitChoices.length > 0 || combat.snackChoices.length > 0;
     
     return (
       <div className="cute-theme relative h-screen w-full overflow-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_combat_blob.png")} />
         <div className="absolute inset-0 bg-[#073f50]/55" />
+        {combat.showTraitTransformation && claimedTrait && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#073f50]/80 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-sm rounded-xl border border-pink-200/65 bg-[#eafff6] p-5 text-center text-[#25334a] shadow-2xl">
+              <div className="text-xs font-black uppercase tracking-wide text-pink-600">Camp evolution</div>
+              <PipploSprite traitIds={combat.runTraitIds} transforming className="mx-auto my-3 h-44 w-44" />
+              <h3 className="text-2xl font-black">{claimedTrait.name} grew in!</h3>
+              <p className="mt-2 text-sm font-semibold text-[#166b73]">{claimedTrait.description}</p>
+              <button
+                type="button"
+                onClick={dismissTraitTransformation}
+                className="mt-4 rounded-lg bg-[#ff6d87] px-5 py-2.5 text-sm font-black text-white shadow-md transition-all hover:bg-[#f45173]"
+              >
+                Keep wobbling
+              </button>
+            </div>
+          </div>
+        )}
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6">
           <h2 
             className="text-4xl font-bold mb-2"
@@ -8453,12 +8652,17 @@ export default function App() {
 
           {combat.lastMeal && (
             <div className="mb-5 w-full max-w-3xl rounded-lg border border-lime-300/45 bg-lime-300/14 px-4 py-3 text-lime-50 shadow-lg">
-              <div className="flex items-center gap-2 font-black">
-                <Utensils className="h-5 w-5" />
-                Pipplo absorbed {combat.lastMeal.enemyNames.join(" + ")}
-              </div>
-              <div className="mt-1 text-sm font-bold text-lime-50/80">
-                +{combat.lastMeal.growth.bulk} Bulk · +{combat.lastMeal.growth.bop} Bop · +{combat.lastMeal.growth.bounce} Bounce · +{combat.lastMeal.growth.gusto} Gusto
+              <div className="flex items-center gap-3">
+                <PipploSprite traitIds={combat.runTraitIds} className="h-16 w-16 shrink-0" />
+                <div>
+                  <div className="flex items-center gap-2 font-black">
+                    <Utensils className="h-5 w-5" />
+                    Pipplo absorbed {combat.lastMeal.enemyNames.join(" + ")}
+                  </div>
+                  <div className="mt-1 text-sm font-bold text-lime-50/80">
+                    +{combat.lastMeal.growth.bulk} Bulk · +{combat.lastMeal.growth.bop} Bop · +{combat.lastMeal.growth.bounce} Bounce · +{combat.lastMeal.growth.gusto} Gusto
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -8469,6 +8673,7 @@ export default function App() {
             <span>Bop {combat.blobStats.bop}</span>
             <span>Bounce {combat.blobStats.bounce}</span>
             <span>Gusto {combat.blobStats.gusto}</span>
+            <PipploTraitChips traitIds={combat.runTraitIds} />
             {combat.runCurioIds.map(curioId => {
               const curio = getCurioById(curioId);
               return curio ? <span key={curio.id} className="rounded-full bg-cyan-300/12 px-2 py-1 text-cyan-100">{curio.name}</span> : null;
@@ -8528,6 +8733,35 @@ export default function App() {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {combat.traitChoices.length > 0 && (
+            <div className="mb-6 w-full max-w-4xl">
+              <h3 className="mb-2 flex items-center justify-center gap-2 text-lg font-bold text-white">
+                <Sparkles className="h-5 w-5 text-pink-200" />
+                Choose A Body Trait
+              </h3>
+              <p className="mx-auto mb-3 max-w-2xl text-center text-sm font-semibold text-pink-50/80">
+                Camp meals reshape this expedition. Pipplo can show up to {MAX_BODY_TRAITS} traits at once.
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {combat.traitChoices.map(trait => (
+                  <button
+                    type="button"
+                    key={trait.id}
+                    onClick={() => claimTrait(trait)}
+                    className="cute-sticker rounded-lg border-2 border-pink-200/60 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="font-bold text-white">{trait.name}</span>
+                      <ElementPip kind={trait.element} />
+                    </div>
+                    <p className="text-sm text-gray-300">{trait.description}</p>
+                    <div className="mt-3 text-xs font-bold capitalize text-pink-100">Visible change: {trait.visual}</div>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -8610,13 +8844,13 @@ export default function App() {
                       <button
                         key={rating.id}
                         onClick={() => claimRewardCard(rewardWord, rating.id)}
-                        disabled={combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0}
+                        disabled={hasPendingExpeditionRewards}
                         className="px-2 py-2 rounded-md border text-xs font-bold transition-all hover:scale-[1.03]"
                         style={{
                           borderColor: rating.color,
                           color: rating.color,
-                          backgroundColor: combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0 ? "rgba(80,80,95,0.18)" : `${rating.color}18`,
-                          opacity: combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0 ? 0.45 : 1,
+                          backgroundColor: hasPendingExpeditionRewards ? "rgba(80,80,95,0.18)" : `${rating.color}18`,
+                          opacity: hasPendingExpeditionRewards ? 0.45 : 1,
                         }}
                       >
                         {rating.shortLabel}
@@ -8630,11 +8864,11 @@ export default function App() {
           ) : (
             <button
               onClick={() => {
-                if (combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0) return;
+                if (hasPendingExpeditionRewards) return;
                 setSave(prev => ({ ...prev, wisdomOrbs: prev.wisdomOrbs + orbsEarned }));
                 nextFloor();
               }}
-              disabled={combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0}
+              disabled={hasPendingExpeditionRewards}
               className="px-8 py-3 mb-6 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold transition-all disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
             >
               Continue
@@ -8642,14 +8876,14 @@ export default function App() {
           )}
           
           <div className="flex items-center gap-3 text-gray-500 text-sm mb-4">
-            <span>{combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0 ? "Choose expedition rewards first" : rewardChoices.length > 0 ? `${combat.vocabPicksRemaining} optional new card${combat.vocabPicksRemaining === 1 ? "" : "s"} available` : "Ready for the next floor"}</span>
+            <span>{hasPendingExpeditionRewards ? "Choose expedition rewards first" : rewardChoices.length > 0 ? `${combat.vocabPicksRemaining} optional new card${combat.vocabPicksRemaining === 1 ? "" : "s"} available` : "Ready for the next floor"}</span>
             <span className="flex items-center gap-1">
               <Layers className="w-4 h-4" />
               Deck: {combat.deck.length} cards
             </span>
           </div>
 
-          {rewardChoices.length > 0 && combat.relicChoices.length === 0 && combat.curioChoices.length === 0 && combat.snackChoices.length === 0 && (
+          {rewardChoices.length > 0 && !hasPendingExpeditionRewards && (
             <button
               type="button"
               onClick={skipVocabularyBatch}
