@@ -38,6 +38,9 @@ const MASTERY_INTERVALS_MS = [
   6 * 60 * 60_000,
   24 * 60 * 60_000,
   3 * 24 * 60 * 60_000,
+  7 * 24 * 60 * 60_000,
+  14 * 24 * 60 * 60_000,
+  30 * 24 * 60 * 60_000,
 ];
 
 export function normalizeStudySettings(settings?: Partial<DeckStudySettings> | null): DeckStudySettings {
@@ -137,6 +140,13 @@ export function getStudyProgressWeight(progress: DirectionStudyProgress, now = D
   return Math.max(0.04, dueWeight * struggleWeight * masteryWeight * difficultyWeight * dailyReviewWeight);
 }
 
+export function getStudyQueuePriority(progress: DirectionStudyProgress, now = Date.now()): number {
+  const normalized = normalizeForToday(progress, now);
+  if (normalized.wrongStreak > 0) return 0;
+  if (normalized.dueAt <= now) return 1;
+  return 2;
+}
+
 export function getCorrectAnswerAp(progress: DirectionStudyProgress, questionType: StudyQuestionType, now = Date.now()): number {
   const normalized = normalizeForToday(progress, now);
   const masteryReward = normalized.mastery < 0.2
@@ -174,7 +184,23 @@ export function updateDirectionStudyProgress(
     ? (0.055 + Math.min(0.045, nextCorrectStreak * 0.008)) * formatStrength
     : -(0.11 + Math.min(0.12, nextWrongStreak * 0.035));
   const mastery = clampMastery(current.mastery + masteryChange);
-  const intervalIndex = mastery < 0.2 ? 0 : mastery < 0.4 ? 1 : mastery < 0.6 ? 2 : mastery < 0.78 ? 3 : mastery < 0.9 ? 4 : 5;
+  const intervalIndex = mastery < 0.2
+    ? 0
+    : mastery < 0.34
+      ? 1
+      : mastery < 0.48
+        ? 2
+        : mastery < 0.62
+          ? 3
+          : mastery < 0.74
+            ? 4
+            : mastery < 0.84
+              ? 5
+              : mastery < 0.9
+                ? 6
+                : mastery < 0.95
+                  ? 7
+                  : 8;
 
   return {
     mastery,

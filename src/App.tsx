@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot } from "lucide-react";
-import VOCABULARY, { getRandomWord, generateDistractors, type VocabWord } from "./data/vocabulary";
+import VOCABULARY, { generateDistractors, type VocabWord } from "./data/vocabulary";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
 import { getClassById } from "./data/classes";
 import { getEncounterForFloor, type EncounterInfo } from "./game/encounters";
@@ -37,6 +37,7 @@ import {
   getMasteryLabel,
   getStudyDirectionKey,
   getStudyProgressWeight,
+  getStudyQueuePriority,
   normalizeDirectionStudyProgress,
   normalizeStudySettings,
   updateDirectionStudyProgress,
@@ -277,6 +278,7 @@ interface CombatState {
   studyImprovedCardIds: string[];
   studyStruggledCardIds: string[];
   studyMasteryEvents: string[];
+  runStudyStats: RunStudyStats;
   studyEndReason: "goal" | "card_cap" | null;
   studyBoardTimeBonus: number;
   currentWord: VocabWord | null;
@@ -444,6 +446,17 @@ interface FloorTelemetry {
   itemsUsed: number;
 }
 
+interface RunStudyStats {
+  reviews: number;
+  correct: number;
+  wrong: number;
+  apEarned: number;
+  reviewedCardIds: string[];
+  improvedCardIds: string[];
+  struggledCardIds: string[];
+  masteredCardIds: string[];
+}
+
 // ─── Constants ───────────────────────────────────────────
 const STARTING_HP = 100;
 const SAVE_KEY = "lexicon_labyrinth_save";
@@ -519,6 +532,19 @@ const STUDY_CONTRACT_PRESETS = [
 
 function createFloorTelemetry(): FloorTelemetry {
   return { studyCardsReviewed: 0, apEarned: 0, damageTaken: 0, itemsUsed: 0 };
+}
+
+function createRunStudyStats(): RunStudyStats {
+  return {
+    reviews: 0,
+    correct: 0,
+    wrong: 0,
+    apEarned: 0,
+    reviewedCardIds: [],
+    improvedCardIds: [],
+    struggledCardIds: [],
+    masteredCardIds: [],
+  };
 }
 
 function getBackpackSnackIds(state: CombatState): string[] {
@@ -1002,6 +1028,19 @@ function getDeckStudySummary(saveData: SaveData) {
   return summary;
 }
 
+function getCardReviewStatus(card: VocabWord, saveData: SaveData): string {
+  const settings = normalizeStudySettings(getActiveDeck(saveData).studySettings);
+  const progress = getEnabledStudyDirections(settings).map(direction => getDirectionProgress(card, saveData, direction));
+  if (progress.some(item => item.wrongStreak > 0)) return "Needs attention";
+  const nextReviewAt = Math.min(...progress.map(item => item.dueAt));
+  if (nextReviewAt <= Date.now()) return "Due now";
+  const minutes = Math.max(1, Math.ceil((nextReviewAt - Date.now()) / 60_000));
+  if (minutes < 60) return `Next review in ${minutes}m`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 24) return `Next review in ${hours}h`;
+  return `Next review in ${Math.ceil(hours / 24)}d`;
+}
+
 function getApForCorrectCard(card: VocabWord, saveData: SaveData, direction: StudyDirection, questionType: StudyQuestionType): number {
   return Math.min(MAX_STUDY_AP_PER_CARD, getCorrectAnswerAp(getDirectionProgress(card, saveData, direction), questionType));
 }
@@ -1187,8 +1226,14 @@ function drawStudyQuestionFromDeck(deck: VocabWord[], saveData: SaveData, previo
       progress: getDirectionProgress(card, saveData, direction),
     })));
   const withoutPrevious = candidates.length > 1 ? candidates.filter(candidate => candidate.key !== previousKey) : candidates;
-  const pool = withoutPrevious.length > 0 ? withoutPrevious : candidates;
-  const fallbackCard = deck[0] || getIntroducedStudyCards(saveData)[0] || getStudyLibrary(saveData)[0] || getRandomWord(1);
+  const available = withoutPrevious.length > 0 ? withoutPrevious : candidates;
+  const now = Date.now();
+  const bestPriority = Math.min(...available.map(candidate => getStudyQueuePriority(candidate.progress, now)));
+  const pool = available.filter(candidate => getStudyQueuePriority(candidate.progress, now) === bestPriority);
+  const fallbackCard = deck[0] || getIntroducedStudyCards(saveData)[0];
+  if (!fallbackCard) {
+    throw new Error("Cannot draw a study question without an introduced card.");
+  }
   if (pool.length === 0) {
     const fallbackDirection = directions[0] || "definition_to_term";
     return {
@@ -1199,7 +1244,6 @@ function drawStudyQuestionFromDeck(deck: VocabWord[], saveData: SaveData, previo
       options: generateStudyOptions(fallbackCard, fallbackDirection, saveData, settings.shuffleAnswers),
     };
   }
-  const now = Date.now();
   const totalWeight = pool.reduce((sum, candidate) => sum + getStudyProgressWeight(candidate.progress, now, candidate.card.difficulty), 0);
   let roll = Math.random() * totalWeight;
   let selected = pool[pool.length - 1];
@@ -2655,6 +2699,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     studyImprovedCardIds: [],
     studyStruggledCardIds: [],
     studyMasteryEvents: [],
+    runStudyStats: createRunStudyStats(),
     studyEndReason: null,
     studyBoardTimeBonus: 0,
     ...studyQuestion,
@@ -3098,9 +3143,11 @@ export default function App() {
     const totalEarnedAp = roundCombatAp(earnedAp + fluencyBonus);
     const apCapped = offeredAp < getApForCorrectCard(state.currentWord, save, state.currentStudyDirection, state.currentStudyQuestionType) + hardEdgeBonus + steadyGripBonus;
     const difficultyFocusBonus = getFocusBonusForCorrectCard(state.currentWord);
-    const previousMasteryLabel = getMasteryLabel(getDirectionProgress(state.currentWord, save, state.currentStudyDirection).mastery);
+    const previousMastery = getDirectionProgress(state.currentWord, save, state.currentStudyDirection).mastery;
+    const previousMasteryLabel = getMasteryLabel(previousMastery);
     const nextSave = updateCardProgressFromAnswer(save, state.currentWord, state.currentStudyDirection, state.currentStudyQuestionType, true);
-    const nextMasteryLabel = getMasteryLabel(getDirectionProgress(state.currentWord, nextSave, state.currentStudyDirection).mastery);
+    const nextMastery = getDirectionProgress(state.currentWord, nextSave, state.currentStudyDirection).mastery;
+    const nextMasteryLabel = getMasteryLabel(nextMastery);
     const masteryEvent = previousMasteryLabel === nextMasteryLabel
       ? ""
       : `${state.currentWord.word} moved up to ${nextMasteryLabel}.`;
@@ -3135,6 +3182,17 @@ export default function App() {
       studyCorrectStreak: state.studyCorrectStreak + 1,
       studyImprovedCardIds: appendUniqueValue(state.studyImprovedCardIds, state.currentWord.id),
       studyMasteryEvents: appendStudyMasteryEvent(state.studyMasteryEvents, masteryEvent),
+      runStudyStats: {
+        ...(state.runStudyStats || createRunStudyStats()),
+        reviews: (state.runStudyStats?.reviews || 0) + 1,
+        correct: (state.runStudyStats?.correct || 0) + 1,
+        apEarned: roundCombatAp((state.runStudyStats?.apEarned || 0) + totalEarnedAp),
+        reviewedCardIds: appendUniqueValue(state.runStudyStats?.reviewedCardIds || [], state.currentWord.id),
+        improvedCardIds: appendUniqueValue(state.runStudyStats?.improvedCardIds || [], state.currentWord.id),
+        masteredCardIds: previousMastery < 0.88 && nextMastery >= 0.88
+          ? appendUniqueValue(state.runStudyStats?.masteredCardIds || [], state.currentWord.id)
+          : state.runStudyStats?.masteredCardIds || [],
+      },
       correctCount: state.correctCount + 1,
       floorTelemetry: {
         ...state.floorTelemetry,
@@ -3184,6 +3242,17 @@ export default function App() {
       studyCorrectStreak: 0,
       studyStruggledCardIds: missedWord ? appendUniqueValue(state.studyStruggledCardIds, missedWord.id) : state.studyStruggledCardIds,
       studyMasteryEvents: appendStudyMasteryEvent(state.studyMasteryEvents, masteryEvent),
+      runStudyStats: {
+        ...(state.runStudyStats || createRunStudyStats()),
+        reviews: (state.runStudyStats?.reviews || 0) + 1,
+        wrong: (state.runStudyStats?.wrong || 0) + 1,
+        reviewedCardIds: missedWord
+          ? appendUniqueValue(state.runStudyStats?.reviewedCardIds || [], missedWord.id)
+          : state.runStudyStats?.reviewedCardIds || [],
+        struggledCardIds: missedWord
+          ? appendUniqueValue(state.runStudyStats?.struggledCardIds || [], missedWord.id)
+          : state.runStudyStats?.struggledCardIds || [],
+      },
       floorTelemetry: {
         ...state.floorTelemetry,
         studyCardsReviewed: state.floorTelemetry.studyCardsReviewed + 1,
@@ -5241,6 +5310,7 @@ export default function App() {
       studyImprovedCardIds: snapshot.combat.studyImprovedCardIds || [],
       studyStruggledCardIds: snapshot.combat.studyStruggledCardIds || [],
       studyMasteryEvents: snapshot.combat.studyMasteryEvents || [],
+      runStudyStats: snapshot.combat.runStudyStats || createRunStudyStats(),
       studyEndReason: snapshot.combat.studyEndReason || null,
       turnQueue: refreshedTurnQueue,
       isPaused: false,
@@ -6350,6 +6420,7 @@ export default function App() {
                         const currentRating = activeDeck.cardRatings?.[card.id];
                         const isIntroduced = introducedIds.has(card.id) && currentRating !== "known";
                         const mastery = getCardMastery(card, save);
+                        const reviewStatus = isIntroduced ? getCardReviewStatus(card, save) : "";
 
                         return (
                           <div key={card.id} className="border-b border-[#0F3460]/70 p-4 last:border-b-0">
@@ -6372,6 +6443,15 @@ export default function App() {
                                   Studying · {getMasteryLabel(mastery)}
                                 </span>
                                 <span className="text-xs text-gray-500">{Math.round(mastery * 100)}% mastery</span>
+                                <span className={`rounded-full border px-2 py-1 text-xs font-bold ${
+                                  reviewStatus === "Needs attention"
+                                    ? "border-pink-300/40 bg-pink-300/10 text-pink-100"
+                                    : reviewStatus === "Due now"
+                                      ? "border-yellow-300/40 bg-yellow-300/10 text-yellow-100"
+                                      : "border-white/10 bg-black/20 text-gray-400"
+                                }`}>
+                                  {reviewStatus}
+                                </span>
                                 <button
                                   onClick={() => pauseStudyCard(card.id)}
                                   className="rounded-md border border-white/15 bg-black/20 px-3 py-1 text-xs font-bold text-gray-300 transition-all hover:bg-white/10"
@@ -7779,7 +7859,7 @@ export default function App() {
                 </section>
 
                 <section className="cute-panel flex min-h-0 flex-col justify-between overflow-hidden rounded-lg border border-[#0F3460] bg-[#16213E]/88 p-2 shadow-2xl sm:p-4">
-                  <div className="min-h-0">
+                  <div className="min-h-0 flex-1 overflow-auto pr-1">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 text-white">
@@ -7940,14 +8020,6 @@ export default function App() {
                           </button>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={endCommandWindow}
-                          disabled={combat.phase !== "answering"}
-                          className="flex w-full items-center justify-center rounded-md border border-white/10 bg-white/6 py-1.5 text-xs font-bold text-gray-200 transition-all hover:bg-white/10 disabled:opacity-45 sm:py-2"
-                        >
-                          End Window
-                        </button>
                       </div>
                     )}
 
@@ -7958,7 +8030,18 @@ export default function App() {
                     )}
                   </div>
 
-                  <div className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 sm:gap-4">
+                  {combat.mode === "command" && (
+                    <button
+                      type="button"
+                      onClick={endCommandWindow}
+                      disabled={combat.phase !== "answering"}
+                      className="mt-2 flex min-h-11 w-full shrink-0 items-center justify-center rounded-md border border-yellow-200/30 bg-yellow-300/12 px-3 py-2 text-sm font-black text-yellow-50 transition-all hover:bg-yellow-300/20 disabled:opacity-45"
+                    >
+                      End Commands
+                    </button>
+                  )}
+
+                  <div className="mt-2 flex shrink-0 items-center gap-2 border-t border-white/10 pt-2 sm:gap-4">
                     <PipploSprite traitIds={combat.runTraitIds} className="h-8 w-8 sm:h-12 sm:w-12" />
                     <div className="flex-1">
                       <div className="mb-1 flex justify-between text-xs">
@@ -9150,28 +9233,33 @@ export default function App() {
     const orbsEarned = floor * 10 + (lastCombat?.correctCount || 0) * 2 + (lastCombat?.maxCombo || 0) * 5;
     const bestFloor = activeDeckStats.bestFloor;
     const isNewBest = floor >= bestFloor;
+    const runStudyStats = lastCombat?.runStudyStats || createRunStudyStats();
+    const struggledCards = runStudyStats.struggledCardIds
+      .map(cardId => activeDeck.cards.find(card => card.id === cardId))
+      .filter((card): card is VocabWord => Boolean(card))
+      .slice(0, 4);
     
     return (
-      <div className="relative w-full h-screen overflow-hidden bg-[#1A1A2E]">
+      <div className="relative min-h-[100dvh] w-full overflow-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-48" style={assetBackground("/bg_combat_blob.png")} />
         <div className="absolute inset-0 bg-gradient-to-b from-red-900/20 to-[#1A1A2E]" />
         
-        <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
+        <div className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-start px-4 py-6 sm:justify-center">
           <h2 
-            className="text-5xl font-bold mb-2"
-            style={{ color: "#FF4757", textShadow: "0 0 30px rgba(255,71,87,0.5)", fontFamily: "Cinzel, Georgia, serif" }}
+            className="mb-1 text-4xl font-black sm:mb-2 sm:text-5xl"
+            style={{ color: "#FF7895", textShadow: "0 0 24px rgba(255,120,149,0.45)" }}
           >
-            DEFEATED
+            PIPPLO NEEDS A NAP
           </h2>
           
-          <p className="text-gray-400 mb-6 text-lg">
+          <p className="mb-3 text-sm text-gray-300 sm:mb-5 sm:text-lg">
             You reached <span className="text-white font-bold">Floor {floor}</span>
             {isNewBest && <span className="text-yellow-400 ml-2">(New Best!)</span>}
           </p>
           
           {/* Stats */}
-          <div className="bg-[#16213E]/80 rounded-2xl p-6 border border-[#0F3460] max-w-md w-full mb-6">
-            <div className="grid grid-cols-2 gap-4">
+          <div className="mb-3 w-full max-w-md rounded-xl border border-cyan-200/20 bg-[#16213E]/88 p-4 shadow-xl sm:mb-4">
+            <div className="grid grid-cols-2 gap-3">
               <div className="text-center">
                 <div className="text-2xl font-bold text-white">{lastCombat?.correctCount || 0}</div>
                 <div className="text-xs text-gray-500">Correct Answers</div>
@@ -9190,17 +9278,40 @@ export default function App() {
               </div>
             </div>
             
-            <div className="mt-4 pt-4 border-t border-[#0F3460] flex items-center justify-center gap-2">
+            <div className="mt-3 flex items-center justify-center gap-2 border-t border-[#0F3460] pt-3">
               <img src={assetUrl("/wisdom_orb_blob.svg")} alt="" className="h-6 w-6" />
               <span className="text-yellow-400 font-bold text-lg">+{orbsEarned} Wisdom Orbs</span>
             </div>
           </div>
+
+          <div className="mb-3 w-full max-w-md rounded-xl border border-green-200/25 bg-[#eafff6]/95 p-4 text-[#166b73] shadow-xl sm:mb-4">
+            <div className="mb-3 flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-pink-500" />
+              <h3 className="text-base font-black">Study Progress This Expedition</h3>
+            </div>
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div><div className="text-xl font-black">{runStudyStats.reviews}</div><div className="text-[10px] font-bold">Reviews</div></div>
+              <div><div className="text-xl font-black">{formatAp(runStudyStats.apEarned)}</div><div className="text-[10px] font-bold">AP earned</div></div>
+              <div><div className="text-xl font-black">{runStudyStats.improvedCardIds.length}</div><div className="text-[10px] font-bold">Improving</div></div>
+              <div><div className="text-xl font-black">{runStudyStats.masteredCardIds.length}</div><div className="text-[10px] font-bold">Mastered</div></div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[#166b73]/15 pt-3 text-xs font-bold">
+              <span className="rounded-full bg-white/70 px-2 py-1">{deckStudySummary.due} due now</span>
+              <span className="rounded-full bg-white/70 px-2 py-1">{deckStudySummary.needsAttention} need attention</span>
+              <span className="rounded-full bg-white/70 px-2 py-1">{runStudyStats.reviewedCardIds.length} unique reviewed</span>
+            </div>
+            {struggledCards.length > 0 && (
+              <div className="mt-3 rounded-md bg-pink-100/75 px-3 py-2 text-xs font-bold text-pink-800">
+                Review next: {struggledCards.map(card => card.word).join(", ")}
+              </div>
+            )}
+          </div>
           
           {/* Action buttons */}
-          <div className="flex gap-4">
+          <div className="grid w-full max-w-md grid-cols-1 gap-2 sm:grid-cols-3">
             <button
               onClick={() => setScreen("meta")}
-              className="flex items-center gap-2 px-6 py-3 bg-[#0F3460] hover:bg-[#1a4a7a] rounded-lg text-white font-bold transition-all"
+              className="flex items-center justify-center gap-2 rounded-lg bg-[#0F3460] px-4 py-3 font-bold text-white transition-all hover:bg-[#1a4a7a]"
             >
               <Star className="w-5 h-5 text-yellow-400" />
               Discoveries
@@ -9210,14 +9321,14 @@ export default function App() {
                 setCombat(null);
                 setScreen("classSelect");
               }}
-              className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold transition-all hover:scale-105"
+              className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-3 font-bold text-white transition-all hover:bg-green-500"
             >
               <RotateCcw className="w-5 h-5" />
               Fresh Expedition
             </button>
             <button
               onClick={goToMenu}
-              className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 rounded-lg text-white transition-all"
+              className="flex items-center justify-center gap-2 rounded-lg bg-white/10 px-4 py-3 text-white transition-all hover:bg-white/20"
             >
               <Home className="w-5 h-5" />
               Menu
