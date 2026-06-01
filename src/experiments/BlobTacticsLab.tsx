@@ -5,6 +5,7 @@ import {
   Award,
   Beaker,
   CircleDot,
+  Dna,
   Droplets,
   Heart,
   HelpCircle,
@@ -21,7 +22,7 @@ import {
   BLOB_BOARD_ROWS,
   BLOB_RUN_ROOMS,
   MUTATION_DEFS,
-  STICKER_INFO,
+  ACTION_TILE_INFO,
   applyFakeStudyResult,
   claimBlobMutation,
   createInitialBlobTacticsState,
@@ -29,17 +30,18 @@ import {
   getBlobletAt,
   getBoardTileKey,
   getEnemyIntent,
-  getStickerDisabledReason,
+  getEnemyPreview,
+  getActionTileDisabledReason,
   getTileEffectAt,
   getValidTargetKeys,
   isEnemyAt,
   isPipploAt,
-  selectSticker,
+  selectActionTile,
   tapBoardTile,
   type BlobPosition,
   type BlobMutationId,
-  type BlobSticker,
-  type BlobStickerType,
+  type BlobActionTile,
+  type BlobActionTileType,
   type BlobStudyGrade,
 } from "./blobTactics";
 import "./BlobTacticsLab.css";
@@ -48,9 +50,10 @@ interface BlobTacticsLabProps {
   onExit: () => void;
 }
 
-const STICKER_ICONS: Record<BlobStickerType, ReactNode> = {
+const ACTION_TILE_ICONS: Record<BlobActionTileType, ReactNode> = {
   move: <Move />,
   hop: <Move />,
+  bump: <ArrowRight />,
   slap: <Swords />,
   stretch: <ArrowRight />,
   bellyFlop: <CircleDot />,
@@ -68,46 +71,56 @@ const STUDY_GRADES: Array<{
   detail: string;
   accent: string;
 }> = [
-  { grade: "bad", title: "Messy", detail: "3 stickers + sour", accent: "#d982ba" },
-  { grade: "good", title: "Good", detail: "4 stickers + Mass", accent: "#54bfb4" },
-  { grade: "great", title: "Great", detail: "5 stickers + upgrade", accent: "#ff866c" },
+  { grade: "bad", title: "Messy", detail: "3 tiles + sour", accent: "#d982ba" },
+  { grade: "good", title: "Good", detail: "4 tiles + Mass", accent: "#54bfb4" },
+  { grade: "great", title: "Great", detail: "5 tiles + upgrade", accent: "#ff866c" },
 ];
 
-function getStickerPrompt(type: BlobStickerType, hasSource: boolean, enemyName: string): string {
+function getActionTilePrompt(type: BlobActionTileType, hasSource: boolean, enemyName: string): string {
   if (type === "slap") return hasSource ? `Tap ${enemyName}` : "Tap Pipplo or an adjacent bloblet";
   if (type === "spit") return hasSource ? `Tap ${enemyName}` : "Tap a bloblet to sacrifice";
   if (type === "goo") return hasSource ? "Tap a neighboring empty tile" : "Tap a bloblet";
   if (type === "rejoin") return "Tap an adjacent bloblet";
   if (type === "split" || type === "bubble" || type === "sourSplit") return "Tap an empty tile beside Pipplo";
-  if (type === "stretch" || type === "bellyFlop") return `Tap ${enemyName}`;
+  if (type === "stretch" || type === "bellyFlop" || type === "bump") return `Tap ${enemyName}`;
   return "Tap a highlighted tile";
 }
 
-function StickerCard({
-  sticker,
+function ActionTile({
+  tile,
   selected,
   disabledReason,
   onClick,
 }: {
-  sticker: BlobSticker;
+  tile: BlobActionTile;
   selected: boolean;
   disabledReason: string | null;
   onClick: () => void;
 }) {
-  const info = STICKER_INFO[sticker.type];
+  const info = ACTION_TILE_INFO[tile.type];
   return (
     <button
       type="button"
-      className={`blob-lab-sticker ${selected ? "is-selected" : ""} ${sticker.sour ? "is-sour" : ""}`}
-      style={{ "--sticker-accent": info.accent } as React.CSSProperties}
+      className={`blob-lab-action-tile ${selected ? "is-selected" : ""} ${tile.sour ? "is-sour" : ""}`}
+      style={{ "--tile-accent": info.accent } as React.CSSProperties}
       disabled={Boolean(disabledReason)}
       onClick={onClick}
       title={disabledReason || info.description}
     >
-      <span className="blob-lab-sticker-icon">{STICKER_ICONS[sticker.type]}</span>
-      <span className="blob-lab-sticker-label">{info.shortName}</span>
-      {info.massCost > 0 && <span className="blob-lab-sticker-cost">{info.massCost} Mass</span>}
-      {sticker.upgraded && <span className="blob-lab-sticker-upgrade">+</span>}
+      <span className="blob-lab-action-tile-face">
+        <span className="blob-lab-action-tile-top">
+          <span className="blob-lab-action-tile-icon">{ACTION_TILE_ICONS[tile.type]}</span>
+        </span>
+        <span className="blob-lab-action-tile-divider" />
+        <span className="blob-lab-action-tile-bottom">
+          <span className="blob-lab-action-tile-label">{info.shortName}</span>
+          <span className="blob-lab-action-tile-pips" aria-hidden="true">
+            {Array.from({ length: Math.max(1, info.massCost) }, (_, index) => <i key={index} />)}
+          </span>
+          <span className="blob-lab-action-tile-cost">{info.massCost > 0 ? `${info.massCost} Mass` : "Free"}</span>
+        </span>
+      </span>
+      {tile.upgraded && <span className="blob-lab-action-tile-upgrade">+</span>}
     </button>
   );
 }
@@ -140,9 +153,12 @@ function StudySimulator({ onChoose }: { onChoose: (grade: BlobStudyGrade) => voi
 export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
   const [state, setState] = useState(createInitialBlobTacticsState);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [traitsOpen, setTraitsOpen] = useState(false);
   const validTargetKeys = useMemo(() => getValidTargetKeys(state), [state]);
-  const selectedSticker = state.hand.find(sticker => sticker.id === state.selectedStickerId) || null;
+  const selectedTile = state.hand.find(tile => tile.id === state.selectedActionTileId) || null;
   const enemyIntent = getEnemyIntent(state);
+  const enemyPreview = useMemo(() => getEnemyPreview(state), [state]);
+  const chainStep = state.tilesPlayedThisTurn % 3;
 
   useEffect(() => {
     if (state.animation === "idle") return;
@@ -154,7 +170,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
 
   const reset = () => setState(createInitialBlobTacticsState());
   const chooseStudyGrade = (grade: BlobStudyGrade) => setState(current => applyFakeStudyResult(current, grade));
-  const chooseSticker = (sticker: BlobSticker) => setState(current => selectSticker(current, sticker.id));
+  const chooseActionTile = (tile: BlobActionTile) => setState(current => selectActionTile(current, tile.id));
   const tapTile = (position: BlobPosition) => setState(current => tapBoardTile(current, position));
   const claimMutation = (mutationId: BlobMutationId) => setState(current => claimBlobMutation(current, mutationId));
 
@@ -189,7 +205,10 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             aria-label={`Room ${index + 1}${index + 1 === BLOB_RUN_ROOMS ? ", guardian" : ""}`}
           />
         ))}
-        <strong>{state.mutations.length} traits</strong>
+        <button type="button" className="blob-lab-trait-button" onClick={() => setTraitsOpen(true)}>
+          <Dna />
+          {state.mutations.length} traits
+        </button>
       </section>
 
       <section className="blob-lab-status-row" aria-label="Battle status">
@@ -232,16 +251,22 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             const pipplo = isPipploAt(state, position);
             const enemy = isEnemyAt(state, position);
             const valid = validTargetKeys.has(tileKey);
+            const pathPreview = enemyPreview.pathKeys.has(tileKey);
+            const dangerPreview = enemyPreview.dangerKeys.has(tileKey);
+            const hazardPreview = enemyPreview.hazardKeys.has(tileKey);
             const isSource = Boolean(bloblet && bloblet.id === state.actionSourceId) || (pipplo && state.actionSourceId === "pipplo");
             return (
               <button
                 key={tileKey}
                 type="button"
-                className={`blob-lab-tile ${valid ? "is-valid" : ""} ${isSource ? "is-source" : ""}`}
+                className={`blob-lab-tile ${valid ? "is-valid" : ""} ${isSource ? "is-source" : ""} ${pathPreview ? "is-threat-path" : ""} ${dangerPreview ? "is-threat-danger" : ""} ${hazardPreview ? "is-threat-hazard" : ""}`}
                 onClick={() => tapTile(position)}
                 aria-label={`Tile ${position.row + 1}, ${position.col + 1}${pipplo ? ", Pipplo" : ""}${enemy ? `, ${state.enemy.name}` : ""}${bloblet ? `, ${bloblet.kind} bloblet` : ""}${tileEffect ? `, ${tileEffect.type}` : ""}`}
               >
                 {tileEffect && <span className={`blob-lab-tile-effect is-${tileEffect.type}`} />}
+                {pathPreview && <span className="blob-lab-threat-marker is-path" aria-hidden="true" />}
+                {dangerPreview && <span className="blob-lab-threat-marker is-danger" aria-hidden="true" />}
+                {hazardPreview && <span className="blob-lab-threat-marker is-hazard" aria-hidden="true" />}
                 {pipplo && (
                   <span className="blob-lab-pipplo" aria-hidden="true">
                     <i className="blob-lab-antenna" />
@@ -271,6 +296,11 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             );
           })}
         </div>
+        <div className="blob-lab-board-legend" aria-label="Enemy preview legend">
+          <span><i className="is-path" /> enemy path</span>
+          <span><i className="is-danger" /> danger</span>
+          <span><i className="is-hazard" /> hazard</span>
+        </div>
       </section>
 
       <section className={`blob-lab-notice is-${state.notice.tone}`} aria-live="polite">
@@ -281,28 +311,35 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
       {state.phase === "study" && <StudySimulator onChoose={chooseStudyGrade} />}
 
       {state.phase === "player" && (
-        <section className="blob-lab-command-tray" aria-label="Sticker hand">
+        <section className="blob-lab-command-tray" aria-label="Tile hand">
           <div className="blob-lab-tray-heading">
             <div>
-              <p className="blob-lab-eyebrow">Sticker hand</p>
-              <strong>{selectedSticker ? getStickerPrompt(selectedSticker.type, Boolean(state.actionSourceId), state.enemy.name) : "Pick a sticker, then tap highlighted tiles"}</strong>
+              <p className="blob-lab-eyebrow">Tile hand</p>
+              <strong>{selectedTile ? getActionTilePrompt(selectedTile.type, Boolean(state.actionSourceId), state.enemy.name) : "Pick a tile, then tap highlighted tiles"}</strong>
+              <div className="blob-lab-chain" title="Every third tile restores Mass">
+                <span>Bounce chain</span>
+                {[0, 1, 2].map(index => <i key={index} className={index < chainStep ? "is-filled" : ""} />)}
+                <b className={state.tilesPlayedThisTurn > 0 && chainStep === 0 ? "is-popped" : ""}>
+                  {state.tilesPlayedThisTurn > 0 && chainStep === 0 ? "Mass popped!" : `${state.mutations.includes("rhythmJelly") ? "+2" : "+1"} Mass`}
+                </b>
+              </div>
             </div>
             <button type="button" className="blob-lab-end-button" onClick={() => setState(endBlobTacticsTurn)}>
               End Turn
               <ArrowRight />
             </button>
           </div>
-          <div className="blob-lab-sticker-row">
-            {state.hand.map(sticker => (
-              <StickerCard
-                key={sticker.id}
-                sticker={sticker}
-                selected={state.selectedStickerId === sticker.id}
-                disabledReason={getStickerDisabledReason(state, sticker)}
-                onClick={() => chooseSticker(sticker)}
+          <div className="blob-lab-action-tile-row">
+            {state.hand.map(tile => (
+              <ActionTile
+                key={tile.id}
+                tile={tile}
+                selected={state.selectedActionTileId === tile.id}
+                disabledReason={getActionTileDisabledReason(state, tile)}
+                onClick={() => chooseActionTile(tile)}
               />
             ))}
-            {state.hand.length === 0 && <p className="blob-lab-empty-hand">No stickers left. End the turn when you are ready.</p>}
+            {state.hand.length === 0 && <p className="blob-lab-empty-hand">No tiles left. End the turn when you are ready.</p>}
           </div>
         </section>
       )}
@@ -357,9 +394,34 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             </button>
             <p className="blob-lab-eyebrow">Tiny tactics primer</p>
             <h2>Split yourself to make options</h2>
-            <p>Study creates temporary Stickers. Stickers move Pipplo, crack Shell, or bud off little helpers. Use every useful sticker, then end the turn.</p>
+            <p>Study creates temporary tiles. Tiles move Pipplo, crack Shell, or bud off little helpers. Every third tile played restores Mass.</p>
             <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors to recover Mass.</p>
-            <p>This micro-run has five rooms. Absorb each defeated enemy, pick a body mutation, and adapt to new enemy intents.</p>
+            <p>The board previews enemy paths, attacks, and hazards before the turn ends. Absorb each defeated enemy, pick a body mutation, and adapt.</p>
+          </section>
+        </aside>
+      )}
+
+      {traitsOpen && (
+        <aside className="blob-lab-help-backdrop" onClick={() => setTraitsOpen(false)}>
+          <section className="blob-lab-help-sheet blob-lab-traits-sheet" onClick={event => event.stopPropagation()}>
+            <button type="button" className="blob-lab-close-button" onClick={() => setTraitsOpen(false)} aria-label="Close absorbed traits">
+              <X />
+            </button>
+            <p className="blob-lab-eyebrow">Absorbed traits</p>
+            <h2>Pipplo changes as it eats</h2>
+            {state.mutations.length === 0
+              ? <p>Defeat the first enemy to absorb a body mutation.</p>
+              : <div className="blob-lab-trait-list">
+                  {state.mutations.map(mutationId => {
+                    const mutation = MUTATION_DEFS[mutationId];
+                    return (
+                      <div key={mutationId} style={{ "--mutation-accent": mutation.accent } as React.CSSProperties}>
+                        <strong>{mutation.name}</strong>
+                        <span>{mutation.description}</span>
+                      </div>
+                    );
+                  })}
+                </div>}
           </section>
         </aside>
       )}

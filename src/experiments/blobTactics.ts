@@ -3,9 +3,10 @@ export const BLOB_BOARD_COLS = 5;
 export const BLOB_RUN_ROOMS = 5;
 
 export type BlobStudyGrade = "bad" | "good" | "great";
-export type BlobStickerType =
+export type BlobActionTileType =
   | "move"
   | "hop"
+  | "bump"
   | "slap"
   | "stretch"
   | "bellyFlop"
@@ -23,7 +24,9 @@ export type BlobMutationId =
   | "stickySkin"
   | "bubbleWrap"
   | "sharpCheeks"
-  | "studySnacks";
+  | "studySnacks"
+  | "rhythmJelly"
+  | "rollingShoulder";
 export type BlobTacticsPhase = "study" | "player" | "reward" | "won" | "lost";
 export type TileEffect = "goo" | "spore";
 
@@ -32,9 +35,9 @@ export interface BlobPosition {
   col: number;
 }
 
-export interface BlobSticker {
+export interface BlobActionTile {
   id: string;
-  type: BlobStickerType;
+  type: BlobActionTileType;
   upgraded?: boolean;
   sour?: boolean;
 }
@@ -88,8 +91,8 @@ export interface BlobTacticsState {
   enemy: BlobEnemy;
   bloblets: Bloblet[];
   tileEffects: BlobTileEffect[];
-  hand: BlobSticker[];
-  selectedStickerId: string | null;
+  hand: BlobActionTile[];
+  selectedActionTileId: string | null;
   actionSourceId: string | null;
   notice: BlobTacticsNotice;
   nextId: number;
@@ -99,11 +102,12 @@ export interface BlobTacticsState {
   rewardChoices: BlobMutationId[];
   absorbedEnemies: BlobEnemyKind[];
   springFeetUsedThisRoom: boolean;
+  tilesPlayedThisTurn: number;
 }
 
 export interface BlobStudyResult {
   grade: BlobStudyGrade;
-  stickerCount: number;
+  tileCount: number;
   massGain: number;
   upgradedCount: number;
   sourCount: number;
@@ -116,6 +120,12 @@ export interface BlobEnemyIntent {
   targetId: string | null;
 }
 
+export interface BlobEnemyPreview {
+  pathKeys: Set<string>;
+  dangerKeys: Set<string>;
+  hazardKeys: Set<string>;
+}
+
 export interface BlobMutationDef {
   id: BlobMutationId;
   name: string;
@@ -123,7 +133,7 @@ export interface BlobMutationDef {
   accent: string;
 }
 
-export const STICKER_INFO: Record<BlobStickerType, {
+export const ACTION_TILE_INFO: Record<BlobActionTileType, {
   name: string;
   shortName: string;
   description: string;
@@ -142,6 +152,13 @@ export const STICKER_INFO: Record<BlobStickerType, {
     shortName: "Hop",
     description: "Bounce Pipplo up to two tiles away.",
     accent: "#45b4d1",
+    massCost: 0,
+  },
+  bump: {
+    name: "Bump",
+    shortName: "Bump",
+    description: "Nudge an adjacent enemy backward and lightly crack Shell.",
+    accent: "#f5aa49",
     massCost: 0,
   },
   slap: {
@@ -246,9 +263,21 @@ export const MUTATION_DEFS: Record<BlobMutationId, BlobMutationDef> = {
     description: "Good and Great study hands restore 1 additional Mass.",
     accent: "#ffd84d",
   },
+  rhythmJelly: {
+    id: "rhythmJelly",
+    name: "Rhythm Jelly",
+    description: "Every third tile played restores 2 Mass instead of 1.",
+    accent: "#ef78b2",
+  },
+  rollingShoulder: {
+    id: "rollingShoulder",
+    name: "Rolling Shoulder",
+    description: "Bump deals +1 HP and Shell damage before pushing.",
+    accent: "#f5aa49",
+  },
 };
 
-const NORMAL_STICKER_POOL: BlobStickerType[] = [
+const NORMAL_ACTION_TILE_POOL: BlobActionTileType[] = [
   "move",
   "slap",
   "stretch",
@@ -259,6 +288,7 @@ const NORMAL_STICKER_POOL: BlobStickerType[] = [
   "bubble",
   "hop",
   "bellyFlop",
+  "bump",
 ];
 
 const samePosition = (a: BlobPosition, b: BlobPosition) => a.row === b.row && a.col === b.col;
@@ -288,17 +318,17 @@ const withNotice = (
   notice: { id: state.notice.id + 1, title, detail, tone },
 });
 
-const makeSticker = (
-  type: BlobStickerType,
+const makeActionTile = (
+  type: BlobActionTileType,
   id: number,
   upgraded = false,
   sour = false,
-): BlobSticker => ({ id: `sticker-${id}`, type, upgraded, sour });
+): BlobActionTile => ({ id: `tile-${id}`, type, upgraded, sour });
 
 const getStudyResult = (grade: BlobStudyGrade): BlobStudyResult => {
-  if (grade === "great") return { grade, stickerCount: 5, massGain: 1, upgradedCount: 1, sourCount: 0 };
-  if (grade === "bad") return { grade, stickerCount: 3, massGain: 0, upgradedCount: 0, sourCount: 1 };
-  return { grade, stickerCount: 4, massGain: 1, upgradedCount: 0, sourCount: 0 };
+  if (grade === "great") return { grade, tileCount: 5, massGain: 1, upgradedCount: 1, sourCount: 0 };
+  if (grade === "bad") return { grade, tileCount: 3, massGain: 0, upgradedCount: 0, sourCount: 1 };
+  return { grade, tileCount: 4, massGain: 1, upgradedCount: 0, sourCount: 0 };
 };
 
 const createEnemyForRoom = (room: number): BlobEnemy => {
@@ -383,12 +413,12 @@ export function createInitialBlobTacticsState(): BlobTacticsState {
     bloblets: [],
     tileEffects: [],
     hand: [],
-    selectedStickerId: null,
+    selectedActionTileId: null,
     actionSourceId: null,
     notice: {
       id: 1,
       title: "Room 1: crack the Shell",
-      detail: "Study to grow a sticker hand. Spit Chunk is especially good at breaking Shell.",
+      detail: "Study to grow a tile hand. Spit Chunk is especially good at breaking Shell.",
       tone: "plain",
     },
     nextId: 10,
@@ -398,47 +428,52 @@ export function createInitialBlobTacticsState(): BlobTacticsState {
     rewardChoices: [],
     absorbedEnemies: [],
     springFeetUsedThisRoom: false,
+    tilesPlayedThisTurn: 0,
   };
 }
 
-export function createStickersFromStudyResult(
+export function createActionTilesFromStudyResult(
   result: BlobStudyResult,
   startingId: number,
-): { stickers: BlobSticker[]; nextId: number } {
+): { tiles: BlobActionTile[]; nextId: number } {
   let nextId = startingId;
-  const stickers: BlobSticker[] = [];
+  const tiles: BlobActionTile[] = [];
   const offset = result.grade === "great" ? 2 : result.grade === "good" ? 0 : 4;
-  for (let index = 0; index < result.stickerCount; index += 1) {
-    const type = NORMAL_STICKER_POOL[(startingId + offset + (index * 3)) % NORMAL_STICKER_POOL.length];
-    stickers.push(makeSticker(type, nextId, index < result.upgradedCount));
+  for (let index = 0; index < result.tileCount; index += 1) {
+    const type = NORMAL_ACTION_TILE_POOL[(startingId + offset + (index * 3)) % NORMAL_ACTION_TILE_POOL.length];
+    tiles.push(makeActionTile(type, nextId, index < result.upgradedCount));
     nextId += 1;
+  }
+  if (!tiles.some(tile => tile.type === "move" || tile.type === "hop") && tiles[0]) {
+    tiles[0] = { ...tiles[0], type: startingId % 2 === 0 ? "move" : "hop" };
   }
   for (let index = 0; index < result.sourCount; index += 1) {
-    stickers.push(makeSticker("sourSplit", nextId, false, true));
+    tiles.push(makeActionTile("sourSplit", nextId, false, true));
     nextId += 1;
   }
-  return { stickers, nextId };
+  return { tiles, nextId };
 }
 
 export function applyFakeStudyResult(state: BlobTacticsState, grade: BlobStudyGrade): BlobTacticsState {
   if (state.phase !== "study") return state;
   const result = getStudyResult(grade);
-  const generated = createStickersFromStudyResult(result, state.nextId);
+  const generated = createActionTilesFromStudyResult(result, state.nextId);
   const snackBonus = grade !== "bad" && state.mutations.includes("studySnacks") ? 1 : 0;
   const massGain = result.massGain + snackBonus;
   return withNotice({
     ...state,
     phase: "player",
     mass: Math.min(state.massMax, state.mass + massGain),
-    hand: generated.stickers,
-    selectedStickerId: null,
+    hand: generated.tiles,
+    selectedActionTileId: null,
     actionSourceId: null,
     nextId: generated.nextId,
     lastStudyGrade: grade,
+    tilesPlayedThisTurn: 0,
   }, grade === "great" ? "Great study!" : grade === "good" ? "Good study" : "Messy study",
   grade === "bad"
-    ? "Three regular stickers and one risky Sour Split appeared."
-    : `${result.stickerCount} stickers appeared${massGain ? ` and Pipplo recovered ${massGain} Mass` : ""}.`,
+    ? "Three regular tiles and one risky Sour Split appeared."
+    : `${result.tileCount} tiles appeared${massGain ? ` and Pipplo recovered ${massGain} Mass` : ""}.`,
   grade === "bad" ? "warn" : "good");
 }
 
@@ -449,7 +484,7 @@ const isOccupied = (state: BlobTacticsState, position: BlobPosition) => (
 );
 
 const getBloblet = (state: BlobTacticsState, id: string | null) => state.bloblets.find(bloblet => bloblet.id === id) || null;
-const getSelectedSticker = (state: BlobTacticsState) => state.hand.find(sticker => sticker.id === state.selectedStickerId) || null;
+const getSelectedActionTile = (state: BlobTacticsState) => state.hand.find(tile => tile.id === state.selectedActionTileId) || null;
 
 const getSlapSources = (state: BlobTacticsState): string[] => {
   const sources: string[] = [];
@@ -472,8 +507,8 @@ const getEmptyTargetsWithin = (state: BlobTacticsState, source: BlobPosition, ra
 };
 
 export function getValidTargetKeys(state: BlobTacticsState): Set<string> {
-  const sticker = getSelectedSticker(state);
-  if (!sticker || state.phase !== "player") return new Set();
+  const tile = getSelectedActionTile(state);
+  if (!tile || state.phase !== "player") return new Set();
   const keys = new Set<string>();
   const addEmptyAdjacent = (position: BlobPosition) => {
     adjacentPositions(position).forEach(target => {
@@ -481,23 +516,24 @@ export function getValidTargetKeys(state: BlobTacticsState): Set<string> {
     });
   };
 
-  if (sticker.type === "move") addEmptyAdjacent(state.pipploPosition);
-  if (sticker.type === "hop") getEmptyTargetsWithin(state, state.pipploPosition, 2).forEach(target => keys.add(positionKey(target)));
-  if (sticker.type === "split" || sticker.type === "bubble" || sticker.type === "sourSplit") {
-    if (state.mass >= STICKER_INFO[sticker.type].massCost) addEmptyAdjacent(state.pipploPosition);
+  if (tile.type === "move") addEmptyAdjacent(state.pipploPosition);
+  if (tile.type === "hop") getEmptyTargetsWithin(state, state.pipploPosition, 2).forEach(target => keys.add(positionKey(target)));
+  if (tile.type === "bump" && distance(state.pipploPosition, state.enemy.position) === 1) keys.add(positionKey(state.enemy.position));
+  if (tile.type === "split" || tile.type === "bubble" || tile.type === "sourSplit") {
+    if (state.mass >= ACTION_TILE_INFO[tile.type].massCost) addEmptyAdjacent(state.pipploPosition);
   }
-  if (sticker.type === "rejoin") {
+  if (tile.type === "rejoin") {
     state.bloblets
       .filter(bloblet => distance(bloblet.position, state.pipploPosition) === 1)
       .forEach(bloblet => keys.add(positionKey(bloblet.position)));
   }
-  if (sticker.type === "stretch" && state.mass >= STICKER_INFO.stretch.massCost && distance(state.pipploPosition, state.enemy.position) <= 2) {
+  if (tile.type === "stretch" && state.mass >= ACTION_TILE_INFO.stretch.massCost && distance(state.pipploPosition, state.enemy.position) <= 2) {
     keys.add(positionKey(state.enemy.position));
   }
-  if (sticker.type === "bellyFlop" && state.mass >= STICKER_INFO.bellyFlop.massCost && distance(state.pipploPosition, state.enemy.position) === 1) {
+  if (tile.type === "bellyFlop" && state.mass >= ACTION_TILE_INFO.bellyFlop.massCost && distance(state.pipploPosition, state.enemy.position) === 1) {
     keys.add(positionKey(state.enemy.position));
   }
-  if (sticker.type === "slap") {
+  if (tile.type === "slap") {
     if (!state.actionSourceId) {
       getSlapSources(state).forEach(sourceId => {
         keys.add(positionKey(sourceId === "pipplo" ? state.pipploPosition : getBloblet(state, sourceId)!.position));
@@ -506,14 +542,14 @@ export function getValidTargetKeys(state: BlobTacticsState): Set<string> {
       keys.add(positionKey(state.enemy.position));
     }
   }
-  if (sticker.type === "spit") {
+  if (tile.type === "spit") {
     if (!state.actionSourceId) {
       state.bloblets.forEach(bloblet => keys.add(positionKey(bloblet.position)));
     } else if (getBloblet(state, state.actionSourceId) && distance(getBloblet(state, state.actionSourceId)!.position, state.enemy.position) <= 3) {
       keys.add(positionKey(state.enemy.position));
     }
   }
-  if (sticker.type === "goo") {
+  if (tile.type === "goo") {
     if (!state.actionSourceId) {
       state.bloblets.forEach(bloblet => keys.add(positionKey(bloblet.position)));
     } else {
@@ -524,36 +560,45 @@ export function getValidTargetKeys(state: BlobTacticsState): Set<string> {
   return keys;
 }
 
-export function getStickerDisabledReason(state: BlobTacticsState, sticker: BlobSticker): string | null {
+export function getActionTileDisabledReason(state: BlobTacticsState, tile: BlobActionTile): string | null {
   if (state.phase !== "player") return "Finish studying first.";
-  const cost = STICKER_INFO[sticker.type].massCost;
+  const cost = ACTION_TILE_INFO[tile.type].massCost;
   if (state.mass < cost) return `Needs ${cost} Mass.`;
-  if ((sticker.type === "spit" || sticker.type === "goo") && state.bloblets.length === 0) return "Needs a bloblet.";
-  if (sticker.type === "rejoin" && !state.bloblets.some(bloblet => distance(bloblet.position, state.pipploPosition) === 1)) return "No adjacent bloblet.";
-  if (sticker.type === "stretch" && distance(state.pipploPosition, state.enemy.position) > 2) return "Enemy is too far away.";
-  if (sticker.type === "bellyFlop" && distance(state.pipploPosition, state.enemy.position) !== 1) return "Pipplo must be beside the enemy.";
-  if (sticker.type === "slap" && getSlapSources(state).length === 0) return "Nobody can reach the enemy.";
+  if ((tile.type === "spit" || tile.type === "goo") && state.bloblets.length === 0) return "Needs a bloblet.";
+  if (tile.type === "rejoin" && !state.bloblets.some(bloblet => distance(bloblet.position, state.pipploPosition) === 1)) return "No adjacent bloblet.";
+  if (tile.type === "stretch" && distance(state.pipploPosition, state.enemy.position) > 2) return "Enemy is too far away.";
+  if (tile.type === "bellyFlop" && distance(state.pipploPosition, state.enemy.position) !== 1) return "Pipplo must be beside the enemy.";
+  if (tile.type === "bump" && distance(state.pipploPosition, state.enemy.position) !== 1) return "Pipplo must be beside the enemy.";
+  if (tile.type === "slap" && getSlapSources(state).length === 0) return "Nobody can reach the enemy.";
   return null;
 }
 
-export function selectSticker(state: BlobTacticsState, stickerId: string): BlobTacticsState {
-  const sticker = state.hand.find(entry => entry.id === stickerId);
-  if (!sticker) return state;
-  const reason = getStickerDisabledReason(state, sticker);
-  if (reason) return withNotice(state, STICKER_INFO[sticker.type].name, reason, "warn");
+export function selectActionTile(state: BlobTacticsState, tileId: string): BlobTacticsState {
+  const tile = state.hand.find(entry => entry.id === tileId);
+  if (!tile) return state;
+  const reason = getActionTileDisabledReason(state, tile);
+  if (reason) return withNotice(state, ACTION_TILE_INFO[tile.type].name, reason, "warn");
   return {
     ...state,
-    selectedStickerId: state.selectedStickerId === stickerId ? null : stickerId,
+    selectedActionTileId: state.selectedActionTileId === tileId ? null : tileId,
     actionSourceId: null,
   };
 }
 
-const consumeSelectedSticker = (state: BlobTacticsState): BlobTacticsState => ({
-  ...state,
-  hand: state.hand.filter(sticker => sticker.id !== state.selectedStickerId),
-  selectedStickerId: null,
-  actionSourceId: null,
-});
+const consumeSelectedActionTile = (state: BlobTacticsState): BlobTacticsState => {
+  const tilesPlayedThisTurn = state.tilesPlayedThisTurn + 1;
+  const chainMass = tilesPlayedThisTurn % 3 === 0
+    ? state.mutations.includes("rhythmJelly") ? 2 : 1
+    : 0;
+  return {
+    ...state,
+    mass: Math.min(state.massMax, state.mass + chainMass),
+    hand: state.hand.filter(tile => tile.id !== state.selectedActionTileId),
+    selectedActionTileId: null,
+    actionSourceId: null,
+    tilesPlayedThisTurn,
+  };
+};
 
 const getRewardChoices = (state: BlobTacticsState): BlobMutationId[] => {
   const available = (Object.keys(MUTATION_DEFS) as BlobMutationId[]).filter(id => !state.mutations.includes(id));
@@ -577,7 +622,7 @@ const dealDamageToEnemy = (state: BlobTacticsState, damage: number, shellDamage:
     rewardChoices: defeated && !finalRoom ? getRewardChoices(state) : [],
     absorbedEnemies: defeated ? [...state.absorbedEnemies, state.enemy.kind] : state.absorbedEnemies,
     hand: defeated ? [] : state.hand,
-    selectedStickerId: defeated ? null : state.selectedStickerId,
+    selectedActionTileId: defeated ? null : state.selectedActionTileId,
     actionSourceId: defeated ? null : state.actionSourceId,
     animation: defeated ? "pop" : "enemy",
   }, title, defeated
@@ -598,16 +643,23 @@ const consumeSporeAt = (state: BlobTacticsState, position: BlobPosition): BlobTa
   }, "Pipplo stepped on spores", nextHp === 0 ? "The prickly patch flattened Pipplo." : "Pipplo lost 1 HP.", "warn");
 };
 
-const useStickerAt = (state: BlobTacticsState, target: BlobPosition): BlobTacticsState => {
-  const sticker = getSelectedSticker(state);
-  if (!sticker) return state;
-  const info = STICKER_INFO[sticker.type];
-  const damageBonus = sticker.upgraded ? 1 : 0;
-  const pipploDamageBonus = state.mutations.includes("sharpCheeks") ? 1 : 0;
-  let next = consumeSelectedSticker({ ...state, mass: Math.max(0, state.mass - info.massCost) });
+const pushEnemyAwayFromPipplo = (state: BlobTacticsState): BlobTacticsState => {
+  const pushTarget = adjacentPositions(state.enemy.position)
+    .filter(position => !isOccupied(state, position))
+    .sort((a, b) => distance(b, state.pipploPosition) - distance(a, state.pipploPosition))[0];
+  return pushTarget ? { ...state, enemy: { ...state.enemy, position: pushTarget } } : state;
+};
 
-  if (sticker.type === "move" || sticker.type === "hop") {
-    const healed = sticker.type === "hop" && state.mutations.includes("springFeet") && !state.springFeetUsedThisRoom;
+const useActionTileAt = (state: BlobTacticsState, target: BlobPosition): BlobTacticsState => {
+  const tile = getSelectedActionTile(state);
+  if (!tile) return state;
+  const info = ACTION_TILE_INFO[tile.type];
+  const damageBonus = tile.upgraded ? 1 : 0;
+  const pipploDamageBonus = state.mutations.includes("sharpCheeks") ? 1 : 0;
+  let next = consumeSelectedActionTile({ ...state, mass: Math.max(0, state.mass - info.massCost) });
+
+  if (tile.type === "move" || tile.type === "hop") {
+    const healed = tile.type === "hop" && state.mutations.includes("springFeet") && !state.springFeetUsedThisRoom;
     next = consumeSporeAt({
       ...next,
       pipploPosition: target,
@@ -615,17 +667,17 @@ const useStickerAt = (state: BlobTacticsState, target: BlobPosition): BlobTactic
       springFeetUsedThisRoom: healed ? true : state.springFeetUsedThisRoom,
       animation: "pipplo",
     }, target);
-    return withNotice(next, sticker.type === "hop" ? "Long Scoot" : "Scoot",
+    return withNotice(next, tile.type === "hop" ? "Long Scoot" : "Scoot",
       healed ? "Pipplo bounced into position and Spring Feet restored 1 HP." : "Pipplo bounced into position.",
       "good");
   }
-  if (sticker.type === "split" || sticker.type === "bubble" || sticker.type === "sourSplit") {
-    const extraBubbleTurn = sticker.type === "bubble" && state.mutations.includes("bubbleWrap") ? 1 : 0;
+  if (tile.type === "split" || tile.type === "bubble" || tile.type === "sourSplit") {
+    const extraBubbleTurn = tile.type === "bubble" && state.mutations.includes("bubbleWrap") ? 1 : 0;
     const bloblet: Bloblet = {
       id: `bloblet-${state.nextId}`,
-      kind: sticker.type === "bubble" ? "bubble" : "basic",
+      kind: tile.type === "bubble" ? "bubble" : "basic",
       hp: 1,
-      turnsLeft: sticker.type === "sourSplit" ? 1 : 2 + extraBubbleTurn,
+      turnsLeft: tile.type === "sourSplit" ? 1 : 2 + extraBubbleTurn,
       position: target,
     };
     return withNotice({
@@ -633,17 +685,17 @@ const useStickerAt = (state: BlobTacticsState, target: BlobPosition): BlobTactic
       bloblets: [...state.bloblets, bloblet],
       nextId: state.nextId + 1,
       animation: "pipplo",
-    }, info.name, sticker.type === "bubble"
+    }, info.name, tile.type === "bubble"
       ? "A shielding Bubble Bud popped into place."
-      : sticker.type === "sourSplit"
+      : tile.type === "sourSplit"
         ? "A fragile sour bloblet wobbled free."
         : "Pipplo budded off a temporary helper.",
-    sticker.sour ? "warn" : "good");
+    tile.sour ? "warn" : "good");
   }
-  if (sticker.type === "rejoin") {
+  if (tile.type === "rejoin") {
     const absorbed = state.bloblets.find(bloblet => samePosition(bloblet.position, target));
     if (!absorbed) return state;
-    const recoveredMass = sticker.upgraded ? 2 : 1;
+    const recoveredMass = tile.upgraded ? 2 : 1;
     return withNotice({
       ...next,
       mass: Math.min(state.massMax, next.mass + recoveredMass),
@@ -651,19 +703,24 @@ const useStickerAt = (state: BlobTacticsState, target: BlobPosition): BlobTactic
       animation: "pipplo",
     }, "Rejoin", `Pipplo slurped the bloblet back up and recovered ${recoveredMass} Mass.`, "good");
   }
-  if (sticker.type === "stretch") return dealDamageToEnemy(next, 1 + damageBonus + pipploDamageBonus, 2 + damageBonus, "Stretch Slap");
-  if (sticker.type === "bellyFlop") return dealDamageToEnemy(next, 3 + damageBonus + pipploDamageBonus, 2 + damageBonus, "Belly Flop");
-  if (sticker.type === "slap") {
+  if (tile.type === "stretch") return dealDamageToEnemy(next, 1 + damageBonus + pipploDamageBonus, 2 + damageBonus, "Stretch Slap");
+  if (tile.type === "bellyFlop") return dealDamageToEnemy(next, 3 + damageBonus + pipploDamageBonus, 2 + damageBonus, "Belly Flop");
+  if (tile.type === "bump") {
+    const shoulderBonus = state.mutations.includes("rollingShoulder") ? 1 : 0;
+    const bumped = dealDamageToEnemy(next, 1 + damageBonus + shoulderBonus, 1 + damageBonus + shoulderBonus, "Bump");
+    return bumped.phase === "reward" || bumped.phase === "won" ? bumped : pushEnemyAwayFromPipplo(bumped);
+  }
+  if (tile.type === "slap") {
     const sourceIsPipplo = state.actionSourceId === "pipplo";
     return dealDamageToEnemy(next, (sourceIsPipplo ? 2 + pipploDamageBonus : 1) + damageBonus, 1 + damageBonus, sourceIsPipplo ? "Pipplo Slap" : "Bloblet Slap");
   }
-  if (sticker.type === "spit") {
+  if (tile.type === "spit") {
     const source = getBloblet(state, state.actionSourceId);
     if (!source) return state;
     next = { ...next, bloblets: state.bloblets.filter(bloblet => bloblet.id !== source.id) };
     return dealDamageToEnemy(next, 3 + damageBonus, 4 + damageBonus, "Spit Chunk");
   }
-  if (sticker.type === "goo") {
+  if (tile.type === "goo") {
     const source = getBloblet(state, state.actionSourceId);
     if (!source) return state;
     return withNotice({
@@ -686,20 +743,20 @@ const useStickerAt = (state: BlobTacticsState, target: BlobPosition): BlobTactic
 };
 
 export function tapBoardTile(state: BlobTacticsState, target: BlobPosition): BlobTacticsState {
-  const sticker = getSelectedSticker(state);
-  if (!sticker) return withNotice(state, "Pick a sticker", "Choose a sticker, then tap a highlighted tile.", "plain");
+  const tile = getSelectedActionTile(state);
+  if (!tile) return withNotice(state, "Pick a tile", "Choose a tile, then tap a highlighted tile.", "plain");
   const validKeys = getValidTargetKeys(state);
   if (!validKeys.has(positionKey(target))) return state;
 
-  if (!state.actionSourceId && (sticker.type === "slap" || sticker.type === "spit" || sticker.type === "goo")) {
+  if (!state.actionSourceId && (tile.type === "slap" || tile.type === "spit" || tile.type === "goo")) {
     const sourceIsPipplo = samePosition(state.pipploPosition, target);
     const sourceBloblet = state.bloblets.find(bloblet => samePosition(bloblet.position, target));
     const sourceId = sourceIsPipplo ? "pipplo" : sourceBloblet?.id;
     if (!sourceId) return state;
-    return withNotice({ ...state, actionSourceId: sourceId }, STICKER_INFO[sticker.type].name,
-      sticker.type === "goo" ? "Now tap an empty neighboring tile." : `Now tap ${state.enemy.name}.`, "plain");
+    return withNotice({ ...state, actionSourceId: sourceId }, ACTION_TILE_INFO[tile.type].name,
+      tile.type === "goo" ? "Now tap an empty neighboring tile." : `Now tap ${state.enemy.name}.`, "plain");
   }
-  return useStickerAt(state, target);
+  return useActionTileAt(state, target);
 }
 
 const getEnemyTarget = (state: BlobTacticsState): { id: string; position: BlobPosition } => {
@@ -752,6 +809,36 @@ const chooseEnemyStep = (state: BlobTacticsState): BlobPosition => {
   return options[0] || state.enemy.position;
 };
 
+export function getEnemyPreview(state: BlobTacticsState): BlobEnemyPreview {
+  const preview: BlobEnemyPreview = { pathKeys: new Set(), dangerKeys: new Set(), hazardKeys: new Set() };
+  if (state.phase === "reward" || state.phase === "won" || state.phase === "lost") return preview;
+  const intent = getEnemyIntent(state);
+  if (intent.tone === "hazard") {
+    preview.hazardKeys.add(positionKey(getSporeTarget(state)));
+    return preview;
+  }
+  if (intent.tone === "attack" && intent.label !== "Pounce") {
+    const target = intent.targetId === "pipplo" ? state.pipploPosition : getBloblet(state, intent.targetId)?.position;
+    if (target) preview.dangerKeys.add(positionKey(target));
+    return preview;
+  }
+
+  const steps = intent.label === "Pounce" ? 2 : state.enemy.moveRange;
+  let simulated = state;
+  for (let stepIndex = 0; stepIndex < steps; stepIndex += 1) {
+    if (distance(simulated.enemy.position, simulated.pipploPosition) <= 1) break;
+    const step = chooseEnemyStep(simulated);
+    if (samePosition(step, simulated.enemy.position)) break;
+    preview.pathKeys.add(positionKey(step));
+    if (simulated.tileEffects.some(effect => effect.type === "goo" && samePosition(effect.position, step))) break;
+    simulated = { ...simulated, enemy: { ...simulated.enemy, position: step } };
+  }
+  if (intent.label === "Pounce" && distance(simulated.enemy.position, simulated.pipploPosition) === 1) {
+    preview.dangerKeys.add(positionKey(simulated.pipploPosition));
+  }
+  return preview;
+}
+
 const moveEnemyTowardPipplo = (state: BlobTacticsState, steps: number): { state: BlobTacticsState; stuck: boolean } => {
   let next = state;
   let stuck = false;
@@ -800,7 +887,7 @@ const damagePipplo = (state: BlobTacticsState, damage: number, title: string): B
     pipploHp: nextHp,
     phase: nextHp === 0 ? "lost" : "study",
   }, nextHp === 0 ? "Pipplo flattened" : title,
-  nextHp === 0 ? "The micro-run is over. Pipplo needs another try." : `Pipplo lost ${damage} HP. Study again to make a new sticker hand.`,
+  nextHp === 0 ? "The micro-run is over. Pipplo needs another try." : `Pipplo lost ${damage} HP. Study again to make a new tile hand.`,
   "warn");
 };
 
@@ -809,9 +896,10 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
   const intent = getEnemyIntent(state);
   let next: BlobTacticsState = {
     ...state,
-    selectedStickerId: null,
+    selectedActionTileId: null,
     actionSourceId: null,
     hand: [],
+    tilesPlayedThisTurn: 0,
     animation: "enemy",
   };
 
@@ -885,11 +973,12 @@ export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutat
     bloblets: [],
     tileEffects: [],
     hand: [],
-    selectedStickerId: null,
+    selectedActionTileId: null,
     actionSourceId: null,
     rewardChoices: [],
     mutations,
     springFeetUsedThisRoom: false,
+    tilesPlayedThisTurn: 0,
   }, `Room ${nextRoom}: ${createEnemyForRoom(nextRoom).name}`,
   `${MUTATION_DEFS[mutationId].name} absorbed. Pipplo recovered 1 HP and bounced into the next room.`,
   "good");
