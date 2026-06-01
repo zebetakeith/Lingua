@@ -33,6 +33,7 @@ export interface SnackDef {
   name: string;
   description: string;
   heal: number;
+  effect: "heal" | "ward" | "ap" | "delay" | "cleanse" | "bop";
 }
 
 export interface PipploTraitDef {
@@ -68,8 +69,12 @@ export const CURIO_DEFS: CurioDef[] = [
 ];
 
 export const SNACK_DEFS: SnackDef[] = [
-  { id: "berry_pop", name: "Berry Pop", description: "Restore 28 HP during a command window.", heal: 28 },
-  { id: "bubble_bun", name: "Bubble Bun", description: "Restore 18 HP and raise a Bubble.", heal: 18 },
+  { id: "berry_pop", name: "Berry Pop", description: "Restore 28 HP during a command window.", heal: 28, effect: "heal" },
+  { id: "bubble_bun", name: "Bubble Bun", description: "Restore 18 HP and raise a Bubble.", heal: 18, effect: "ward" },
+  { id: "jam_drop", name: "Jam Drop", description: "Gain 1 AP immediately. It does not move the timeline.", heal: 0, effect: "ap" },
+  { id: "sleepy_cookie", name: "Sleepy Cookie", description: "Push the next enemy action back on the timeline.", heal: 0, effect: "delay" },
+  { id: "fizz_peel", name: "Fizz Peel", description: "Cleanse study pressure and Pipplo's fragile debuff.", heal: 0, effect: "cleanse" },
+  { id: "pepper_puff", name: "Pepper Puff", description: "Pipplo's next Bop deals 12 extra damage.", heal: 0, effect: "bop" },
 ];
 
 export const PIPPLO_TRAIT_DEFS: PipploTraitDef[] = [

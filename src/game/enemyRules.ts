@@ -167,12 +167,15 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
   }
 
   if (special === "three_phase") {
+    const phaseName = enemy.phase >= 3 ? "Word Storm" : enemy.phase === 2 ? "Messy Notes" : "Ink Blot";
     return {
       id: "boss_protocol",
-      name: "Boss Protocol",
+      name: phaseName,
       apCost: 1,
       damage: 0,
-      description: "Raises the next study goal and reduces early AP gain.",
+      description: enemy.phase >= 3
+        ? "The final phase raises the next study goal and reduces early AP gain."
+        : "Raises the next study goal and reduces early AP gain.",
       counterplay: "Save burst tricks for phase shifts and keep a Bubble ready.",
       severity: "high",
     };

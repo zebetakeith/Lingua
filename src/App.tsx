@@ -236,6 +236,7 @@ interface CombatState {
   showTraitTransformation: boolean;
   snackChoices: SnackDef[];
   snackId: string | null;
+  backpackSnackIds: string[];
   blobStats: BlobStats;
   lastMeal: MealSummary | null;
   mealDigested: boolean;
@@ -296,6 +297,7 @@ interface CombatState {
   screenShake: number;
   flashColor: string;
   showPhaseBanner: string | null;
+  floorTelemetry: FloorTelemetry;
   isPaused: boolean;
 }
 
@@ -435,6 +437,13 @@ interface StudyFeedback {
   lostAp: number;
 }
 
+interface FloorTelemetry {
+  studyCardsReviewed: number;
+  apEarned: number;
+  damageTaken: number;
+  itemsUsed: number;
+}
+
 // ─── Constants ───────────────────────────────────────────
 const STARTING_HP = 100;
 const SAVE_KEY = "lexicon_labyrinth_save";
@@ -464,6 +473,7 @@ const MAX_ACTIVE_PARTY_SIZE = 3;
 const MAX_HELPER_SIZE = 2;
 const MAX_CURIO_SLOTS = 3;
 const MAX_BODY_TRAITS = 3;
+const MAX_BACKPACK_SNACKS = 2;
 const EARLY_GUEST_FLOOR = 2;
 const EARLY_GUEST_CHARACTER_ID = "scholar";
 const FIRST_BOSS_FLOOR = 5;
@@ -501,6 +511,19 @@ const CARD_RATINGS: { id: CardRating; label: string; shortLabel: string; color: 
 
 const LEITNER_KNOWN_BOX = 6;
 const LEITNER_INTERVALS_MS = [0, 0, 5 * 60_000, 30 * 60_000, 6 * 60 * 60_000, 24 * 60 * 60_000, Number.MAX_SAFE_INTEGER];
+const STUDY_CONTRACT_PRESETS = [
+  { id: "quick", label: "Quick", newCards: 5, minutes: 10 },
+  { id: "regular", label: "Regular", newCards: 15, minutes: 25 },
+  { id: "long", label: "Long", newCards: 35, minutes: 50 },
+] as const;
+
+function createFloorTelemetry(): FloorTelemetry {
+  return { studyCardsReviewed: 0, apEarned: 0, damageTaken: 0, itemsUsed: 0 };
+}
+
+function getBackpackSnackIds(state: CombatState): string[] {
+  return Array.from(new Set([...(state.backpackSnackIds || []), ...(state.snackId ? [state.snackId] : [])])).slice(0, MAX_BACKPACK_SNACKS);
+}
 
 // ─── Utility ─────────────────────────────────────────────
 function createDeckStats(): DeckStats {
@@ -958,6 +981,25 @@ function getCardMastery(card: VocabWord, saveData: SaveData): number {
   const directions = getEnabledStudyDirections(settings);
   const total = directions.reduce((sum, direction) => sum + getDirectionProgress(card, saveData, direction).mastery, 0);
   return total / Math.max(1, directions.length);
+}
+
+function getDeckStudySummary(saveData: SaveData) {
+  const deck = getActiveDeck(saveData);
+  const introduced = new Set(deck.introducedCardIds || []);
+  const cards = deck.cards.filter(card => introduced.has(card.id) && !isKnownCard(card, saveData));
+  const now = Date.now();
+  const summary = { due: 0, learning: 0, familiar: 0, mastered: 0, needsAttention: 0 };
+  for (const card of cards) {
+    const mastery = getCardMastery(card, saveData);
+    const directions = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
+    const progress = directions.map(direction => getDirectionProgress(card, saveData, direction));
+    if (progress.some(item => item.dueAt <= now)) summary.due += 1;
+    if (progress.some(item => item.wrongStreak > 0)) summary.needsAttention += 1;
+    if (mastery < 0.48) summary.learning += 1;
+    else if (mastery < 0.88) summary.familiar += 1;
+    else summary.mastered += 1;
+  }
+  return summary;
 }
 
 function getApForCorrectCard(card: VocabWord, saveData: SaveData, direction: StudyDirection, questionType: StudyQuestionType): number {
@@ -1736,25 +1778,6 @@ function getRewardCardInsight(card: VocabWord, combatState?: CombatState | null)
   };
 }
 
-function getRelicChoiceReason(relic: RelicDef, combatState?: CombatState | null): { tag: string; text: string } {
-  const enemy = combatState?.enemies[combatState.currentEnemyIndex];
-  const hasShield = Boolean(enemy && enemy.shield > 0);
-  const special = enemy?.def.special;
-
-  if (relic.id === "clarity_lens") return { tag: "Study streak build", text: "Perfect rushes Expose the enemy for a stronger weakness hit." };
-  if (relic.id === "blood_quill") return { tag: "Risk economy", text: "Misses charge +2 Focus, but the next enemy hit hurts more." };
-  if (relic.id === "combo_aegis") return { tag: "Rush defense", text: special === "low_combo_punish" ? "Protects strong AP windows." : "Turns excellent study into safety." };
-  if (relic.id === "runic_tumbler") return { tag: "Timeline control", text: "Defend can delay enemy pressure." };
-  if (relic.id === "fracture_notes" || relic.id === "clean_margin") return { tag: hasShield ? "Great now" : "Shield answer", text: "Best against shielded enemies and bosses." };
-  if (relic.id === "heart_ward" || relic.id === "leaf_bloom" || relic.id === "greenhouse") return { tag: "Survival", text: special === "healing_check" ? "Strong into healing tests." : "Improves recovery turns." };
-  if (relic.id === "elemental_index" || relic.id === "linebreaker") return { tag: "Weakness damage", text: enemy ? `Pairs with ${formatTileLabels(enemy.def.weakTo)} commands.` : "Rewards element planning." };
-  if (relic.id === "hard_edge") return { tag: "Learning pressure", text: "Makes hard-rated cards worth fighting through." };
-  if (relic.id === "tidal_memory") return { tag: "Mistake buffer", text: "Your first miss each study set still charges +1 Focus." };
-  if (relic.id === "combo_spark") return { tag: "Study engine", text: "4+ correct study sets charge more Focus." };
-
-  return { tag: "Run modifier", text: "Changes how this deck fights for the rest of the run." };
-}
-
 function createEnemyInstance(def: EnemyDef, hpMult: number, encounter: EncounterInfo): EnemyInstance {
   const maxHp = Math.floor(def.hpBase * hpMult * encounter.hpMultiplier);
   const baseShield = def.shieldBase || (encounter.isElite ? 10 : encounter.isBoss ? 18 : 0);
@@ -2501,6 +2524,21 @@ function getFloorLessonNotice(floor: number): CombatNotice | null {
   if (floor === FIRST_BOSS_FLOOR) {
     return createCombatNotice("Zip Sprig tags along", "Use Comet Bonk to crack Root Lump's shell. It gets extra grumpy below half HP.", "warn");
   }
+  if (floor === 6) {
+    return createCombatNotice("Lesson: Study Pressure", "Nap Puff adds 1 AP to the next study goal. Bubble its action or prepare for a longer hand.", "warn");
+  }
+  if (floor === 7) {
+    return createCombatNotice("Lesson: Take Care", "Sprout Grump hits harder unless you Brace or recover HP before its turn.", "warn");
+  }
+  if (floor === 8) {
+    return createCombatNotice("Lesson: Fast Trouble", "Dusk Puff returns to the timeline quickly after acting. Spend AP with purpose.", "warn");
+  }
+  if (floor === 9) {
+    return createCombatNotice("Lesson: Stop The Snack", "Nibbly Bat repairs itself after attacking. Crack its shell and burst before it feeds.", "warn");
+  }
+  if (floor === 10) {
+    return createCombatNotice("Region Guardian: Word Dragon", "Word Dragon changes behavior as its HP falls. Save a Bubble and a Big Trick for the final phase.", "warn");
+  }
   return null;
 }
 
@@ -2574,6 +2612,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     showTraitTransformation: false,
     snackChoices: [],
     snackId: "berry_pop",
+    backpackSnackIds: ["berry_pop"],
     blobStats: starterBlobStats,
     lastMeal: null,
     mealDigested: false,
@@ -2632,6 +2671,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     screenShake: 0,
     flashColor: "",
     showPhaseBanner: null,
+    floorTelemetry: createFloorTelemetry(),
     isPaused: false,
   };
 }
@@ -2653,6 +2693,8 @@ export default function App() {
   const [contractNewCards, setContractNewCards] = useState(DEFAULT_CONTRACT_NEW_CARDS);
   const [contractMinutes, setContractMinutes] = useState(DEFAULT_CONTRACT_MINUTES);
   const [selectedRegionStart, setSelectedRegionStart] = useState(1);
+  const [rewardDrawerOpen, setRewardDrawerOpen] = useState(false);
+  const [backpackDrawerOpen, setBackpackDrawerOpen] = useState(false);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const combatRef = useRef<CombatState | null>(null);
@@ -2664,6 +2706,12 @@ export default function App() {
   useEffect(() => {
     saveSave(save);
   }, [save]);
+
+  useEffect(() => {
+    if (!combat || (combat.relicChoices.length === 0 && combat.traitChoices.length === 0 && combat.curioChoices.length === 0 && combat.snackChoices.length === 0)) {
+      setRewardDrawerOpen(false);
+    }
+  }, [combat?.relicChoices.length, combat?.traitChoices.length, combat?.curioChoices.length, combat?.snackChoices.length]);
 
   useEffect(() => {
     if (!combat || (screen !== "combat" && screen !== "reward")) return;
@@ -3088,6 +3136,11 @@ export default function App() {
       studyImprovedCardIds: appendUniqueValue(state.studyImprovedCardIds, state.currentWord.id),
       studyMasteryEvents: appendStudyMasteryEvent(state.studyMasteryEvents, masteryEvent),
       correctCount: state.correctCount + 1,
+      floorTelemetry: {
+        ...state.floorTelemetry,
+        studyCardsReviewed: state.floorTelemetry.studyCardsReviewed + 1,
+        apEarned: roundCombatAp(state.floorTelemetry.apEarned + totalEarnedAp),
+      },
       skillCharge: Math.min(12, state.skillCharge + focusGain),
       score: nextScore,
       eventNotices: appendCombatNotices(state.eventNotices, answerNotices),
@@ -3131,6 +3184,10 @@ export default function App() {
       studyCorrectStreak: 0,
       studyStruggledCardIds: missedWord ? appendUniqueValue(state.studyStruggledCardIds, missedWord.id) : state.studyStruggledCardIds,
       studyMasteryEvents: appendStudyMasteryEvent(state.studyMasteryEvents, masteryEvent),
+      floorTelemetry: {
+        ...state.floorTelemetry,
+        studyCardsReviewed: state.floorTelemetry.studyCardsReviewed + 1,
+      },
       wrongCount: state.wrongCount + 1,
       skillCharge: Math.min(12, state.skillCharge + tidalMemoryFocus + bloodQuillFocus),
       phase: "wrong" as const,
@@ -3156,26 +3213,23 @@ export default function App() {
     };
 
     setCombat(nextState);
+  };
 
-    window.setTimeout(() => {
-      const latestCombat = combatRef.current;
-      if (!latestCombat || latestCombat.mode !== "study" || latestCombat.phase !== "wrong" || latestCombat.currentWord?.id !== missedWord?.id) return;
-
-      if (shouldFinishStudyRush(nextState)) {
-        finishStudyRound({
-          ...nextState,
-          phase: "answering",
-          studyFeedback: null,
-        }, nextSave);
-        return;
-      }
-
-      setCombat({
-        ...nextState,
-        phase: "answering",
-        ...drawNextStudyCard(nextState, nextSave),
-      });
-    }, 1150);
+  const continueAfterWrongAnswer = () => {
+    if (!combat || combat.mode !== "study" || combat.phase !== "wrong" || !combat.studyFeedback) return;
+    const resumedState = {
+      ...combat,
+      phase: "answering" as const,
+      studyFeedback: null,
+    };
+    if (shouldFinishStudyRush(resumedState)) {
+      finishStudyRound(resumedState);
+      return;
+    }
+    setCombat({
+      ...resumedState,
+      ...drawNextStudyCard(resumedState),
+    });
   };
 
   const playEndOfRoundCinematic = (
@@ -3720,6 +3774,10 @@ export default function App() {
       score: state.score + damage + defense.shieldDamage + stats.comboCount * 20 + healAmount,
       skillCharge: nextSkillCharge,
       playerHp: nextPlayerHp,
+      floorTelemetry: {
+        ...state.floorTelemetry,
+        damageTaken: state.floorTelemetry.damageTaken + enemyDamage + stats.curseDamage,
+      },
       phase: "answering",
       activeBuffs: nextBuffs,
       damageNumbers,
@@ -3932,6 +3990,10 @@ export default function App() {
       phase: "transition",
       enemies: nextEnemies,
       playerHp: nextPlayerHp,
+      floorTelemetry: {
+        ...baseState.floorTelemetry,
+        damageTaken: baseState.floorTelemetry.damageTaken + incomingDamage,
+      },
       turnQueue: nextQueue,
       actionPoints: roundCombatAp(Math.min(baseState.actionPointCarryCap, baseState.actionPoints)),
       actionPointsEarnedThisRush: 0,
@@ -4031,6 +4093,11 @@ export default function App() {
 
     if (action === "attack") {
       rawDamage = Math.max(5, member.attack + (member.id === "linguist" ? combat.blobStats.bop : 0) + Math.floor(combat.difficultyFloor * 1.15));
+      if (member.id === "linguist" && nextBuffs.some(buff => buff.type === "snack_bop")) {
+        rawDamage += 12;
+        nextBuffs = nextBuffs.filter(buff => buff.type !== "snack_bop");
+        actionNotices.push(createCombatNotice("Pepper Puff", "Pipplo's prepared Bop dealt +12 damage.", "good"));
+      }
       if (member.id === "linguist" && combat.runTraitIds.includes("imp_horns") && !nextBuffs.some(buff => buff.type === "imp_horns_used")) {
         rawDamage += 8;
         nextBuffs = [...nextBuffs, { type: "imp_horns_used", remaining: 1 }];
@@ -4141,7 +4208,8 @@ export default function App() {
               phase: enemy.phase + 1,
               currentDamage: Math.floor(enemy.currentDamage * nextPhase.damageMult),
             };
-            phaseBanner = `PHASE ${enemy.phase + 1}`;
+            phaseBanner = enemy.def.special === "three_phase" && enemy.phase + 1 >= 3 ? "WORD STORM" : `PHASE ${enemy.phase + 1}`;
+            actionNotices.push(createCombatNotice("Guardian Shift", phaseBanner, "warn"));
           }
         }
         if (enemy.def.special === "enrage_at_50" && hpPct <= 0.5 && enemy.phase === 1) {
@@ -4432,12 +4500,26 @@ export default function App() {
     };
     if (enemyHpAfter <= 0) {
       nextQueue = removeEnemyFromQueue(nextQueue, enemy);
-    } else if (enemy.def.special === "enrage_at_50" && enemyHpAfter / enemy.maxHp <= 0.5 && enemy.phase === 1) {
-      nextEnemies[combat.currentEnemyIndex] = {
-        ...nextEnemies[combat.currentEnemyIndex],
-        phase: 2,
-        currentDamage: Math.floor(enemy.currentDamage * 1.5),
-      };
+    } else {
+      const hpPct = enemyHpAfter / enemy.maxHp;
+      if (enemy.def.phases && enemy.phase < enemy.def.phases.length) {
+        const nextPhase = enemy.def.phases[enemy.phase];
+        if (hpPct <= nextPhase.threshold) {
+          nextEnemies[combat.currentEnemyIndex] = {
+            ...nextEnemies[combat.currentEnemyIndex],
+            phase: enemy.phase + 1,
+            currentDamage: Math.floor(enemy.currentDamage * nextPhase.damageMult),
+          };
+          actionNotices.push(createCombatNotice("Guardian Shift", enemy.def.special === "three_phase" && enemy.phase + 1 >= 3 ? "WORD STORM" : `Phase ${enemy.phase + 1}`, "warn"));
+        }
+      }
+      if (enemy.def.special === "enrage_at_50" && hpPct <= 0.5 && enemy.phase === 1) {
+        nextEnemies[combat.currentEnemyIndex] = {
+          ...nextEnemies[combat.currentEnemyIndex],
+          phase: 2,
+          currentDamage: Math.floor(enemy.currentDamage * 1.5),
+        };
+      }
     }
 
     const nextPlayerHp = Math.min(combat.playerMaxHp, combat.playerHp + healAmount);
@@ -5153,6 +5235,8 @@ export default function App() {
       absorbedElementHistory: snapshot.combat.absorbedElementHistory || [],
       lastClaimedTraitId: snapshot.combat.lastClaimedTraitId || null,
       showTraitTransformation: Boolean(snapshot.combat.showTraitTransformation),
+      backpackSnackIds: snapshot.combat.backpackSnackIds || (snapshot.combat.snackId ? [snapshot.combat.snackId] : []),
+      floorTelemetry: snapshot.combat.floorTelemetry || createFloorTelemetry(),
       studyCorrectStreak: snapshot.combat.studyCorrectStreak || 0,
       studyImprovedCardIds: snapshot.combat.studyImprovedCardIds || [],
       studyStruggledCardIds: snapshot.combat.studyStruggledCardIds || [],
@@ -5352,6 +5436,7 @@ export default function App() {
       screenShake: 0,
       flashColor: "",
       showPhaseBanner: null,
+      floorTelemetry: createFloorTelemetry(),
     });
     
     setScreen("combat");
@@ -5474,11 +5559,13 @@ export default function App() {
 
   const claimSnack = (snack: SnackDef) => {
     if (!combat) return;
+    const backpackSnackIds = [...getBackpackSnackIds(combat).filter(id => id !== snack.id), snack.id].slice(-MAX_BACKPACK_SNACKS);
     setCombat({
       ...combat,
-      snackId: snack.id,
+      snackId: backpackSnackIds[0] || null,
+      backpackSnackIds,
       snackChoices: [],
-      boardMessage: `${snack.name} packed for later.`,
+      boardMessage: `${snack.name} packed for later. Backpack ${backpackSnackIds.length}/${MAX_BACKPACK_SNACKS}.`,
     });
   };
 
@@ -5501,27 +5588,58 @@ export default function App() {
     });
   };
 
-  const useSnack = () => {
-    if (!combat || combat.mode !== "command" || combat.phase !== "answering" || !combat.snackId) return;
-    const snack = getSnackById(combat.snackId);
+  const useSnack = (snackId?: string) => {
+    if (!combat || combat.mode !== "command" || combat.phase !== "answering") return;
+    const snack = getSnackById(snackId || getBackpackSnackIds(combat)[0]);
     if (!snack) return;
+    const nextBackpack = getBackpackSnackIds(combat).filter(id => id !== snack.id);
     const heal = Math.min(combat.playerMaxHp - combat.playerHp, snack.heal);
-    const raisesBubble = snack.id === "bubble_bun";
+    const raisesBubble = snack.effect === "ward";
+    const givesAp = snack.effect === "ap";
+    const delaysEnemy = snack.effect === "delay";
+    const cleansesPressure = snack.effect === "cleanse";
+    const primesBop = snack.effect === "bop";
+    const nextBuffs = [
+      ...combat.activeBuffs.filter(buff => !cleansesPressure || buff.type !== "study_tax"),
+      ...(raisesBubble ? [{ type: "ward", remaining: 1 }] : []),
+      ...(primesBop ? [{ type: "snack_bop", remaining: 1 }] : []),
+    ];
+    const itemSummary = raisesBubble
+      ? `+${heal} HP - Bubble raised`
+      : givesAp
+        ? "+1 AP"
+        : delaysEnemy
+          ? "Enemy action delayed"
+          : cleansesPressure
+            ? "Study pressure cleansed"
+            : primesBop
+              ? "Next Bop empowered"
+              : `+${heal} HP`;
     setCombat({
       ...combat,
-      snackId: null,
+      snackId: nextBackpack[0] || null,
+      backpackSnackIds: nextBackpack,
       playerHp: combat.playerHp + heal,
-      activeBuffs: raisesBubble ? [...combat.activeBuffs, { type: "ward", remaining: 1 }] : combat.activeBuffs,
+      actionPoints: roundCombatAp(combat.actionPoints + (givesAp ? 1 : 0)),
+      turnQueue: delaysEnemy ? delayNextEnemyAction(combat.turnQueue, 42) : combat.turnQueue,
+      fragileDebuff: cleansesPressure ? 0 : combat.fragileDebuff,
+      apPenaltyNextRush: cleansesPressure ? 0 : combat.apPenaltyNextRush,
+      activeBuffs: nextBuffs,
+      floorTelemetry: {
+        ...combat.floorTelemetry,
+        itemsUsed: combat.floorTelemetry.itemsUsed + 1,
+      },
       actionEffect: createCombatActionEffect("mend", snack.name, "#ff7895", {
-        detail: `Snack time - +${heal} HP${raisesBubble ? " - Bubble raised" : ""}`,
+        detail: `Snack time - ${itemSummary}`,
         casterName: "Pipplo",
         casterSprite: CHARACTER_DEFS[0].sprite,
       }),
       eventNotices: appendCombatNotices(combat.eventNotices, [
-        createCombatNotice(snack.name, `Pipplo recovered ${heal} HP${raisesBubble ? " and raised a Bubble" : ""}.`, "good"),
+        createCombatNotice(snack.name, itemSummary, "good"),
       ]),
       boardMessage: `${snack.name} eaten. No AP spent.`,
     });
+    setBackpackDrawerOpen(false);
   };
 
   const exportSaveBackup = () => {
@@ -5705,6 +5823,7 @@ export default function App() {
   const activeDeck = getActiveDeck(save);
   const activeDeckStats = activeDeck.stats || createDeckStats();
   const activeDeckCards = activeDeck.cards.length;
+  const deckStudySummary = getDeckStudySummary(save);
   const runParty = getRunParty(save, combat?.guestCharacterIds, combat?.runPartyCharacterIds);
   const currentEnemyTelegraphClass = getEnemyTelegraphClass(currentEnemy);
   const showLegacyCinematicScreen: boolean = false;
@@ -6445,6 +6564,25 @@ export default function App() {
             </button>
           )}
 
+          <div className="mb-3 flex w-full max-w-3xl gap-2 rounded-lg border border-white/12 bg-black/30 p-2 text-sm text-white backdrop-blur-sm">
+            {STUDY_CONTRACT_PRESETS.map(preset => {
+              const selected = contractNewCards === preset.newCards && contractMinutes === preset.minutes;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => {
+                    setContractNewCards(preset.newCards);
+                    setContractMinutes(preset.minutes);
+                  }}
+                  className={`flex-1 rounded-md px-2 py-2 text-xs font-black transition-all sm:text-sm ${selected ? "bg-cyan-300/25 text-cyan-50" : "bg-white/6 text-white/70 hover:bg-white/12"}`}
+                >
+                  {preset.label}
+                  <span className="mt-0.5 block text-[10px] font-semibold opacity-75">{preset.newCards} cards · {preset.minutes} min</span>
+                </button>
+              );
+            })}
+          </div>
           <div className="mb-5 grid w-full max-w-3xl gap-3 rounded-lg border border-white/12 bg-black/30 p-3 text-sm text-white backdrop-blur-sm sm:grid-cols-3">
             <label className="rounded-md bg-white/6 p-2">
               <span className="mb-1 block text-xs font-black uppercase tracking-wide text-cyan-100/70">New cards</span>
@@ -6576,6 +6714,47 @@ export default function App() {
         {/* Flash overlay */}
         {combat.flashColor && (
           <div className="absolute inset-0 z-50 pointer-events-none" style={{ backgroundColor: combat.flashColor }} />
+        )}
+
+        {backpackDrawerOpen && (
+          <div className="fixed inset-0 z-[70] flex justify-end bg-[#073f50]/45 backdrop-blur-[2px]">
+            <button type="button" aria-label="Close backpack" className="absolute inset-0" onClick={() => setBackpackDrawerOpen(false)} />
+            <aside className="relative z-10 flex h-full w-[min(88vw,22rem)] flex-col border-l border-pink-200/45 bg-[#eafff6] p-4 text-[#25334a] shadow-2xl">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wide text-pink-600">Expedition pocket</div>
+                  <h3 className="text-xl font-black">Pipplo&apos;s Backpack</h3>
+                </div>
+                <button type="button" onClick={() => setBackpackDrawerOpen(false)} className="rounded-full border border-[#166b73]/20 px-3 py-1.5 text-sm font-black text-[#166b73]">Close</button>
+              </div>
+              <p className="mb-3 text-xs font-semibold text-[#166b73]">Items are free actions. Pick the snack that solves the current problem.</p>
+              <div className="space-y-2">
+                {getBackpackSnackIds(combat).map(snackId => {
+                  const snack = getSnackById(snackId);
+                  if (!snack) return null;
+                  return (
+                    <button
+                      key={snack.id}
+                      type="button"
+                      onClick={() => useSnack(snack.id)}
+                      className="flex min-h-20 w-full items-center gap-3 rounded-lg border-2 border-pink-200 bg-white/85 p-3 text-left shadow-sm transition-all hover:border-pink-400 hover:bg-white"
+                    >
+                      <Cookie className="h-6 w-6 shrink-0 text-pink-500" />
+                      <span>
+                        <span className="block text-sm font-black">{snack.name}</span>
+                        <span className="mt-0.5 block text-xs font-semibold text-[#166b73]">{snack.description}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-auto space-y-2 rounded-lg border border-[#166b73]/15 bg-white/65 p-3 text-xs font-bold text-[#166b73]">
+                <div>{combat.runCurioIds.length}/{MAX_CURIO_SLOTS} curios tucked away</div>
+                <div>{combat.runTraitIds.length}/{MAX_BODY_TRAITS} visible body traits</div>
+                <div>Floor stats: {formatAp(combat.floorTelemetry.apEarned)} AP, {combat.floorTelemetry.studyCardsReviewed} reviews, {combat.floorTelemetry.damageTaken} damage, {combat.floorTelemetry.itemsUsed} items</div>
+              </div>
+            </aside>
+          </div>
         )}
         
         {/* Background */}
@@ -7746,18 +7925,18 @@ export default function App() {
                           </button>
                         )}
 
-                        {combat.snackId && (
+                        {getBackpackSnackIds(combat).length > 0 && (
                           <button
                             type="button"
-                            onClick={useSnack}
+                            onClick={() => setBackpackDrawerOpen(true)}
                             disabled={combat.phase !== "answering"}
                             className="snack-command-button flex min-h-12 w-full items-center justify-between gap-2 rounded-md border border-pink-200/35 bg-pink-300/10 px-3 py-2 text-left text-pink-50 transition-all hover:bg-pink-300/18 disabled:opacity-45 sm:px-3 sm:py-2.5"
                           >
                             <span className="flex min-w-0 items-center gap-2">
-                              <Cookie className="h-5 w-5 shrink-0" />
-                              <span className="truncate text-sm font-black">Snack: {getSnackById(combat.snackId)?.name}</span>
+                              <Backpack className="h-5 w-5 shrink-0" />
+                              <span className="truncate text-sm font-black">Open Backpack</span>
                             </span>
-                            <span className="rounded bg-black/20 px-2 py-1 text-xs font-bold">Free</span>
+                            <span className="rounded bg-black/20 px-2 py-1 text-xs font-bold">{getBackpackSnackIds(combat).length}/{MAX_BACKPACK_SNACKS}</span>
                           </button>
                         )}
 
@@ -8588,7 +8767,16 @@ export default function App() {
                 </div>
               )}
 
-              {combat.currentStudyQuestionType === "multiple_choice" && (
+              {combat.studyFeedback ? (
+                <button
+                  type="button"
+                  onClick={continueAfterWrongAnswer}
+                  className="flex min-h-14 w-full items-center justify-center gap-2 rounded-md bg-[#ff6d87] px-4 py-3 text-base font-black text-white shadow-lg transition-all hover:bg-[#f45173]"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                  Tap to continue
+                </button>
+              ) : combat.currentStudyQuestionType === "multiple_choice" ? (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
                   {(filteredOptions.length > 0 ? filteredOptions : combat.options || []).map((opt, i) => {
                   const isCorrectOption = combat.studyFeedback?.correct === opt;
@@ -8622,9 +8810,7 @@ export default function App() {
                   );
                   })}
                 </div>
-              )}
-
-              {combat.currentStudyQuestionType === "self_grade" && (
+              ) : (
                 <div className="space-y-3">
                   {combat.studyRevealAnswer ? (
                     <>
@@ -8671,9 +8857,15 @@ export default function App() {
     const orbsEarned = combat.floor * 10;
     const rewardChoices = combat.rewardChoices;
     const pendingCharacterUnlocks = getPendingCharacterUnlocks(save, combat);
-    const isFirstRelicReward = combat.floor === 3 && combat.relicChoices.length > 0;
     const claimedTrait = combat.lastClaimedTraitId ? getPipploTraitById(combat.lastClaimedTraitId) : null;
     const hasPendingExpeditionRewards = combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.traitChoices.length > 0 || combat.snackChoices.length > 0;
+    const rewardPouchLabel = combat.relicChoices.length > 0
+      ? "Choose a Mutation"
+      : combat.traitChoices.length > 0
+        ? "Choose a Body Trait"
+        : combat.curioChoices.length > 0
+          ? "Tuck Away a Curio"
+          : "Pack a Snack";
     
     return (
       <div className="cute-theme relative h-screen w-full overflow-auto bg-[#1A1A2E]">
@@ -8694,6 +8886,50 @@ export default function App() {
                 Keep wobbling
               </button>
             </div>
+          </div>
+        )}
+        {rewardDrawerOpen && hasPendingExpeditionRewards && (
+          <div className="fixed inset-0 z-[60] flex justify-end bg-[#073f50]/45 backdrop-blur-[2px]">
+            <button type="button" aria-label="Close reward pouch" className="absolute inset-0" onClick={() => setRewardDrawerOpen(false)} />
+            <aside className="relative z-10 flex h-full w-[min(92vw,26rem)] flex-col overflow-auto border-l border-yellow-200/45 bg-[#eafff6] p-4 text-[#25334a] shadow-2xl">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-wide text-pink-600">Reward pouch</div>
+                  <h3 className="text-xl font-black">{rewardPouchLabel}</h3>
+                </div>
+                <button type="button" onClick={() => setRewardDrawerOpen(false)} className="rounded-full border border-[#166b73]/20 px-3 py-1.5 text-sm font-black text-[#166b73]">Close</button>
+              </div>
+              <div className="space-y-3">
+                {combat.relicChoices.length > 0 && combat.relicChoices.map(relic => (
+                  <button key={relic.id} type="button" onClick={() => claimRelic(relic)} className="w-full rounded-lg border-2 border-yellow-300 bg-white/85 p-3 text-left shadow-sm transition-all hover:bg-white">
+                    <div className="flex items-center justify-between gap-2"><span className="font-black">{relic.name}</span><span className="text-xs font-black capitalize text-yellow-700">{relic.rarity}</span></div>
+                    <p className="mt-1 text-xs font-semibold text-[#166b73]">{relic.description}</p>
+                  </button>
+                ))}
+                {combat.relicChoices.length === 0 && combat.traitChoices.length > 0 && combat.traitChoices.map(trait => (
+                  <button key={trait.id} type="button" onClick={() => claimTrait(trait)} className="w-full rounded-lg border-2 border-pink-200 bg-white/85 p-3 text-left shadow-sm transition-all hover:bg-white">
+                    <div className="flex items-center justify-between gap-2"><span className="font-black">{trait.name}</span><ElementPip kind={trait.element} /></div>
+                    <p className="mt-1 text-xs font-semibold text-[#166b73]">{trait.description}</p>
+                    <div className="mt-2 text-[10px] font-black uppercase text-pink-600">Visible change: {trait.visual}</div>
+                  </button>
+                ))}
+                {combat.relicChoices.length === 0 && combat.traitChoices.length === 0 && combat.curioChoices.length > 0 && combat.curioChoices.map(curio => (
+                  <button key={curio.id} type="button" onClick={() => claimCurio(curio)} className="w-full rounded-lg border-2 border-cyan-200 bg-white/85 p-3 text-left shadow-sm transition-all hover:bg-white">
+                    <div className="flex items-center justify-between gap-2"><span className="font-black">{curio.name}</span><span className="text-xs font-black capitalize text-cyan-700">{curio.rarity}</span></div>
+                    <p className="mt-1 text-xs font-semibold text-[#166b73]">{curio.description}</p>
+                  </button>
+                ))}
+                {combat.relicChoices.length === 0 && combat.traitChoices.length === 0 && combat.curioChoices.length === 0 && combat.snackChoices.map(snack => (
+                  <button key={snack.id} type="button" onClick={() => claimSnack(snack)} className="w-full rounded-lg border-2 border-pink-200 bg-white/85 p-3 text-left shadow-sm transition-all hover:bg-white">
+                    <div className="flex items-center gap-2 font-black"><Cookie className="h-5 w-5 text-pink-500" />{snack.name}</div>
+                    <p className="mt-1 text-xs font-semibold text-[#166b73]">{snack.description}</p>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-auto pt-4 text-xs font-bold text-[#166b73]">
+                Pick one option. If this floor has another reward type, it appears here next.
+              </div>
+            </aside>
           </div>
         )}
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6">
@@ -8721,6 +8957,17 @@ export default function App() {
             </div>
           </div>
 
+          {hasPendingExpeditionRewards && (
+            <button
+              type="button"
+              onClick={() => setRewardDrawerOpen(true)}
+              className="mb-5 flex min-h-14 w-full max-w-md items-center justify-between gap-3 rounded-lg border-2 border-yellow-200/65 bg-yellow-300/18 px-4 py-3 text-left font-black text-yellow-50 shadow-lg transition-all hover:bg-yellow-300/26"
+            >
+              <span className="flex items-center gap-2"><Backpack className="h-5 w-5" />Open Reward Pouch</span>
+              <span className="text-xs">{rewardPouchLabel}</span>
+            </button>
+          )}
+
           <div className="mb-5 grid w-full max-w-4xl gap-2 text-sm md:grid-cols-2">
             <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-cyan-100">
               <div className="font-bold">Study contract</div>
@@ -8736,6 +8983,13 @@ export default function App() {
                   : `Region ${combat.region} · Pipplo keeps growing until this expedition ends.`}
               </div>
             </div>
+          </div>
+          <div className="mb-5 flex w-full max-w-4xl flex-wrap items-center justify-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3 py-2 text-xs font-bold text-white/85">
+            <span className="text-cyan-100">Floor recap</span>
+            <span>{combat.floorTelemetry.studyCardsReviewed} reviews</span>
+            <span>{formatAp(combat.floorTelemetry.apEarned)} AP earned</span>
+            <span>{combat.floorTelemetry.damageTaken} damage taken</span>
+            <span>{combat.floorTelemetry.itemsUsed} items used</span>
           </div>
 
           {combat.floor % 5 === 0 && combat.studyContract.introducedThisContract >= combat.studyContract.targetNewCards && (
@@ -8797,121 +9051,6 @@ export default function App() {
             </div>
           )}
 
-          {combat.relicChoices.length > 0 && (
-            <div className="mb-6 w-full max-w-4xl">
-              <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
-                <Sparkles className="h-5 w-5 text-yellow-300" />
-                {isFirstRelicReward ? "Choose Your First Mutation" : "Choose a Mutation"}
-              </h3>
-              {isFirstRelicReward && (
-                <p className="mx-auto mb-3 max-w-2xl rounded-lg border border-yellow-300/25 bg-yellow-300/10 px-3 py-2 text-center text-sm font-semibold text-yellow-50">
-                  Mutations reshape this expedition. Pick the odd little rule change that sounds fun.
-                </p>
-              )}
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                {combat.relicChoices.map(relic => {
-                  const tile = TILE_DEFS[relic.element];
-                  const reason = getRelicChoiceReason(relic, combat);
-                  return (
-                    <button
-                      key={relic.id}
-                      onClick={() => claimRelic(relic)}
-                      className="cute-sticker rounded-lg border-2 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
-                      style={{ borderColor: tile.color, boxShadow: `0 0 20px ${tile.glow}` }}
-                    >
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="font-bold text-white">{relic.name}</span>
-                        <span className="rounded bg-black/30 px-2 py-0.5 text-xs capitalize" style={{ color: tile.color }}>{relic.rarity}</span>
-                      </div>
-                      <p className="text-sm text-gray-400">{relic.description}</p>
-                      <div className="mt-3 rounded-md border border-white/10 bg-black/25 px-2 py-1.5">
-                        <div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: tile.color }}>{reason.tag}</div>
-                        <div className="text-xs text-gray-300">{reason.text}</div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {combat.traitChoices.length > 0 && (
-            <div className="mb-6 w-full max-w-4xl">
-              <h3 className="mb-2 flex items-center justify-center gap-2 text-lg font-bold text-white">
-                <Sparkles className="h-5 w-5 text-pink-200" />
-                Choose A Body Trait
-              </h3>
-              <p className="mx-auto mb-3 max-w-2xl text-center text-sm font-semibold text-pink-50/80">
-                Camp meals reshape this expedition. Pipplo can show up to {MAX_BODY_TRAITS} traits at once.
-              </p>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                {combat.traitChoices.map(trait => (
-                  <button
-                    type="button"
-                    key={trait.id}
-                    onClick={() => claimTrait(trait)}
-                    className="cute-sticker rounded-lg border-2 border-pink-200/60 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="font-bold text-white">{trait.name}</span>
-                      <ElementPip kind={trait.element} />
-                    </div>
-                    <p className="text-sm text-gray-300">{trait.description}</p>
-                    <div className="mt-3 text-xs font-bold capitalize text-pink-100">Visible change: {trait.visual}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {combat.curioChoices.length > 0 && (
-            <div className="mb-6 w-full max-w-4xl">
-              <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
-                <Backpack className="h-5 w-5 text-cyan-200" />
-                Tuck Away One Curio
-              </h3>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                {combat.curioChoices.map(curio => (
-                  <button
-                    type="button"
-                    key={curio.id}
-                    onClick={() => claimCurio(curio)}
-                    className="cute-sticker rounded-lg border-2 border-cyan-200/55 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="font-bold text-white">{curio.name}</span>
-                      <span className="rounded bg-black/30 px-2 py-0.5 text-xs capitalize text-cyan-100">{curio.rarity}</span>
-                    </div>
-                    <p className="text-sm text-gray-300">{curio.description}</p>
-                    <div className="mt-3 text-xs font-bold text-cyan-100">Equip up to {MAX_CURIO_SLOTS}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {combat.snackChoices.length > 0 && (
-            <div className="mb-6 w-full max-w-2xl">
-              <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
-                <Cookie className="h-5 w-5 text-pink-200" />
-                Pack A Snack
-              </h3>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {combat.snackChoices.map(snack => (
-                  <button
-                    type="button"
-                    key={snack.id}
-                    onClick={() => claimSnack(snack)}
-                    className="cute-sticker rounded-lg border-2 border-pink-200/55 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
-                  >
-                    <div className="font-bold text-white">{snack.name}</div>
-                    <p className="mt-1 text-sm text-gray-300">{snack.description}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          
           {/* Reward cards */}
           {rewardChoices.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 w-full max-w-4xl">
@@ -9114,6 +9253,25 @@ export default function App() {
           
           {/* Content */}
           <div className="flex-1 overflow-auto p-6">
+            <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-white">
+              <BookOpen className="h-5 w-5 text-cyan-200" />
+              Study Progress
+            </h3>
+            <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-5">
+              {[
+                ["Due now", deckStudySummary.due, "text-pink-200"],
+                ["Learning", deckStudySummary.learning, "text-yellow-200"],
+                ["Familiar", deckStudySummary.familiar, "text-cyan-200"],
+                ["Mastered", deckStudySummary.mastered, "text-green-200"],
+                ["Needs attention", deckStudySummary.needsAttention, "text-orange-200"],
+              ].map(([label, value, tone]) => (
+                <div key={String(label)} className="rounded-xl border border-white/10 bg-[#16213E] p-3">
+                  <div className={`text-2xl font-black ${tone}`}>{value}</div>
+                  <div className="text-xs text-gray-400">{label}</div>
+                </div>
+              ))}
+            </div>
+
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-300" />
               {activeDeck.name} Helpers
