@@ -5,26 +5,34 @@ import {
   Award,
   Beaker,
   CircleDot,
+  Coffee,
   Dna,
   Droplets,
+  Footprints,
   Heart,
   HelpCircle,
+  Map,
   Move,
+  Package,
   RefreshCcw,
   Shield,
   Sparkles,
   Swords,
   Target,
+  Wrench,
   X,
 } from "lucide-react";
 import {
   BLOB_BOARD_COLS,
   BLOB_BOARD_ROWS,
+  BLOB_MAP_NODES,
   BLOB_RUN_ROOMS,
   MUTATION_DEFS,
   ACTION_TILE_INFO,
   applyFakeStudyResult,
   claimBlobMutation,
+  claimWorkshopTile,
+  chooseBlobMapNode,
   createInitialBlobTacticsState,
   endBlobTacticsTurn,
   getBlobletAt,
@@ -40,6 +48,7 @@ import {
   tapBoardTile,
   type BlobPosition,
   type BlobMutationId,
+  type BlobMapNodeId,
   type BlobActionTile,
   type BlobActionTileType,
   type BlobStudyGrade,
@@ -125,6 +134,29 @@ function ActionTile({
   );
 }
 
+function MapNodeIcon({ kind }: { kind: "encounter" | "rest" | "workshop" | "guardian" }) {
+  if (kind === "rest") return <Coffee />;
+  if (kind === "workshop") return <Wrench />;
+  if (kind === "guardian") return <Award />;
+  return <Footprints />;
+}
+
+function WorkshopTileOption({ type, onClick }: { type: BlobActionTileType; onClick: () => void }) {
+  const info = ACTION_TILE_INFO[type];
+  return (
+    <button
+      type="button"
+      className="blob-lab-workshop-tile"
+      style={{ "--tile-accent": info.accent } as React.CSSProperties}
+      onClick={onClick}
+    >
+      <span className="blob-lab-action-tile-icon">{ACTION_TILE_ICONS[type]}</span>
+      <strong>{info.name}</strong>
+      <span>{info.description}</span>
+    </button>
+  );
+}
+
 function StudySimulator({ onChoose }: { onChoose: (grade: BlobStudyGrade) => void }) {
   return (
     <section className="blob-lab-study-sheet" aria-label="Fake study result generator">
@@ -154,6 +186,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
   const [state, setState] = useState(createInitialBlobTacticsState);
   const [helpOpen, setHelpOpen] = useState(false);
   const [traitsOpen, setTraitsOpen] = useState(false);
+  const [bagOpen, setBagOpen] = useState(false);
   const validTargetKeys = useMemo(() => getValidTargetKeys(state), [state]);
   const selectedTile = state.hand.find(tile => tile.id === state.selectedActionTileId) || null;
   const enemyIntent = getEnemyIntent(state);
@@ -173,6 +206,12 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
   const chooseActionTile = (tile: BlobActionTile) => setState(current => selectActionTile(current, tile.id));
   const tapTile = (position: BlobPosition) => setState(current => tapBoardTile(current, position));
   const claimMutation = (mutationId: BlobMutationId) => setState(current => claimBlobMutation(current, mutationId));
+  const chooseMapNode = (nodeId: BlobMapNodeId) => setState(current => chooseBlobMapNode(current, nodeId));
+  const chooseWorkshopTile = (type: BlobActionTileType) => setState(current => claimWorkshopTile(current, type));
+  const bagCounts = state.tileBag.reduce<Partial<Record<BlobActionTileType, number>>>((counts, type) => {
+    counts[type] = (counts[type] || 0) + 1;
+    return counts;
+  }, {});
 
   const boardTiles = Array.from({ length: BLOB_BOARD_ROWS * BLOB_BOARD_COLS }, (_, index) => ({
     row: Math.floor(index / BLOB_BOARD_COLS),
@@ -201,13 +240,17 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
         {Array.from({ length: BLOB_RUN_ROOMS }, (_, index) => (
           <i
             key={index}
-            className={`${index + 1 === state.room ? "is-current" : ""} ${index + 1 <= state.roomsCleared ? "is-cleared" : ""} ${index + 1 === BLOB_RUN_ROOMS ? "is-guardian" : ""}`}
-            aria-label={`Room ${index + 1}${index + 1 === BLOB_RUN_ROOMS ? ", guardian" : ""}`}
+            className={`${index + 1 === state.mapDepth ? "is-current" : ""} ${index + 1 < state.mapDepth ? "is-cleared" : ""} ${index + 1 === BLOB_RUN_ROOMS ? "is-guardian" : ""}`}
+            aria-label={`Route layer ${index + 1}${index + 1 === BLOB_RUN_ROOMS ? ", guardian" : ""}`}
           />
         ))}
         <button type="button" className="blob-lab-trait-button" onClick={() => setTraitsOpen(true)}>
           <Dna />
           {state.mutations.length} traits
+        </button>
+        <button type="button" className="blob-lab-trait-button" onClick={() => setBagOpen(true)}>
+          <Package />
+          {state.tileBag.length} tiles
         </button>
       </section>
 
@@ -223,7 +266,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
           <strong>{state.mass}/{state.massMax}</strong>
         </div>
         <div className="blob-lab-room-pill">
-          <span>Room</span>
+          <span>Stop</span>
           <strong>{state.room}/{BLOB_RUN_ROOMS}</strong>
         </div>
       </section>
@@ -350,7 +393,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             <Award />
             <p className="blob-lab-eyebrow">Room {state.room} absorbed</p>
             <h2>Pick one body mutation</h2>
-            <p>Pipplo carries it through the remaining rooms.</p>
+            <p>Pipplo carries it through the remaining route stops.</p>
             <div className="blob-lab-mutation-grid">
               {state.rewardChoices.map(mutationId => {
                 const mutation = MUTATION_DEFS[mutationId];
@@ -371,13 +414,64 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
         </aside>
       )}
 
+      {state.phase === "map" && (
+        <aside className="blob-lab-map-backdrop">
+          <section className="blob-lab-map-sheet">
+            <Map />
+            <p className="blob-lab-eyebrow">Expedition route</p>
+            <h2>Where should Pipplo wobble next?</h2>
+            <p>Fight for more mutations, recover before danger, or tune the tile bag.</p>
+            <div className="blob-lab-map-grid">
+              {state.mapChoices.map(nodeId => {
+                const node = BLOB_MAP_NODES[nodeId];
+                return (
+                  <button
+                    key={nodeId}
+                    type="button"
+                    className={`is-${node.kind}`}
+                    style={{ "--node-accent": node.accent } as React.CSSProperties}
+                    onClick={() => chooseMapNode(nodeId)}
+                  >
+                    <MapNodeIcon kind={node.kind} />
+                    <span>{node.kind === "guardian" ? "Guardian" : node.kind}</span>
+                    <strong>{node.name}</strong>
+                    <small>{node.description}</small>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="blob-lab-map-footer">
+              <span>{state.roomsCleared} fights absorbed</span>
+              <span>{state.mutations.length} traits carried</span>
+              <span>{state.tileBag.length} tiles in bag</span>
+            </div>
+          </section>
+        </aside>
+      )}
+
+      {state.phase === "workshop" && (
+        <aside className="blob-lab-map-backdrop">
+          <section className="blob-lab-map-sheet blob-lab-workshop-sheet">
+            <Wrench />
+            <p className="blob-lab-eyebrow">Tile Tinker</p>
+            <h2>Add one domino to Pipplo's bag</h2>
+            <p>Future study hands become more likely to draw the chosen action tile.</p>
+            <div className="blob-lab-workshop-grid">
+              {state.workshopChoices.map(type => (
+                <WorkshopTileOption key={type} type={type} onClick={() => chooseWorkshopTile(type)} />
+              ))}
+            </div>
+          </section>
+        </aside>
+      )}
+
       {(state.phase === "won" || state.phase === "lost") && (
         <section className={`blob-lab-result is-${state.phase}`}>
           <Sparkles />
           <p className="blob-lab-eyebrow">{state.phase === "won" ? "Micro-run cleared" : "Experiment over"}</p>
           <h2>{state.phase === "won" ? "Root Lump absorbed!" : "Pipplo needs another try"}</h2>
           <p>{state.phase === "won"
-            ? `Pipplo cleared all ${BLOB_RUN_ROOMS} rooms with ${state.mutations.length} body mutations.`
+            ? `Pipplo reached Root Sanctum with ${state.mutations.length} body mutations and ${state.tileBag.length} tiles in the bag.`
             : `Pipplo reached Room ${state.room}. Try splitting helpers to block danger and reclaiming survivors for Mass.`}</p>
           <div>
             <button type="button" onClick={reset}><RefreshCcw /> Restart Lab</button>
@@ -396,7 +490,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             <h2>Split yourself to make options</h2>
             <p>Study creates temporary tiles. Tiles move Pipplo, crack Shell, or bud off little helpers. Every third tile played restores Mass.</p>
             <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors to recover Mass.</p>
-            <p>The board previews enemy paths, attacks, and hazards before the turn ends. Absorb each defeated enemy, pick a body mutation, and adapt.</p>
+            <p>The board previews enemy paths, attacks, and hazards before the turn ends. Between fights, choose routes for mutations, recovery, or Tile Tinker bag upgrades.</p>
           </section>
         </aside>
       )}
@@ -422,6 +516,28 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
                     );
                   })}
                 </div>}
+          </section>
+        </aside>
+      )}
+
+      {bagOpen && (
+        <aside className="blob-lab-help-backdrop" onClick={() => setBagOpen(false)}>
+          <section className="blob-lab-help-sheet blob-lab-bag-sheet" onClick={event => event.stopPropagation()}>
+            <button type="button" className="blob-lab-close-button" onClick={() => setBagOpen(false)} aria-label="Close tile bag">
+              <X />
+            </button>
+            <p className="blob-lab-eyebrow">Tile bag</p>
+            <h2>What study can draw</h2>
+            <p>The Tile Tinker adds duplicates, making favored moves more likely to appear.</p>
+            <div className="blob-lab-bag-grid">
+              {(Object.keys(bagCounts) as BlobActionTileType[]).map(type => (
+                <div key={type} style={{ "--tile-accent": ACTION_TILE_INFO[type].accent } as React.CSSProperties}>
+                  <span className="blob-lab-action-tile-icon">{ACTION_TILE_ICONS[type]}</span>
+                  <strong>{ACTION_TILE_INFO[type].shortName}</strong>
+                  <b>x{bagCounts[type]}</b>
+                </div>
+              ))}
+            </div>
           </section>
         </aside>
       )}

@@ -109,7 +109,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.34rem;
+  gap: 0.25rem;
   min-height: 1rem;
 }
 .blob-lab-route span,
@@ -696,7 +696,8 @@
 
 .blob-lab-result,
 .blob-lab-help-backdrop,
-.blob-lab-reward-backdrop {
+.blob-lab-reward-backdrop,
+.blob-lab-map-backdrop {
   position: fixed;
   z-index: 20;
   inset: 0;
@@ -746,6 +747,13 @@
   background: rgba(30, 69, 80, 0.28);
   padding: 0.65rem;
 }
+.blob-lab-map-backdrop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 69, 80, 0.3);
+  padding: 0.65rem;
+}
 .blob-lab-reward-sheet {
   width: min(100%, 32rem);
   border: 0.18rem solid rgba(22, 143, 153, 0.34);
@@ -772,6 +780,83 @@
 }
 .blob-lab-mutation-grid strong { font-size: 0.78rem; }
 .blob-lab-mutation-grid span { color: #66868a; font-size: 0.67rem; font-weight: 700; line-height: 1.18; }
+.blob-lab-map-sheet {
+  width: min(100%, 34rem);
+  border: 0.18rem solid rgba(22, 143, 153, 0.34);
+  border-radius: 0.94rem;
+  background: rgba(250, 255, 249, 0.98);
+  padding: 0.86rem;
+  box-shadow: 0 1rem 3rem rgba(29, 93, 102, 0.24);
+  text-align: center;
+}
+.blob-lab-map-sheet > svg { width: 1.8rem; height: 1.8rem; color: #45a8b5; }
+.blob-lab-map-sheet h2 { margin: 0.14rem 0 0; color: #2b5e6c; font-size: 1.02rem; }
+.blob-lab-map-sheet > p:not(.blob-lab-eyebrow) { margin: 0.25rem 0 0; color: #5c8084; font-size: 0.68rem; font-weight: 700; }
+.blob-lab-map-grid {
+  display: grid;
+  gap: 0.52rem;
+  margin-top: 0.76rem;
+}
+.blob-lab-map-grid button {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  gap: 0.08rem 0.48rem;
+  align-items: center;
+  border: 0.16rem solid var(--node-accent);
+  border-radius: 0.74rem;
+  background: #fff;
+  color: #3b6873;
+  padding: 0.55rem;
+  box-shadow: 0 0.24rem 0 color-mix(in srgb, var(--node-accent) 52%, #6a8b8d);
+  text-align: left;
+}
+.blob-lab-map-grid button svg {
+  grid-row: 1 / 4;
+  width: 1.45rem;
+  height: 1.45rem;
+  justify-self: center;
+  color: var(--node-accent);
+}
+.blob-lab-map-grid button span {
+  color: color-mix(in srgb, var(--node-accent) 72%, #527a80);
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.blob-lab-map-grid button strong { font-size: 0.8rem; }
+.blob-lab-map-grid button small { color: #66868a; font-size: 0.65rem; font-weight: 700; line-height: 1.18; }
+.blob-lab-map-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.24rem 0.62rem;
+  margin-top: 0.72rem;
+  color: #66868a;
+  font-size: 0.57rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.blob-lab-workshop-grid { display: grid; gap: 0.5rem; margin-top: 0.76rem; }
+.blob-lab-workshop-tile {
+  --tile-accent: #54bfb4;
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  gap: 0.08rem 0.5rem;
+  align-items: center;
+  border: 0.16rem solid var(--tile-accent);
+  border-radius: 0.72rem;
+  background: color-mix(in srgb, var(--tile-accent) 9%, white);
+  color: #3b6873;
+  padding: 0.56rem;
+  box-shadow: 0 0.22rem 0 color-mix(in srgb, var(--tile-accent) 52%, #6a8b8d);
+  text-align: left;
+}
+.blob-lab-workshop-tile .blob-lab-action-tile-icon { grid-row: span 2; }
+.blob-lab-workshop-tile .blob-lab-action-tile-icon svg { width: 1.42rem; height: 1.42rem; }
+.blob-lab-workshop-tile strong { font-size: 0.78rem; }
+.blob-lab-workshop-tile > span:last-child { color: #66868a; font-size: 0.65rem; font-weight: 700; line-height: 1.18; }
 .blob-lab-help-sheet {
   position: relative;
   border: 1px solid rgba(22, 143, 153, 0.3);
@@ -793,6 +878,25 @@
 }
 .blob-lab-trait-list strong { color: #3b6873; font-size: 0.76rem; }
 .blob-lab-trait-list span { color: #66868a; font-size: 0.68rem; font-weight: 700; line-height: 1.2; }
+.blob-lab-bag-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.42rem;
+  margin-top: 0.7rem;
+}
+.blob-lab-bag-grid div {
+  --tile-accent: #54bfb4;
+  display: grid;
+  place-items: center;
+  gap: 0.12rem;
+  border: 0.12rem solid var(--tile-accent);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--tile-accent) 8%, white);
+  padding: 0.4rem 0.18rem;
+}
+.blob-lab-bag-grid .blob-lab-action-tile-icon svg { width: 0.94rem; height: 0.94rem; }
+.blob-lab-bag-grid strong { color: #3b6873; font-size: 0.62rem; }
+.blob-lab-bag-grid b { color: color-mix(in srgb, var(--tile-accent) 80%, #46777d); font-size: 0.58rem; }
 
 @keyframes blobLabBob {
   0%, 100% { transform: translateY(0) scale(1); }

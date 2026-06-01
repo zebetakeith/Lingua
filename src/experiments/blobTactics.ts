@@ -18,6 +18,16 @@ export type BlobActionTileType =
   | "sourSplit";
 export type BlobletKind = "basic" | "bubble";
 export type BlobEnemyKind = "shellSlime" | "nibbleImp" | "sporeBud" | "rootLump";
+export type BlobMapNodeKind = "encounter" | "rest" | "workshop" | "guardian";
+export type BlobMapNodeId =
+  | "shellGate"
+  | "nibbleBurrow"
+  | "snackSpring"
+  | "sporeGarden"
+  | "tileTinker"
+  | "shellHollow"
+  | "softNest"
+  | "rootSanctum";
 export type BlobMutationId =
   | "plumpCore"
   | "springFeet"
@@ -27,7 +37,7 @@ export type BlobMutationId =
   | "studySnacks"
   | "rhythmJelly"
   | "rollingShoulder";
-export type BlobTacticsPhase = "study" | "player" | "reward" | "won" | "lost";
+export type BlobTacticsPhase = "study" | "player" | "reward" | "map" | "workshop" | "won" | "lost";
 export type TileEffect = "goo" | "spore";
 
 export interface BlobPosition {
@@ -103,6 +113,11 @@ export interface BlobTacticsState {
   absorbedEnemies: BlobEnemyKind[];
   springFeetUsedThisRoom: boolean;
   tilesPlayedThisTurn: number;
+  mapDepth: number;
+  mapChoices: BlobMapNodeId[];
+  visitedNodeIds: BlobMapNodeId[];
+  tileBag: BlobActionTileType[];
+  workshopChoices: BlobActionTileType[];
 }
 
 export interface BlobStudyResult {
@@ -131,6 +146,16 @@ export interface BlobMutationDef {
   name: string;
   description: string;
   accent: string;
+}
+
+export interface BlobMapNodeDef {
+  id: BlobMapNodeId;
+  depth: number;
+  kind: BlobMapNodeKind;
+  name: string;
+  description: string;
+  accent: string;
+  enemyKind?: BlobEnemyKind;
 }
 
 export const ACTION_TILE_INFO: Record<BlobActionTileType, {
@@ -291,6 +316,93 @@ const NORMAL_ACTION_TILE_POOL: BlobActionTileType[] = [
   "bump",
 ];
 
+export const STARTING_TILE_BAG: BlobActionTileType[] = [
+  "move",
+  "move",
+  "hop",
+  "slap",
+  "stretch",
+  "bellyFlop",
+  "bump",
+  "split",
+  "rejoin",
+  "spit",
+  "goo",
+  "bubble",
+];
+
+export const BLOB_MAP_NODES: Record<BlobMapNodeId, BlobMapNodeDef> = {
+  shellGate: {
+    id: "shellGate",
+    depth: 1,
+    kind: "encounter",
+    name: "Shell Gate",
+    description: "A shelled wobble blocks the first doorway.",
+    accent: "#7bcff2",
+    enemyKind: "shellSlime",
+  },
+  nibbleBurrow: {
+    id: "nibbleBurrow",
+    depth: 2,
+    kind: "encounter",
+    name: "Nibble Burrow",
+    description: "Fight a quick imp and absorb an extra body mutation.",
+    accent: "#a8d941",
+    enemyKind: "nibbleImp",
+  },
+  snackSpring: {
+    id: "snackSpring",
+    depth: 2,
+    kind: "rest",
+    name: "Snack Spring",
+    description: "Recover 3 HP and 2 Mass, but skip a mutation fight.",
+    accent: "#ffdf5d",
+  },
+  sporeGarden: {
+    id: "sporeGarden",
+    depth: 3,
+    kind: "encounter",
+    name: "Spore Garden",
+    description: "Fight a hazard-making bud and absorb another mutation.",
+    accent: "#a987e7",
+    enemyKind: "sporeBud",
+  },
+  tileTinker: {
+    id: "tileTinker",
+    depth: 3,
+    kind: "workshop",
+    name: "Tile Tinker",
+    description: "Add a favored domino tile to Pipplo's study bag.",
+    accent: "#f5aa49",
+  },
+  shellHollow: {
+    id: "shellHollow",
+    depth: 4,
+    kind: "encounter",
+    name: "Shell Hollow",
+    description: "Fight a sturdy shelled duo for one final mutation.",
+    accent: "#54bfb4",
+    enemyKind: "shellSlime",
+  },
+  softNest: {
+    id: "softNest",
+    depth: 4,
+    kind: "rest",
+    name: "Soft Nest",
+    description: "Recover 4 HP and fully refill Mass before the guardian.",
+    accent: "#ff7895",
+  },
+  rootSanctum: {
+    id: "rootSanctum",
+    depth: 5,
+    kind: "guardian",
+    name: "Root Sanctum",
+    description: "The route converges on Root Lump.",
+    accent: "#8fbd57",
+    enemyKind: "rootLump",
+  },
+};
+
 const samePosition = (a: BlobPosition, b: BlobPosition) => a.row === b.row && a.col === b.col;
 const distance = (a: BlobPosition, b: BlobPosition) => Math.abs(a.row - b.row) + Math.abs(a.col - b.col);
 const positionKey = (position: BlobPosition) => `${position.row}:${position.col}`;
@@ -398,6 +510,20 @@ const createEnemyForRoom = (room: number): BlobEnemy => {
   };
 };
 
+const getMapChoicesAfterDepth = (depth: number): BlobMapNodeId[] => {
+  if (depth === 1) return ["nibbleBurrow", "snackSpring"];
+  if (depth === 2) return ["sporeGarden", "tileTinker"];
+  if (depth === 3) return ["shellHollow", "softNest"];
+  if (depth === 4) return ["rootSanctum"];
+  return [];
+};
+
+const getWorkshopChoices = (state: BlobTacticsState): BlobActionTileType[] => {
+  const candidates: BlobActionTileType[] = ["move", "bump", "bellyFlop", "split", "goo", "bubble", "spit"];
+  const offset = (state.tileBag.length + state.roomsCleared) % candidates.length;
+  return Array.from({ length: 3 }, (_, index) => candidates[(offset + (index * 2)) % candidates.length]);
+};
+
 export function createInitialBlobTacticsState(): BlobTacticsState {
   return {
     turn: 1,
@@ -429,18 +555,24 @@ export function createInitialBlobTacticsState(): BlobTacticsState {
     absorbedEnemies: [],
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
+    mapDepth: 1,
+    mapChoices: [],
+    visitedNodeIds: ["shellGate"],
+    tileBag: [...STARTING_TILE_BAG],
+    workshopChoices: [],
   };
 }
 
 export function createActionTilesFromStudyResult(
   result: BlobStudyResult,
   startingId: number,
+  tileBag: BlobActionTileType[] = NORMAL_ACTION_TILE_POOL,
 ): { tiles: BlobActionTile[]; nextId: number } {
   let nextId = startingId;
   const tiles: BlobActionTile[] = [];
   const offset = result.grade === "great" ? 2 : result.grade === "good" ? 0 : 4;
   for (let index = 0; index < result.tileCount; index += 1) {
-    const type = NORMAL_ACTION_TILE_POOL[(startingId + offset + (index * 3)) % NORMAL_ACTION_TILE_POOL.length];
+    const type = tileBag[(startingId + offset + (index * 3)) % tileBag.length];
     tiles.push(makeActionTile(type, nextId, index < result.upgradedCount));
     nextId += 1;
   }
@@ -457,7 +589,7 @@ export function createActionTilesFromStudyResult(
 export function applyFakeStudyResult(state: BlobTacticsState, grade: BlobStudyGrade): BlobTacticsState {
   if (state.phase !== "study") return state;
   const result = getStudyResult(grade);
-  const generated = createActionTilesFromStudyResult(result, state.nextId);
+  const generated = createActionTilesFromStudyResult(result, state.nextId, state.tileBag);
   const snackBonus = grade !== "bad" && state.mutations.includes("studySnacks") ? 1 : 0;
   const massGain = result.massGain + snackBonus;
   return withNotice({
@@ -613,7 +745,7 @@ const dealDamageToEnemy = (state: BlobTacticsState, damage: number, shellDamage:
   const nextHp = Math.max(0, state.enemy.hp - hpDamage);
   const defeated = nextHp === 0;
   const roomsCleared = defeated ? state.roomsCleared + 1 : state.roomsCleared;
-  const finalRoom = defeated && state.room >= BLOB_RUN_ROOMS;
+  const finalRoom = defeated && state.enemy.boss;
   return withNotice({
     ...state,
     roomsCleared,
@@ -773,7 +905,9 @@ const getSporeTarget = (state: BlobTacticsState): BlobPosition => {
 };
 
 export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
-  if (state.phase === "reward" || state.phase === "won") return { label: "Absorbed", detail: "The room is clear.", tone: "shell", targetId: null };
+  if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "won") {
+    return { label: "Absorbed", detail: "The room is clear.", tone: "shell", targetId: null };
+  }
   const target = getEnemyTarget(state);
   const targetDistance = distance(target.position, state.enemy.position);
   if (state.enemy.kind === "sporeBud" && state.turn % 2 === 0 && targetDistance > 1) {
@@ -811,7 +945,7 @@ const chooseEnemyStep = (state: BlobTacticsState): BlobPosition => {
 
 export function getEnemyPreview(state: BlobTacticsState): BlobEnemyPreview {
   const preview: BlobEnemyPreview = { pathKeys: new Set(), dangerKeys: new Set(), hazardKeys: new Set() };
-  if (state.phase === "reward" || state.phase === "won" || state.phase === "lost") return preview;
+  if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "won" || state.phase === "lost") return preview;
   const intent = getEnemyIntent(state);
   if (intent.tone === "hazard") {
     preview.hazardKeys.add(positionKey(getSporeTarget(state)));
@@ -960,16 +1094,12 @@ export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutat
   if (state.phase !== "reward" || !state.rewardChoices.includes(mutationId)) return state;
   const mutations = [...state.mutations, mutationId];
   const gainsMass = mutationId === "plumpCore";
-  const nextRoom = state.room + 1;
   return withNotice({
     ...state,
-    room: nextRoom,
-    phase: "study",
+    phase: "map",
     pipploHp: Math.min(state.pipploMaxHp, state.pipploHp + 1),
     massMax: gainsMass ? state.massMax + 2 : state.massMax,
     mass: Math.min(gainsMass ? state.massMax + 2 : state.massMax, state.mass + (gainsMass ? 3 : 1)),
-    pipploPosition: { row: 2, col: 0 },
-    enemy: createEnemyForRoom(nextRoom),
     bloblets: [],
     tileEffects: [],
     hand: [],
@@ -979,8 +1109,77 @@ export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutat
     mutations,
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
-  }, `Room ${nextRoom}: ${createEnemyForRoom(nextRoom).name}`,
-  `${MUTATION_DEFS[mutationId].name} absorbed. Pipplo recovered 1 HP and bounced into the next room.`,
+    mapChoices: getMapChoicesAfterDepth(state.mapDepth),
+  }, "Choose a path",
+  `${MUTATION_DEFS[mutationId].name} absorbed. Pipplo recovered 1 HP and can choose the next stop.`,
+  "good");
+}
+
+const enterEncounter = (state: BlobTacticsState, node: BlobMapNodeDef): BlobTacticsState => withNotice({
+  ...state,
+  room: node.depth,
+  mapDepth: node.depth,
+  phase: "study",
+  pipploPosition: { row: 2, col: 0 },
+  enemy: createEnemyForRoom(node.depth),
+  bloblets: [],
+  tileEffects: [],
+  hand: [],
+  selectedActionTileId: null,
+  actionSourceId: null,
+  mapChoices: [],
+  visitedNodeIds: [...state.visitedNodeIds, node.id],
+  springFeetUsedThisRoom: false,
+  tilesPlayedThisTurn: 0,
+}, `${node.name}: ${createEnemyForRoom(node.depth).name}`,
+node.kind === "guardian" ? "The guardian is waiting. Study for a fresh tile hand." : "Study for a fresh tile hand and absorb another mutation.",
+"plain");
+
+const completeSupportStop = (state: BlobTacticsState, node: BlobMapNodeDef, title: string, detail: string): BlobTacticsState => withNotice({
+  ...state,
+  room: node.depth,
+  mapDepth: node.depth,
+  phase: "map",
+  mapChoices: getMapChoicesAfterDepth(node.depth),
+  visitedNodeIds: [...state.visitedNodeIds, node.id],
+}, title, detail, "good");
+
+export function chooseBlobMapNode(state: BlobTacticsState, nodeId: BlobMapNodeId): BlobTacticsState {
+  if (state.phase !== "map" || !state.mapChoices.includes(nodeId)) return state;
+  const node = BLOB_MAP_NODES[nodeId];
+  if (node.kind === "encounter" || node.kind === "guardian") return enterEncounter(state, node);
+  if (node.kind === "rest") {
+    const isSoftNest = node.id === "softNest";
+    const hpGain = isSoftNest ? 4 : 3;
+    return completeSupportStop({
+      ...state,
+      pipploHp: Math.min(state.pipploMaxHp, state.pipploHp + hpGain),
+      mass: isSoftNest ? state.massMax : Math.min(state.massMax, state.mass + 2),
+    }, node, node.name, isSoftNest
+      ? "Pipplo curled up, recovered 4 HP, and refilled Mass."
+      : "Pipplo splashed around, recovered 3 HP, and gained 2 Mass.");
+  }
+  return withNotice({
+    ...state,
+    room: node.depth,
+    mapDepth: node.depth,
+    phase: "workshop",
+    mapChoices: [],
+    visitedNodeIds: [...state.visitedNodeIds, node.id],
+    workshopChoices: getWorkshopChoices(state),
+  }, node.name, "Choose one domino tile to add to Pipplo's study bag.", "good");
+}
+
+export function claimWorkshopTile(state: BlobTacticsState, tileType: BlobActionTileType): BlobTacticsState {
+  if (state.phase !== "workshop" || !state.workshopChoices.includes(tileType)) return state;
+  return withNotice({
+    ...state,
+    phase: "map",
+    tileBag: [...state.tileBag, tileType],
+    workshopChoices: [],
+    mapChoices: getMapChoicesAfterDepth(state.mapDepth),
+  }, `${ACTION_TILE_INFO[tileType].name} added`,
+  `Future study hands are now more likely to contain ${ACTION_TILE_INFO[tileType].name}.`,
   "good");
 }
 
