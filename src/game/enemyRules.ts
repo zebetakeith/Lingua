@@ -47,7 +47,7 @@ export function getEnemySpecialText(special: string | null): string {
   if (special === "freeze_timer") return "adds 1 AP to the next study goal";
   if (special === "sequential") return "strikes faster after a hit";
   if (special === "self_heal") return "heals after attacking";
-  if (special === "timer_drain") return "drains Focus and AP";
+  if (special === "timer_drain") return "drains Gusto and AP";
   if (special === "randomize_positions") return "delays a party member";
   if (special === "low_combo_punish") return "punishes low AP spend";
   if (special === "healing_check") return "tests healing or defense";
@@ -75,7 +75,7 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
       apCost: 1,
       damage,
       description: `Spends a second AP for +${damage} damage.`,
-      counterplay: "Defend to soften both hits, or finish it before its turn.",
+      counterplay: "Brace to soften both hits, or finish it before its turn.",
       severity: "high",
     };
   }
@@ -99,7 +99,7 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
       apCost: 1,
       damage: 0,
       description: "Adds 1 AP to the next study goal.",
-      counterplay: "Ward the hit or prepare to answer one more card in the next study set.",
+      counterplay: "Bubble the hit or prepare to answer one more card in the next study set.",
       severity: "medium",
     };
   }
@@ -107,11 +107,11 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
   if (special === "timer_drain") {
     return {
       id: "drain_focus",
-      name: "Drain Focus",
+      name: "Drain Gusto",
       apCost: 1,
       damage: 0,
-      description: "Drains Focus and reduces the first AP gained next rush.",
-      counterplay: "Spend AP before it acts, or use Ward to block the disruption.",
+      description: "Drains Gusto and reduces the first AP gained next rush.",
+      counterplay: "Spend AP before it acts, or use a Bubble to block the disruption.",
       severity: "high",
     };
   }
@@ -173,7 +173,7 @@ function getEnemySpecialAction(enemy: EnemyLike, context: EnemyPlanContext): Ene
       apCost: 1,
       damage: 0,
       description: "Raises the next study goal and reduces early AP gain.",
-      counterplay: "Save burst commands for phase shifts and keep Ward ready.",
+      counterplay: "Save burst tricks for phase shifts and keep a Bubble ready.",
       severity: "high",
     };
   }
@@ -190,7 +190,7 @@ export function getEnemyActionPlan(enemy: EnemyLike, context: EnemyPlanContext =
       apCost: 1,
       damage: enemy.currentDamage,
       description: `Deals ${enemy.currentDamage} damage.`,
-      counterplay: enemy.shield && enemy.shield > 0 ? "Break shields with weakness hits, or defend before impact." : "Defend, Ward, heal, or finish it before it acts.",
+      counterplay: enemy.shield && enemy.shield > 0 ? "Crack shells with weakness hits, or brace before impact." : "Brace, Bubble, heal, or finish it before it acts.",
       severity: enemy.attackCharge <= 1 ? "high" : "low",
     },
   ];
@@ -227,17 +227,17 @@ export function getEnemyCounterplayText(enemy: EnemyLike, context: EnemyPlanCont
   })[0];
   if (mostSevere) return mostSevere.counterplay;
   if (enemy.def.special === "low_combo_punish") return "Spend at least 3 AP before it acts.";
-  if (enemy.def.special === "heavy_attack") return "Defend to soften both hits, or finish it before its turn.";
+  if (enemy.def.special === "heavy_attack") return "Brace to soften both hits, or finish it before its turn.";
   if (enemy.def.special === "healing_check") return "Heal or defend before its turn.";
   if (enemy.def.special === "self_heal") return "Burst it down or break shield before it heals.";
-  if (enemy.def.special === "timer_drain") return "Ward the hit or spend AP before Focus is drained.";
-  if (enemy.def.special === "freeze_timer") return "Ward the hit or prepare for a longer study set.";
+  if (enemy.def.special === "timer_drain") return "Bubble the hit or spend AP before Gusto is drained.";
+  if (enemy.def.special === "freeze_timer") return "Bubble the hit or prepare for a longer study set.";
   if (enemy.def.special === "randomize_positions") return "Act with key party members before it delays them.";
   if (enemy.def.special === "three_phase") return "Save burst commands for phase shifts.";
   if (enemy.def.special === "enrage_at_50") return "Hold burst until you can push through half HP.";
   if (enemy.def.special === "shuffle_answers") return "Expect the next study answers to be shuffled.";
   if (enemy.def.special === "sequential") return "Expect shorter attack windows after it connects.";
-  if (enemy.shield && enemy.shield > 0) return "Hit weaknesses to break the shield and charge Focus.";
+  if (enemy.shield && enemy.shield > 0) return "Hit weaknesses to crack the shell and charge Gusto.";
   return "Earn AP, spend commands, heal or defend before enemy turns.";
 }
 

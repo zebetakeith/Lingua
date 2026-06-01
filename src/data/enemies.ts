@@ -106,7 +106,7 @@ export const ENEMIES: EnemyDef[] = [
   },
   {
     id: "lich_scribe",
-    name: "Nap Wisp",
+    name: "Nap Puff",
     element: "shadow",
     weakTo: ["light", "flame"],
     resists: ["shadow", "heart"],
@@ -214,7 +214,7 @@ export const ENEMIES: EnemyDef[] = [
   },
   {
     id: "abyssal_knight",
-    name: "Dusk Knight",
+    name: "Dusk Bouncer",
     element: "shadow",
     weakTo: ["light", "flame"],
     resists: ["shadow", "tide"],
@@ -230,7 +230,7 @@ export const ENEMIES: EnemyDef[] = [
   },
   {
     id: "archmage",
-    name: "Cloud Mage",
+    name: "Cloud Lump",
     element: "light",
     weakTo: ["shadow", "tide"],
     resists: ["light", "flame"],
@@ -281,16 +281,23 @@ export function getEnemiesForFloor(floor: number): EnemyDef[] {
   }
 
   const regularEnemies = ENEMIES.filter(e => !e.isBoss);
-  return [regularEnemies[(floor - 1) % regularEnemies.length]];
+  const first = regularEnemies[(floor - 1) % regularEnemies.length];
+  if (floor <= 10) return [first];
+
+  const region = Math.floor((floor - 1) / 10) + 1;
+  const groupSize = region >= 4 && floor % 4 === 3 ? 3 : floor % 3 === 0 || floor % 10 === 7 ? 2 : 1;
+  const enemies = [first];
+  for (let offset = 3; enemies.length < groupSize; offset += 3) {
+    const candidate = regularEnemies[(floor - 1 + offset) % regularEnemies.length];
+    if (!enemies.some(enemy => enemy.id === candidate.id)) enemies.push(candidate);
+  }
+  return enemies;
 }
 
 export function getHpMultiplier(floor: number): number {
-  if (floor <= 2) return 1.0;
-  if (floor <= 4) return 1.5;
-  if (floor <= 6) return 2.0;
-  if (floor <= 8) return 2.8;
-  if (floor <= 10) return 4.0;
-  return 4.0 + (floor - 10) * 0.5;
+  const region = Math.floor((Math.max(1, floor) - 1) / 10);
+  const localStep = (Math.max(1, floor) - 1) % 10;
+  return 1 + region * 0.62 + localStep * 0.16 + Math.max(0, region - 2) * 0.12;
 }
 
 export function getTimerForFloor(floor: number): number {

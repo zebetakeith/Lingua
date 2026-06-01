@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles } from "lucide-react";
+import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot } from "lucide-react";
 import VOCABULARY, { getRandomWord, generateDistractors, type VocabWord } from "./data/vocabulary";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
 import { getClassById } from "./data/classes";
@@ -45,6 +45,27 @@ import {
   type StudyDirection,
   type StudyQuestionType,
 } from "./game/study";
+import {
+  DEFAULT_CONTRACT_MINUTES,
+  DEFAULT_CONTRACT_NEW_CARDS,
+  applyMealGrowth,
+  createBlobStats,
+  createCurioChoices,
+  createSnackChoices,
+  createStudyContract,
+  getCurioById,
+  getMealGrowth,
+  getRegionForFloor,
+  getSnackById,
+  getVocabularyPicksForFloor,
+  normalizeStudyContract,
+  type BlobStats,
+  type CurioDef,
+  type ExpeditionSnapshot,
+  type MealSummary,
+  type SnackDef,
+  type StudyContract,
+} from "./game/expedition";
 import {
   BOARD_COLS,
   BOARD_ROWS,
@@ -135,6 +156,10 @@ interface SavedDeck {
   selectedPartyCharacterIds: string[];
   unlockedRelicIds: string[];
   relicHistory: string[];
+  unlockedCurioIds: string[];
+  unlockedRegionStartFloors: number[];
+  lastStudyContract: StudyContract;
+  activeExpedition: ExpeditionSnapshot<CombatState> | null;
   bossClears: number;
   createdAt: number;
   updatedAt: number;
@@ -198,6 +223,17 @@ interface CombatState {
   cinematicStepIndex: number;
   relicChoices: RelicDef[];
   runRelics: string[];
+  curioChoices: CurioDef[];
+  runCurioIds: string[];
+  snackChoices: SnackDef[];
+  snackId: string | null;
+  blobStats: BlobStats;
+  lastMeal: MealSummary | null;
+  mealDigested: boolean;
+  studyContract: StudyContract;
+  vocabPicksRemaining: number;
+  expeditionSeed: string;
+  region: number;
   runPartyCharacterIds: string[];
   guestCharacterIds: string[];
   recruitedCharacterIds: string[];
@@ -389,7 +425,7 @@ interface StudyFeedback {
 const STARTING_HP = 100;
 const SAVE_KEY = "lexicon_labyrinth_save";
 const SAVE_BACKUP_APP_ID = "lexicon-labyrinth";
-const SAVE_BACKUP_VERSION = 1;
+const SAVE_BACKUP_VERSION = 2;
 const DEFAULT_DECK_ID = "starter-japanese";
 const MAX_DECK_CARDS = 2000;
 const RUN_START_CARD_TARGET = 6;
@@ -409,6 +445,8 @@ const STUDY_RUSH_AP_CAP = 5;
 const PLAYER_ACTION_DELAY = 20;
 const ENEMY_ACTION_DELAY = 70;
 const MAX_ACTIVE_PARTY_SIZE = 3;
+const MAX_HELPER_SIZE = 2;
+const MAX_CURIO_SLOTS = 3;
 const EARLY_GUEST_FLOOR = 2;
 const EARLY_GUEST_CHARACTER_ID = "scholar";
 const FIRST_BOSS_FLOOR = 5;
@@ -469,6 +507,10 @@ function createSavedDeck(name: string, cards: VocabWord[], id = `deck-${Date.now
     selectedPartyCharacterIds: ["linguist"],
     unlockedRelicIds: [],
     relicHistory: [],
+    unlockedCurioIds: [],
+    unlockedRegionStartFloors: [1],
+    lastStudyContract: createStudyContract(),
+    activeExpedition: null,
     bossClears: 0,
     createdAt: now,
     updatedAt: now,
@@ -515,6 +557,14 @@ function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck
     selectedPartyCharacterIds: selectedPartyCharacterIds.length > 0 ? selectedPartyCharacterIds : ["linguist"],
     unlockedRelicIds: Array.isArray(deck.unlockedRelicIds) ? deck.unlockedRelicIds : fallback.unlockedRelicIds,
     relicHistory: Array.isArray(deck.relicHistory) ? deck.relicHistory : fallback.relicHistory,
+    unlockedCurioIds: Array.isArray(deck.unlockedCurioIds) ? deck.unlockedCurioIds : fallback.unlockedCurioIds,
+    unlockedRegionStartFloors: Array.isArray(deck.unlockedRegionStartFloors)
+      ? Array.from(new Set([1, ...deck.unlockedRegionStartFloors.filter(floor => typeof floor === "number" && floor >= 1)]))
+      : fallback.unlockedRegionStartFloors,
+    lastStudyContract: normalizeStudyContract(deck.lastStudyContract),
+    activeExpedition: deck.activeExpedition && typeof deck.activeExpedition === "object"
+      ? deck.activeExpedition as ExpeditionSnapshot<CombatState>
+      : null,
     bossClears: typeof deck.bossClears === "number" ? deck.bossClears : fallback.bossClears,
     stats: {
       ...createDeckStats(),
@@ -751,14 +801,9 @@ function updateActiveDeck(saveData: SaveData, updater: (deck: SavedDeck) => Save
   };
 }
 
-function getDeckRampStride(cardCount: number): number {
-  if (cardCount <= 50) return 1;
-  return Math.min(8, 1 + Math.floor(Math.log2(cardCount / 50)));
-}
-
 function getDifficultyFloor(runFloor: number, saveData: SaveData): number {
-  const stride = getDeckRampStride(Math.max(1, getAllCards(saveData).length));
-  return 1 + Math.floor((Math.max(1, runFloor) - 1) / stride);
+  void saveData;
+  return Math.max(1, runFloor);
 }
 
 function updateRunStats(saveData: SaveData, state: CombatState, orbsEarned: number): SaveData {
@@ -801,6 +846,7 @@ function updateRunStats(saveData: SaveData, state: CombatState, orbsEarned: numb
         updatedAt: Date.now(),
         stats: nextStats,
         bossClears: nextBossClears,
+        activeExpedition: null,
         unlockedCharacterIds,
         selectedPartyCharacterIds: getDeckSelectedPartyIds({ ...deck, unlockedCharacterIds }),
       };
@@ -920,7 +966,8 @@ function getProjectedStudyCardAp(state: CombatState, saveData: SaveData): number
   const rating = getRatingFromBox(getCardProgress(state.currentWord, saveData).box);
   const hardEdgeBonus = state.runRelics.includes("hard_edge") && rating === "hard" ? 1 : 0;
   const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
-  const rawAp = Math.max(0.1, getApForCorrectCard(state.currentWord, saveData, state.currentStudyDirection, state.currentStudyQuestionType) + hardEdgeBonus + steadyGripBonus);
+  const compassBonus = state.runCurioIds.includes("jammy_compass") && state.studyCorrectRound === 0 ? 0.5 : 0;
+  const rawAp = Math.max(0.1, getApForCorrectCard(state.currentWord, saveData, state.currentStudyDirection, state.currentStudyQuestionType) + hardEdgeBonus + steadyGripBonus + compassBonus);
   return clampStudyRushAp(state, rawAp);
 }
 
@@ -1098,6 +1145,70 @@ function createRewardChoices(saveData: SaveData, deck: VocabWord[], floor: numbe
   const pool = primaryPool.length >= REWARD_CARD_COUNT ? primaryPool : library;
 
   return shuffleCards(pool).slice(0, REWARD_CARD_COUNT);
+}
+
+function getRoomVocabularyPicks(saveData: SaveData, state: CombatState): number {
+  return getVocabularyPicksForFloor(state.studyContract, state.floor, getUnintroducedStudyCards(saveData).length);
+}
+
+function createRoomRewardChoices(saveData: SaveData, state: CombatState): VocabWord[] {
+  return getRoomVocabularyPicks(saveData, state) > 0
+    ? createRewardChoices(saveData, state.deck, state.difficultyFloor)
+    : [];
+}
+
+function createExpeditionSnapshot(state: CombatState, screen: "combat" | "reward"): ExpeditionSnapshot<CombatState> {
+  return {
+    version: 1,
+    savedAt: Date.now(),
+    screen,
+    floor: state.floor,
+    region: state.region,
+    seed: state.expeditionSeed,
+    combat: {
+      ...state,
+      isPaused: false,
+      actionEffect: null,
+      damageNumbers: [],
+      flashColor: "",
+      screenShake: 0,
+      enemyAnim: null,
+      playerAnim: null,
+      showPhaseBanner: null,
+    },
+  };
+}
+
+function digestRoom(state: CombatState, enemies: EnemyInstance[]): Pick<CombatState, "blobStats" | "lastMeal" | "mealDigested" | "playerHp" | "playerMaxHp" | "eventNotices"> {
+  if (state.mealDigested) {
+    return {
+      blobStats: state.blobStats,
+      lastMeal: state.lastMeal,
+      mealDigested: state.mealDigested,
+      playerHp: state.playerHp,
+      playerMaxHp: state.playerMaxHp,
+      eventNotices: state.eventNotices,
+    };
+  }
+  const meal = getMealGrowth(enemies.map(enemy => enemy.def), state.runCurioIds);
+  const nextBlobStats = applyMealGrowth(state.blobStats, meal);
+  const bulkGain = meal.growth.bulk * 3;
+  const growthLabels = [
+    meal.growth.bulk > 0 ? `+${meal.growth.bulk} Bulk` : "",
+    meal.growth.bop > 0 ? `+${meal.growth.bop} Bop` : "",
+    meal.growth.bounce > 0 ? `+${meal.growth.bounce} Bounce` : "",
+    meal.growth.gusto > 0 ? `+${meal.growth.gusto} Gusto` : "",
+  ].filter(Boolean);
+  return {
+    blobStats: nextBlobStats,
+    lastMeal: meal,
+    mealDigested: true,
+    playerHp: state.playerHp + bulkGain,
+    playerMaxHp: state.playerMaxHp + bulkGain,
+    eventNotices: appendCombatNotices(state.eventNotices, [
+      createCombatNotice("A satisfying snack", `${meal.enemyNames.join(" + ")} absorbed: ${growthLabels.join(", ") || "a happy wiggle"}.`, "good"),
+    ]),
+  };
 }
 
 function createStarterDraftChoices(saveData: SaveData, draftDeck: VocabWord[], excludedIds = new Set<string>()): VocabWord[] {
@@ -1323,9 +1434,9 @@ function getPlayerActionCost(member: CharacterDef, action: PlayerActionId, state
 }
 
 function getActionLabel(member: CharacterDef, action: PlayerActionId): string {
-  if (action === "attack") return "Attack";
-  if (action === "defend") return "Defend";
-  return getSkillById(member.skillId)?.name || "Skill";
+  if (action === "attack") return "Bop";
+  if (action === "defend") return "Brace";
+  return getSkillById(member.skillId)?.name || "Trick";
 }
 
 function getPlayerActionVisualPreset(member: CharacterDef, action: PlayerActionId): CombatVisualPreset {
@@ -1369,7 +1480,7 @@ function getPlayerActionTimelinePreview(member: CharacterDef, action: PlayerActi
 }
 
 function getPlayerActionPreviewText(member: CharacterDef, action: PlayerActionId, state: CombatState, enemy?: EnemyInstance | null): string {
-  if (action === "defend") return "Reduce the next hit";
+  if (action === "defend") return "Soften the next hit";
   if (action === "skill") return getSkillById(member.skillId)?.description || member.passive;
   const rawDamage = Math.max(5, member.attack + Math.floor(state.difficultyFloor * 1.15));
   if (enemy?.def.weakTo.includes(member.element)) return `${rawDamage} base damage - weakness`;
@@ -1504,7 +1615,7 @@ function getEnemyPuzzleHint(enemy?: EnemyInstance | null): { label: string; text
     return { label: "AP check", text: "Spend 3+ AP before it acts.", tone: "bad" };
   }
   if (enemy.def.special === "heavy_attack") {
-    return { label: "Big windup", text: "Defend to soften Belly Flop, or finish it first.", tone: "warn" };
+    return { label: "Big windup", text: "Brace to soften Belly Flop, or finish it first.", tone: "warn" };
   }
   if (enemy.def.special === "healing_check") {
     return { label: "Healing check", text: "Heal or defend before its turn.", tone: "good" };
@@ -1513,7 +1624,7 @@ function getEnemyPuzzleHint(enemy?: EnemyInstance | null): { label: string; text
     return { label: "Burst puzzle", text: "Finish it quickly or it heals.", tone: "warn" };
   }
   if (enemy.def.special === "timer_drain" || enemy.def.special === "freeze_timer") {
-    return { label: "Disruptor", text: "Ward or shield break prevents the worst hit.", tone: "bad" };
+    return { label: "Disruptor", text: "A Bubble or shell break prevents the worst hit.", tone: "bad" };
   }
   if (enemy.def.special === "randomize_positions" || enemy.def.special === "shuffle_answers") {
     return { label: "Timeline puzzle", text: "Act before it disrupts commands or study.", tone: "warn" };
@@ -2251,24 +2362,24 @@ function createCombatActionEffect(
 // ─── Initial Combat State ────────────────────────────────
 function getFloorLessonNotice(floor: number): CombatNotice | null {
   if (floor === 1) {
-    return createCombatNotice("Lesson: Guard", "Bloop Slime spends 2 AP on Belly Flop. Defend before it acts.", "warn");
+    return createCombatNotice("Lesson: Brace", "Bloop Slime spends 2 AP on Belly Flop. Brace before it acts.", "warn");
   }
   if (floor === 2) {
-    return createCombatNotice("Scholar joins as a guest", "Ward Word can block Nibble Imp's Scramble Answers.", "good");
+    return createCombatNotice("Bubble Bell tags along", "Bubble Up can block Nibble Imp's Scramble Answers.", "good");
   }
   if (floor === 3) {
     return createCombatNotice("Lesson: AP Rhythm", "Spend at least 3 AP before Doodle Dragon acts.", "warn");
   }
   if (floor === 4) {
-    return createCombatNotice("Lesson: Shield Break", "Scholar's Tide commands crack Page Wisp's shield, delay its turn, and charge Focus.", "good");
+    return createCombatNotice("Lesson: Shell Break", "Bubble Bell's aqua tricks crack Page Wisp's shell, delay its turn, and charge Gusto.", "good");
   }
   if (floor === FIRST_BOSS_FLOOR) {
-    return createCombatNotice("Speedreader joins as a guest", "Use Flame Script to crack Root Lump's shield. It enrages below half HP.", "warn");
+    return createCombatNotice("Zip Sprig tags along", "Use Comet Bonk to crack Root Lump's shell. It gets extra grumpy below half HP.", "warn");
   }
   return null;
 }
 
-function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveData, startingDeck?: VocabWord[]): CombatState {
+function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveData, startingDeck?: VocabWord[], contract = createStudyContract()): CombatState {
   const difficultyFloor = getDifficultyFloor(floor, saveData);
   const encounter = getEncounterForFloor(floor);
   const enemyDefs = getEnemiesForFloor(floor);
@@ -2279,7 +2390,11 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
   const runPartyCharacterIds = getDeckSelectedPartyIds(activeDeck);
   const guestCharacterIds = getRunGuestCharacterIds(floor, runPartyCharacterIds, [], getDeckUnlockedCharacterIds(activeDeck));
   const runParty = getRunParty(saveData, guestCharacterIds, runPartyCharacterIds);
-  const runPlayerMaxHp = getPartyMaxHp(runParty, playerMaxHp);
+  const region = getRegionForFloor(floor);
+  const starterBlobStats: BlobStats = floor > 1
+    ? { bulk: (region - 1) * 5, bop: (region - 1) * 4, bounce: (region - 1) * 2, gusto: region - 1 }
+    : createBlobStats();
+  const runPlayerMaxHp = getPartyMaxHp(runParty, playerMaxHp) + starterBlobStats.bulk * 3;
   const encounterBoard = createEncounterBoard(encounter);
   
   const enemies: EnemyInstance[] = enemyDefs.map(def => createEnemyInstance(def, hpMult, encounter));
@@ -2325,6 +2440,17 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     cinematicStepIndex: 0,
     relicChoices: [],
     runRelics: [],
+    curioChoices: [],
+    runCurioIds: [],
+    snackChoices: [],
+    snackId: "berry_pop",
+    blobStats: starterBlobStats,
+    lastMeal: null,
+    mealDigested: false,
+    studyContract: normalizeStudyContract(contract),
+    vocabPicksRemaining: 0,
+    expeditionSeed: `expedition-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    region,
     runPartyCharacterIds,
     guestCharacterIds,
     recruitedCharacterIds: [],
@@ -2350,7 +2476,7 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     flameDiscountNext: false,
     fragileDebuff: 0,
     boardMessage: encounter.modifierLabel === "Standard"
-      ? "Study first, then spend AP on party commands."
+      ? "Study first, then spend AP on body tricks and helper commands."
       : `${encounter.modifierLabel}: ${encounter.modifierDescription}`,
     studyQuestionsTotal: 0,
     studyQuestionsLeft: 0,
@@ -2390,6 +2516,9 @@ export default function App() {
   const [starterDraftChoices, setStarterDraftChoices] = useState<VocabWord[]>([]);
   const [starterDraftMessage, setStarterDraftMessage] = useState("");
   const [typedStudyAnswer, setTypedStudyAnswer] = useState("");
+  const [contractNewCards, setContractNewCards] = useState(DEFAULT_CONTRACT_NEW_CARDS);
+  const [contractMinutes, setContractMinutes] = useState(DEFAULT_CONTRACT_MINUTES);
+  const [selectedRegionStart, setSelectedRegionStart] = useState(1);
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const combatRef = useRef<CombatState | null>(null);
@@ -2405,6 +2534,32 @@ export default function App() {
   useEffect(() => {
     saveSave(save);
   }, [save]);
+
+  useEffect(() => {
+    if (!combat || (screen !== "combat" && screen !== "reward")) return;
+    const snapshot = createExpeditionSnapshot(combat, screen);
+    setSave(prev => updateActiveDeck(prev, deck => ({
+      ...deck,
+      activeExpedition: snapshot,
+      lastStudyContract: combat.studyContract,
+    })));
+  }, [combat, screen]);
+
+  useEffect(() => {
+    if (screen !== "combat" || combat?.mode !== "study" || combat.isPaused) return;
+    const interval = window.setInterval(() => {
+      setCombat(prev => prev && prev.mode === "study"
+        ? {
+            ...prev,
+            studyContract: {
+              ...prev.studyContract,
+              studiedSeconds: prev.studyContract.studiedSeconds + 1,
+            },
+          }
+        : prev);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [screen, combat?.mode, combat?.isPaused]);
 
   // ─── Timer Logic ──────────────────────────────────────
   useEffect(() => {
@@ -2651,22 +2806,22 @@ export default function App() {
     if (perfectStudy && currentEnemy && adjustedState.runRelics.includes("clarity_lens")) {
       exposedTurns = Math.max(exposedTurns, 1);
       studyStatusMessage += " Clarity Lens exposed the enemy.";
-      studyNotices.push(createCombatNotice("Relic: Clarity Lens", "Perfect study applied Exposed.", "relic"));
+      studyNotices.push(createCombatNotice("Mutation: Wobbly Sticker", "Perfect study made the enemy Wobbly.", "relic"));
     }
 
     if (perfectStudy && adjustedState.runRelics.includes("ember_primer")) {
       flameDiscountNext = true;
       studyStatusMessage += " Ember Primer discounted the next Flame action.";
-      studyNotices.push(createCombatNotice("Relic: Ember Primer", "Next Flame command costs 1 less AP.", "relic"));
+      studyNotices.push(createCombatNotice("Mutation: Pepper Puff", "Next coral trick costs 1 less AP.", "relic"));
     }
 
     if (perfectStudy && adjustedState.runRelics.includes("warded_notes") && !nextBuffs.some(buff => buff.type === "ward")) {
       nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }];
-      studyNotices.push(createCombatNotice("Relic: Warded Notes", "Perfect study raised a Ward.", "relic"));
+      studyNotices.push(createCombatNotice("Mutation: Bubble Thoughts", "Perfect study raised a Bubble.", "relic"));
     }
     if (adjustedState.runRelics.includes("combo_aegis") && adjustedState.studyCorrectRound >= 4 && !nextBuffs.some(buff => buff.type === "combo_aegis_used")) {
       nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }, { type: "combo_aegis_used", remaining: 1 }];
-      studyNotices.push(createCombatNotice("Relic: Rush Aegis", "4+ correct raised a Ward.", "relic"));
+      studyNotices.push(createCombatNotice("Mutation: Victory Bubble", "4+ correct raised a Bubble.", "relic"));
     }
 
     setCombat({
@@ -2689,7 +2844,7 @@ export default function App() {
       pendingCinematic: null,
       cinematic: null,
       eventNotices: appendCombatNotices(adjustedState.eventNotices, studyNotices),
-      boardMessage: `Study set complete: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${formatAp(adjustedState.actionPointsEarnedThisRush)} AP and ${adjustedState.skillCharge}/12 Focus is ready.${studyStatusMessage}`,
+      boardMessage: `Study set complete: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${formatAp(adjustedState.actionPointsEarnedThisRush)} AP and ${adjustedState.skillCharge}/12 Gusto is ready.${studyStatusMessage}`,
     });
   };
 
@@ -2759,12 +2914,13 @@ export default function App() {
     const nextScore = Math.round(state.score + 20 + earnedAp * 5);
     const learnedMessage = getActiveDeck(nextSave).cardRatings?.[state.currentWord.id] === "known" ? " Mastered and removed from study." : "";
     const comboSparkFocus = state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? 2 : 0;
-    const focusGain = (state.runRelics.includes("deep_focus") ? 2 : 1) + hardEdgeBonus + comboSparkFocus + difficultyFocusBonus;
+    const appetiteFocusBonus = Math.floor(state.blobStats.gusto / 4);
+    const focusGain = (state.runRelics.includes("deep_focus") ? 2 : 1) + hardEdgeBonus + comboSparkFocus + difficultyFocusBonus + appetiteFocusBonus;
     const answerNotices: CombatNotice[] = [
-      ...(hardEdgeBonus > 0 ? [createCombatNotice("Relic: Hard Edge", "Hard card answered: +1 AP before cap and +1 Focus.", "relic")] : []),
-      ...(steadyGripBonus > 0 ? [createCombatNotice("Relic: Steady Grip", "First correct answer added +1 AP before cap.", "relic")] : []),
-      ...(difficultyFocusBonus > 0 ? [createCombatNotice("Difficult Card", "Harder vocabulary charged +1 extra Focus.", "good")] : []),
-      ...(state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? [createCombatNotice("Relic: Rush Spark", "4 correct in one study set: +2 Focus.", "relic")] : []),
+      ...(hardEdgeBonus > 0 ? [createCombatNotice("Mutation: Crunchy Questions", "Hard card answered: +1 AP before cap and +1 Gusto.", "relic")] : []),
+      ...(steadyGripBonus > 0 ? [createCombatNotice("Mutation: First Bite", "First correct answer added +1 AP before cap.", "relic")] : []),
+      ...(difficultyFocusBonus > 0 ? [createCombatNotice("Difficult Card", "Harder vocabulary charged +1 extra Gusto.", "good")] : []),
+      ...(state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? [createCombatNotice("Mutation: Happy Wiggle", "4 correct in one study set: +2 Gusto.", "relic")] : []),
       ...(apCapped ? [createCombatNotice("Study Hand", `Study hand resolved at ${getStudyRushApCap(state)} possible AP.`, "good")] : []),
     ];
     setSave(nextSave);
@@ -2784,7 +2940,7 @@ export default function App() {
       skillCharge: Math.min(12, state.skillCharge + focusGain),
       score: nextScore,
       eventNotices: appendCombatNotices(state.eventNotices, answerNotices),
-      boardMessage: `+${earnedAp} AP${apCapped ? " (goal filled)" : ""}. +${focusGain} Focus.${learnedMessage}`,
+      boardMessage: `+${earnedAp} AP${apCapped ? " (goal filled)" : ""}. +${focusGain} Gusto.${learnedMessage}`,
       flashColor: "rgba(46,204,113,0.18)",
     };
 
@@ -2824,14 +2980,14 @@ export default function App() {
       } : null,
       fragileDebuff: state.fragileDebuff + (bloodQuill ? 1 : 0),
       eventNotices: bloodQuill
-        ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Blood Quill", "Miss charged +2 Focus, but the next enemy hit hurts more.", "relic")])
+        ? appendCombatNotices(state.eventNotices, [createCombatNotice("Mutation: Sour Berry", "Miss charged +2 Gusto, but the next enemy hit hurts more.", "relic")])
         : tidalMemoryFocus > 0
-          ? appendCombatNotices(state.eventNotices, [createCombatNotice("Relic: Tidal Memory", "First miss this study set still charged +1 Focus.", "relic")])
+          ? appendCombatNotices(state.eventNotices, [createCombatNotice("Mutation: Puddle Memory", "First miss this study set still charged +1 Gusto.", "relic")])
           : state.eventNotices,
       boardMessage: bloodQuill
-        ? `Missed card. Lost ${formatAp(offeredAp)} AP. Blood Quill charged +2 Focus and made you fragile.`
+        ? `Missed card. Lost ${formatAp(offeredAp)} AP. Sour Berry charged +2 Gusto and made Pip tender.`
         : tidalMemoryFocus > 0
-          ? `Missed card. Lost ${formatAp(offeredAp)} AP. Tidal Memory charged +1 Focus.`
+          ? `Missed card. Lost ${formatAp(offeredAp)} AP. Puddle Memory charged +1 Gusto.`
           : `Missed card. Lost ${formatAp(offeredAp)} AP. Review the answer.`,
       flashColor: "rgba(255,71,87,0.2)",
     };
@@ -3711,19 +3867,23 @@ export default function App() {
     const actionLabel = getActionLabel(member, action);
 
     if (action === "attack") {
-      rawDamage = Math.max(5, member.attack + Math.floor(combat.difficultyFloor * 1.15));
+      rawDamage = Math.max(5, member.attack + (member.id === "linguist" ? combat.blobStats.bop : 0) + Math.floor(combat.difficultyFloor * 1.15));
     } else if (action === "defend") {
       nextBuffs = [...nextBuffs, { type: "guard", remaining: 1 }];
       nextSkillCharge = Math.min(12, nextSkillCharge + 1);
       healedOrDefended = true;
+      if (combat.runCurioIds.includes("bubble_cup") && !nextBuffs.some(buff => buff.type === "bubble_cup_used")) {
+        nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }, { type: "bubble_cup_used", remaining: 1 }];
+        actionNotices.push(createCombatNotice("Curio: Bubble Cup", "First Brace this floor also raised a Bubble.", "good"));
+      }
       if (combat.runRelics.includes("runic_tumbler")) {
         actionDelay = -14;
-        actionNotices.push(createCombatNotice("Relic: Runic Tumbler", "Defend nudged the timeline in your favor.", "relic"));
+        actionNotices.push(createCombatNotice("Mutation: Tumble Toes", "Bracing nudged the timeline in your favor.", "relic"));
       }
     } else if (member.skillId === "steady_hand") {
       rawDamage = Math.floor(member.attack * 1.15) + Math.floor(combat.difficultyFloor * 1.2);
       nextExposedTurns = Math.max(nextExposedTurns, 1);
-      actionNotices.push(createCombatNotice("Exposed", "The next weakness hit will strike harder.", "good"));
+      actionNotices.push(createCombatNotice("Wobbly", "The next weakness hit will strike harder.", "good"));
     } else if (member.skillId === "convert_flame") {
       kind = "flame";
       rawDamage = Math.floor(member.attack * 1.55) + (combat.studyCorrectRound >= 4 ? 14 : 0) + Math.floor(combat.difficultyFloor * 1.25);
@@ -3737,11 +3897,11 @@ export default function App() {
       healAmount = Math.min(combat.playerMaxHp - combat.playerHp, Math.floor(member.recovery * 1.4) + 16 + (combat.runRelics.includes("greenhouse") ? 6 : 0) + (combat.runRelics.includes("leaf_bloom") && combat.studyCorrectRound >= 4 ? 8 : 0));
       healedOrDefended = healAmount > 0 || healedOrDefended;
       if (combat.runRelics.includes("greenhouse")) {
-        actionNotices.push(createCombatNotice("Relic: Greenhouse", "Verdant Shift restored extra HP.", "relic"));
+        actionNotices.push(createCombatNotice("Mutation: Snack Pocket", "Sprout Snack restored extra HP.", "relic"));
       }
       if (combat.runRelics.includes("heart_ward") && !nextBuffs.some(buff => buff.type === "heart_ward_used")) {
         nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }, { type: "heart_ward_used", remaining: 1 }];
-        actionNotices.push(createCombatNotice("Relic: Heart Ward", "First heal also raised a Ward.", "relic"));
+        actionNotices.push(createCombatNotice("Mutation: Cozy Pulp", "First heal also raised a Bubble.", "relic"));
       }
     } else if (member.skillId === "umbra_surge") {
       kind = "shadow";
@@ -3751,15 +3911,20 @@ export default function App() {
       }
     }
 
+    if (member.id === "linguist") {
+      actionDelay -= Math.min(12, combat.blobStats.bounce);
+      if (combat.runCurioIds.includes("springy_spoon")) actionDelay -= 6;
+    }
+
     if (rawDamage > 0 && enemy.def.weakTo.includes(kind) && combat.exposedTurns > 0) {
       rawDamage = Math.floor(rawDamage * 1.35);
       nextExposedTurns = Math.max(0, nextExposedTurns - 1);
-      actionNotices.push(createCombatNotice("Exposed Triggered", "Weakness damage amplified.", "good"));
+      actionNotices.push(createCombatNotice("Wobbly Triggered", "Weakness damage amplified.", "good"));
     }
 
     if (rawDamage > 0 && enemy.def.weakTo.includes(kind) && combat.runRelics.includes("linebreaker")) {
       rawDamage = Math.floor(rawDamage * 1.18);
-      actionNotices.push(createCombatNotice("Relic: Linebreaker", "Weakness hit boosted.", "relic"));
+        actionNotices.push(createCombatNotice("Mutation: Pointy Mood", "Weakness hit boosted.", "relic"));
     }
 
     const stats = createDirectActionStats(kind, rawDamage, healAmount, rawDamage > 0 ? member.name : undefined, action === "skill" ? 5 : action === "attack" ? 3 : 0);
@@ -3792,7 +3957,7 @@ export default function App() {
         nextSkillCharge = Math.min(12, nextSkillCharge + (combat.runRelics.includes("fracture_notes") ? 3 : 2));
         nextQueue = delayNextEnemyAction(nextQueue);
         phaseBanner = "SHIELD BROKEN";
-        actionNotices.push(createCombatNotice("Shield Break", "Counter delayed and Focus charged.", "good"));
+        actionNotices.push(createCombatNotice("Shell Break", "Counter delayed and Gusto charged.", "good"));
       }
 
       if (enemyHpAfter > 0) {
@@ -3833,7 +3998,7 @@ export default function App() {
       setSave(prev => recordBossClearForActiveDeck(prev, combat, immediateRecruitIds));
     }
     if (immediateRecruitIds.length > 0) {
-      actionNotices.push(createCombatNotice("Speedreader recruited", "Flame Script is now permanently unlocked for this deck.", "good"));
+      actionNotices.push(createCombatNotice("Zip Sprig befriended", "Comet Bonk is now available as a helper trick in this deck-world.", "good"));
     }
     if (!allDead && enemyHpAfter <= 0) {
       const nextIndex = nextEnemies.findIndex((nextEnemy, index) => index > combat.currentEnemyIndex && !nextEnemy.isDead);
@@ -3858,8 +4023,12 @@ export default function App() {
       ].filter(Boolean)
     );
 
-    const rewardChoices = allDead ? createRewardChoices(save, combat.deck, combat.difficultyFloor) : combat.rewardChoices;
+    const digestion = allDead ? digestRoom({ ...combat, playerHp: nextPlayerHp }, nextEnemies) : null;
+    const rewardChoices = allDead ? createRoomRewardChoices(save, combat) : combat.rewardChoices;
+    const vocabPicksRemaining = allDead ? getRoomVocabularyPicks(save, combat) : combat.vocabPicksRemaining;
     const relicChoices = allDead && combat.encounter.offersRelic ? createRelicChoices(combat.runRelics, combat.encounter) : combat.relicChoices;
+    const curioChoices = allDead ? createCurioChoices(combat.runCurioIds, combat.floor) : combat.curioChoices;
+    const snackChoices = allDead ? createSnackChoices(combat.floor) : combat.snackChoices;
     const cinematic = createActionCinematic(
       stats,
       enemy,
@@ -3889,7 +4058,8 @@ export default function App() {
       phase: "transition",
       enemies: nextEnemies,
       currentEnemyIndex,
-      playerHp: nextPlayerHp,
+      playerHp: digestion?.playerHp ?? nextPlayerHp,
+      playerMaxHp: digestion?.playerMaxHp ?? combat.playerMaxHp,
       actionPoints: nextActionPoints,
       actionPointsSpentThisWindow: nextSpent,
       turnQueue: nextQueue,
@@ -3901,10 +4071,16 @@ export default function App() {
       skillCharge: nextSkillCharge,
       rewardChoices,
       relicChoices,
+      curioChoices,
+      snackChoices,
+      vocabPicksRemaining,
+      blobStats: digestion?.blobStats ?? combat.blobStats,
+      lastMeal: digestion?.lastMeal ?? combat.lastMeal,
+      mealDigested: digestion?.mealDigested ?? combat.mealDigested,
       cinematic,
       cinematicStepIndex: 0,
       combatLog,
-      eventNotices: appendCombatNotices(combat.eventNotices, actionNotices),
+      eventNotices: appendCombatNotices(digestion?.eventNotices ?? combat.eventNotices, actionNotices),
       runPartyCharacterIds: nextRunPartyCharacterIds,
       guestCharacterIds: nextGuestCharacterIds,
       recruitedCharacterIds: Array.from(new Set([...combat.recruitedCharacterIds, ...immediateRecruitIds])),
@@ -3957,7 +4133,7 @@ export default function App() {
           ? "Enemy reached the front of the timeline."
           : nextActionPoints <= 0
             ? "AP spent. Study again before the enemy reaches the front."
-            : `${nextActionPoints} AP remains.`,
+            : `${formatAp(nextActionPoints)} AP remains.`,
     };
 
     setCombat(nextState);
@@ -3996,7 +4172,7 @@ export default function App() {
           cinematicStepIndex: 0,
           enemyAnim: null,
           playerAnim: null,
-          boardMessage: `${prev.actionPoints} AP remains. ${getCurrentActor(prev)?.name || "Next actor"} is ready.`,
+          boardMessage: `${formatAp(prev.actionPoints)} AP remains. ${getCurrentActor(prev)?.name || "Next actor"} is ready.`,
         } : prev);
       }
     }, enemyIsNext ? 950 : 650);
@@ -4020,7 +4196,7 @@ export default function App() {
     let nextBuffs = [...combat.activeBuffs];
     let nextQueue = combat.turnQueue;
     const actionNotices: CombatNotice[] = [
-      createCombatNotice(`Ultimate: ${ultimate.name}`, "12 Focus spent. AP and turn position preserved.", "good"),
+      createCombatNotice(`Big Trick: ${ultimate.name}`, "12 Gusto spent. AP and turn position preserved.", "good"),
     ];
 
     if (ultimate.id === "glossary_star") {
@@ -4031,7 +4207,7 @@ export default function App() {
     } else if (ultimate.id === "perfect_recall") {
       nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }];
       nextQueue = delayNextEnemyAction(nextQueue);
-      actionNotices.push(createCombatNotice("Perfect Recall", "Ward raised. The next enemy action was delayed.", "good"));
+      actionNotices.push(createCombatNotice("Bubble Bath", "Bubble raised. The next enemy action was delayed.", "good"));
     } else if (ultimate.id === "bloom_chorus") {
       healAmount = Math.min(combat.playerMaxHp - combat.playerHp, 48 + member.recovery * 2);
       nextBuffs = [...nextBuffs, { type: "ward", remaining: 1 }];
@@ -4043,7 +4219,7 @@ export default function App() {
     if (rawDamage > 0 && enemy.def.weakTo.includes(ultimate.element) && combat.exposedTurns > 0) {
       rawDamage = Math.floor(rawDamage * 1.35);
       nextExposedTurns = Math.max(0, nextExposedTurns - 1);
-      actionNotices.push(createCombatNotice("Exposed Triggered", "Ultimate weakness damage amplified.", "good"));
+      actionNotices.push(createCombatNotice("Wobbly Triggered", "Big Trick weakness damage amplified.", "good"));
     }
     if (rawDamage > 0 && enemy.def.weakTo.includes(ultimate.element) && combat.runRelics.includes("linebreaker")) {
       rawDamage = Math.floor(rawDamage * 1.18);
@@ -4064,7 +4240,7 @@ export default function App() {
     if (defense.shieldBroken) {
       nextSkillCharge = combat.runRelics.includes("fracture_notes") ? 3 : 2;
       nextQueue = delayNextEnemyAction(nextQueue);
-      actionNotices.push(createCombatNotice("Shield Break", `Counter delayed. +${nextSkillCharge} Focus.`, "good"));
+      actionNotices.push(createCombatNotice("Shell Break", `Counter delayed. +${nextSkillCharge} Gusto.`, "good"));
     }
 
     const enemyHpAfter = Math.max(0, enemy.hp - defense.hpDamage);
@@ -4094,7 +4270,7 @@ export default function App() {
       setSave(prev => recordBossClearForActiveDeck(prev, combat, immediateRecruitIds));
     }
     if (immediateRecruitIds.length > 0) {
-      actionNotices.push(createCombatNotice("Speedreader recruited", "Flame Script is now permanently unlocked for this deck.", "good"));
+      actionNotices.push(createCombatNotice("Zip Sprig befriended", "Comet Bonk is now available as a helper trick in this deck-world.", "good"));
     }
 
     const combatLog = buildCombatLog(
@@ -4105,10 +4281,14 @@ export default function App() {
       playerHpBefore,
       nextPlayerHp,
       allDead ? `${enemy.def.name} fell.` : `${member.name} used ${ultimate.name}.`,
-      ["Ultimate spent 12 Focus without consuming AP or advancing the timeline."]
+      ["Big Trick spent 12 Gusto without consuming AP or advancing the timeline."]
     );
-    const rewardChoices = allDead ? createRewardChoices(save, combat.deck, combat.difficultyFloor) : combat.rewardChoices;
+    const digestion = allDead ? digestRoom({ ...combat, playerHp: nextPlayerHp }, nextEnemies) : null;
+    const rewardChoices = allDead ? createRoomRewardChoices(save, combat) : combat.rewardChoices;
+    const vocabPicksRemaining = allDead ? getRoomVocabularyPicks(save, combat) : combat.vocabPicksRemaining;
     const relicChoices = allDead && combat.encounter.offersRelic ? createRelicChoices(combat.runRelics, combat.encounter) : combat.relicChoices;
+    const curioChoices = allDead ? createCurioChoices(combat.runCurioIds, combat.floor) : combat.curioChoices;
+    const snackChoices = allDead ? createSnackChoices(combat.floor) : combat.snackChoices;
     const cinematic = createActionCinematic(
       stats,
       enemy,
@@ -4136,7 +4316,8 @@ export default function App() {
       ...combat,
       phase: "transition",
       enemies: nextEnemies,
-      playerHp: nextPlayerHp,
+      playerHp: digestion?.playerHp ?? nextPlayerHp,
+      playerMaxHp: digestion?.playerMaxHp ?? combat.playerMaxHp,
       turnQueue: nextQueue,
       activeActorId: getCurrentActor({ ...combat, turnQueue: nextQueue })?.id || null,
       exposedTurns: nextExposedTurns,
@@ -4144,20 +4325,26 @@ export default function App() {
       skillCharge: nextSkillCharge,
       rewardChoices,
       relicChoices,
+      curioChoices,
+      snackChoices,
+      vocabPicksRemaining,
+      blobStats: digestion?.blobStats ?? combat.blobStats,
+      lastMeal: digestion?.lastMeal ?? combat.lastMeal,
+      mealDigested: digestion?.mealDigested ?? combat.mealDigested,
       runPartyCharacterIds: nextRunPartyCharacterIds,
       guestCharacterIds: nextGuestCharacterIds,
       recruitedCharacterIds: Array.from(new Set([...combat.recruitedCharacterIds, ...immediateRecruitIds])),
       cinematic,
       cinematicStepIndex: 0,
       combatLog,
-      eventNotices: appendCombatNotices(combat.eventNotices, actionNotices),
+      eventNotices: appendCombatNotices(digestion?.eventNotices ?? combat.eventNotices, actionNotices),
       actionEffect: createCombatActionEffect(
         ultimate.id === "perfect_recall" ? "ward" : ultimate.id === "bloom_chorus" ? "mend" : "skill",
         `ULTIMATE: ${ultimate.name}`,
         TILE_DEFS[ultimate.element].color,
         {
           kind: ultimate.element,
-          detail: "12 Focus - free action - timeline preserved",
+          detail: "12 Gusto - free action - timeline preserved",
           casterName: member.name,
           casterSprite: member.sprite,
           visualPreset: ultimate.visualPreset,
@@ -4741,7 +4928,7 @@ export default function App() {
     handleWrongAnswer(combat, "Self-graded miss");
   };
 
-  const beginCombatRun = (draftDeck: VocabWord[], saveOverride: SaveData = save) => {
+  const beginCombatRun = (draftDeck: VocabWord[], saveOverride: SaveData = save, introducedForContract = 0) => {
     const preparedSave = draftDeck.reduce((currentSave, card) => {
       const activeDeck = getActiveDeck(currentSave);
       return activeDeck.introducedCardIds.includes(card.id)
@@ -4749,7 +4936,11 @@ export default function App() {
         : introduceCard(currentSave, card, activeDeck.cardRatings?.[card.id] || "medium");
     }, saveOverride);
     const activeStudyDeck = getIntroducedStudyCards(preparedSave);
-    const initial = createInitialCombat(1, STARTING_HP, preparedSave, activeStudyDeck);
+    const contract = {
+      ...createStudyContract(contractNewCards, contractMinutes),
+      introducedThisContract: Math.min(contractNewCards, introducedForContract),
+    };
+    const initial = createInitialCombat(selectedRegionStart, STARTING_HP, preparedSave, activeStudyDeck, contract);
 
     setSave(preparedSave);
     setCombat(initial);
@@ -4761,6 +4952,20 @@ export default function App() {
     if (getActiveDeck(preparedSave).stats.totalRuns === 0) {
       setShowTutorial(true);
     }
+  };
+
+  const resumeActiveExpedition = () => {
+    const snapshot = getActiveDeck(save).activeExpedition;
+    if (!snapshot?.combat) return;
+    setCombat({
+      ...snapshot.combat,
+      isPaused: false,
+      actionEffect: null,
+      damageNumbers: [],
+      flashColor: "",
+      screenShake: 0,
+    });
+    setScreen(snapshot.screen);
   };
 
   const startRun = () => {
@@ -4796,7 +5001,7 @@ export default function App() {
     setStarterDraftDeck(nextDraft);
 
     if (rating !== "known" && nextDraft.length >= RUN_START_CARD_TARGET) {
-      beginCombatRun(nextDraft, baseSave);
+      beginCombatRun(nextDraft, baseSave, nextDraft.length);
       return;
     }
 
@@ -4810,7 +5015,7 @@ export default function App() {
     );
   };
 
-  const nextFloor = (deckOverride?: VocabWord[], saveOverride?: SaveData) => {
+  const nextFloor = (deckOverride?: VocabWord[], saveOverride?: SaveData, contractOverride?: StudyContract) => {
     if (!combat) return;
     const nextFloorNum = combat.floor + 1;
     const nextSave = saveOverride || save;
@@ -4838,9 +5043,16 @@ export default function App() {
     // A guest contributes their HP immediately, then the party recovers between floors.
     const nextPlayerMaxHp = getPartyMaxHp(nextRunParty, combat.playerMaxHp);
     const joinedPartyHp = Math.max(0, nextPlayerMaxHp - combat.playerMaxHp);
-    const healAmount = Math.floor(combat.playerMaxHp * (combat.encounter.isBoss ? 0.3 : 0.2));
+    const healAmount = Math.floor(combat.playerMaxHp * (combat.encounter.isBoss ? 0.3 : 0.2)) + (combat.runCurioIds.includes("mossy_button") ? 8 : 0);
     const newHp = Math.min(nextPlayerMaxHp, combat.playerHp + joinedPartyHp + healAmount);
     const floorLesson = getFloorLessonNotice(nextFloorNum);
+
+    if (nextFloorNum > 1 && nextFloorNum % 10 === 1) {
+      setSave(prev => updateActiveDeck(prev, deck => ({
+        ...deck,
+        unlockedRegionStartFloors: Array.from(new Set([...(deck.unlockedRegionStartFloors || [1]), nextFloorNum])).sort((a, b) => a - b),
+      })));
+    }
     
     setCombat({
       ...combat,
@@ -4877,6 +5089,13 @@ export default function App() {
       cinematic: null,
       cinematicStepIndex: 0,
       relicChoices: [],
+      curioChoices: [],
+      snackChoices: [],
+      lastMeal: null,
+      mealDigested: false,
+      vocabPicksRemaining: 0,
+      studyContract: contractOverride || combat.studyContract,
+      region: getRegionForFloor(nextFloorNum),
       guestCharacterIds: nextGuestCharacterIds,
       recruitedCharacterIds: [],
       combatLog: [],
@@ -4904,7 +5123,7 @@ export default function App() {
       flameDiscountNext: false,
       fragileDebuff: 0,
       boardMessage: encounter.modifierLabel === "Standard"
-        ? `${encounter.title}. Study first, then spend AP on party commands.`
+        ? `${encounter.title}. Study first, then spend AP on body tricks and helper commands.`
         : `${encounter.title}: ${encounter.modifierDescription}`,
       studyQuestionsTotal: 0,
       studyQuestionsLeft: 0,
@@ -4930,10 +5149,10 @@ export default function App() {
 
   const claimRewardCard = (rewardWord: VocabWord, rating: CardRating) => {
     if (!combat) return;
-    if (combat.relicChoices.length > 0) {
+    if (combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0) {
       setCombat({
         ...combat,
-        boardMessage: "Choose a relic before adding the next card.",
+        boardMessage: "Choose the expedition rewards before previewing more vocabulary.",
       });
       return;
     }
@@ -4963,10 +5182,28 @@ export default function App() {
     const nextDeck = !alreadyInDeck
       ? [...combat.deck, rewardWord]
       : combat.deck;
+    const nextContract = {
+      ...combat.studyContract,
+      introducedThisContract: combat.studyContract.introducedThisContract + (alreadyInDeck ? 0 : 1),
+    };
+    const nextPicksRemaining = Math.max(0, combat.vocabPicksRemaining - (alreadyInDeck ? 0 : 1));
 
     setSave(nextSave);
 
-    nextFloor(nextDeck, nextSave);
+    if (nextPicksRemaining > 0) {
+      setCombat({
+        ...combat,
+        deck: nextDeck,
+        studyContract: nextContract,
+        vocabPicksRemaining: nextPicksRemaining,
+        rewardChoices: createRewardChoices(nextSave, nextDeck, combat.difficultyFloor),
+        boardMessage: `${nextPicksRemaining} more new card${nextPicksRemaining === 1 ? "" : "s"} available in this camp batch.`,
+      });
+      return;
+    }
+
+    setCombat({ ...combat, studyContract: nextContract, vocabPicksRemaining: 0 });
+    nextFloor(nextDeck, nextSave, nextContract);
   };
 
   const claimRelic = (relic: RelicDef) => {
@@ -4981,7 +5218,74 @@ export default function App() {
       ...combat,
       runRelics: nextRelics,
       relicChoices: [],
-      boardMessage: `${relic.name} added to this run.`,
+      boardMessage: `${relic.name} mutation added to Pip for this expedition.`,
+    });
+  };
+
+  const claimCurio = (curio: CurioDef) => {
+    if (!combat) return;
+    const nextCurios = [...combat.runCurioIds.filter(id => id !== curio.id), curio.id].slice(-MAX_CURIO_SLOTS);
+    setSave(prev => updateActiveDeck(prev, deck => ({
+      ...deck,
+      unlockedCurioIds: Array.from(new Set([...(deck.unlockedCurioIds || []), curio.id])),
+    })));
+    setCombat({
+      ...combat,
+      runCurioIds: nextCurios,
+      curioChoices: [],
+      boardMessage: `${curio.name} tucked into Pip's curio pocket.`,
+    });
+  };
+
+  const claimSnack = (snack: SnackDef) => {
+    if (!combat) return;
+    setCombat({
+      ...combat,
+      snackId: snack.id,
+      snackChoices: [],
+      boardMessage: `${snack.name} packed for later.`,
+    });
+  };
+
+  const skipVocabularyBatch = () => {
+    if (!combat || combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0) return;
+    setCombat({ ...combat, rewardChoices: [], vocabPicksRemaining: 0 });
+    nextFloor();
+  };
+
+  const extendStudyContract = () => {
+    if (!combat) return;
+    setCombat({
+      ...combat,
+      studyContract: {
+        ...combat.studyContract,
+        targetNewCards: Math.min(100, combat.studyContract.targetNewCards + 10),
+        targetStudyMinutes: Math.min(120, combat.studyContract.targetStudyMinutes + 15),
+      },
+      boardMessage: "Study contract extended: more new words can appear during this expedition.",
+    });
+  };
+
+  const useSnack = () => {
+    if (!combat || combat.mode !== "command" || combat.phase !== "answering" || !combat.snackId) return;
+    const snack = getSnackById(combat.snackId);
+    if (!snack) return;
+    const heal = Math.min(combat.playerMaxHp - combat.playerHp, snack.heal);
+    const raisesBubble = snack.id === "bubble_bun";
+    setCombat({
+      ...combat,
+      snackId: null,
+      playerHp: combat.playerHp + heal,
+      activeBuffs: raisesBubble ? [...combat.activeBuffs, { type: "ward", remaining: 1 }] : combat.activeBuffs,
+      actionEffect: createCombatActionEffect("mend", snack.name, "#ff7895", {
+        detail: `Snack time - +${heal} HP${raisesBubble ? " - Bubble raised" : ""}`,
+        casterName: "Pip",
+        casterSprite: CHARACTER_DEFS[0].sprite,
+      }),
+      eventNotices: appendCombatNotices(combat.eventNotices, [
+        createCombatNotice(snack.name, `Pip recovered ${heal} HP${raisesBubble ? " and raised a Bubble" : ""}.`, "good"),
+      ]),
+      boardMessage: `${snack.name} eaten. No AP spent.`,
     });
   };
 
@@ -5114,6 +5418,7 @@ export default function App() {
 
   const togglePartyCharacter = (characterId: string) => {
     setSave(prev => updateActiveDeck(prev, deck => {
+      if (characterId === "linguist") return deck;
       if (!getDeckUnlockedCharacterIds(deck).includes(characterId)) return deck;
       const selected = getDeckSelectedPartyIds(deck);
       if (selected.includes(characterId)) {
@@ -5144,6 +5449,10 @@ export default function App() {
   };
 
   const goToMenu = () => {
+    if (combat && (screen === "combat" || screen === "reward")) {
+      const snapshot = createExpeditionSnapshot(combat, screen);
+      setSave(prev => updateActiveDeck(prev, deck => ({ ...deck, activeExpedition: snapshot })));
+    }
     setCombat(null);
     setStarterDraftDeck([]);
     setStarterDraftChoices([]);
@@ -5291,7 +5600,7 @@ export default function App() {
           </div>
           
           <p className="mb-8 text-lg font-bold tracking-wide text-teal-950" style={{ textShadow: "0 1px 0 rgba(255,255,255,0.65)" }}>
-            Master Words. Conquer Dungeons.
+            Feed your curiosity. Grow a strange little world.
           </p>
           <div className="mb-4 rounded-lg border border-teal-700/20 bg-white/80 px-4 py-2 text-sm font-bold text-teal-900 shadow-lg backdrop-blur-sm">
             Deck: <span className="font-black text-teal-950">{activeDeck.name}</span> · {activeDeckCards.toLocaleString()} / {MAX_DECK_CARDS.toLocaleString()} cards
@@ -5303,8 +5612,8 @@ export default function App() {
             className="group relative mb-6 max-w-[calc(100vw-2rem)] rounded-lg border border-teal-700/20 bg-[#ff7895] px-5 py-4 text-base font-black text-white shadow-[0_10px_0_rgba(184,78,117,0.72),0_18px_30px_rgba(18,91,115,0.18)] transition-all duration-200 hover:-translate-y-1 hover:bg-[#ff8fa6] sm:px-12 sm:text-xl"
           >
             <span className="flex items-center gap-3">
-              <Sword className="w-6 h-6" />
-              ENTER THE DUNGEON
+              <Play className="w-6 h-6" />
+              OPEN EXPEDITION
               <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </span>
           </button>
@@ -5330,7 +5639,7 @@ export default function App() {
               className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
             >
               <Star className="w-5 h-5 text-yellow-400" />
-              Roster
+              Discoveries
             </button>
           </div>
           
@@ -5391,8 +5700,8 @@ export default function App() {
               <div className="flex items-start gap-4">
                 <div className="p-2 bg-orange-500/20 rounded-lg"><Flame className="w-6 h-6 text-orange-400" /></div>
                 <div>
-                  <h3 className="text-white font-semibold">Party Commands</h3>
-                  <p className="text-sm">Spend AP on Attack, Defend, or character skills. Each action advances that actor on the timeline.</p>
+                  <h3 className="text-white font-semibold">Body Tricks</h3>
+                  <p className="text-sm">Spend AP on Bop, Brace, or strange tricks. Each action moves Pip or a helper along the timeline.</p>
                 </div>
               </div>
               
@@ -5408,15 +5717,15 @@ export default function App() {
                 <div className="p-2 bg-cyan-500/20 rounded-lg"><Shield className="w-6 h-6 text-cyan-300" /></div>
                 <div>
                   <h3 className="text-white font-semibold">Weakness & Shields</h3>
-                  <p className="text-sm">Weak elements amplify damage. Shield breaks delay the counter and charge Focus.</p>
+                  <p className="text-sm">Weak spots amplify damage. Breaking a shell delays the counter and charges Gusto.</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-4">
                 <div className="p-2 bg-purple-500/20 rounded-lg"><Star className="w-6 h-6 text-purple-400" /></div>
                 <div>
-                  <h3 className="text-white font-semibold">Focus Ultimates</h3>
-                  <p className="text-sm">Correct cards charge Focus. At 12 Focus, the active character can fire a free ultimate without spending AP or moving on the timeline.</p>
+                  <h3 className="text-white font-semibold">Big Tricks</h3>
+                  <p className="text-sm">Correct cards charge Gusto. At 12 Gusto, the active creature can use a free Big Trick without spending AP or moving on the timeline.</p>
                 </div>
               </div>
             </div>
@@ -5537,7 +5846,7 @@ export default function App() {
                     <h3 className="text-lg font-bold text-white">Backup & Restore</h3>
                   </div>
                   <p className="mb-3 text-xs leading-relaxed text-gray-400">
-                    Export a save file with every deck, card rating, unlock, relic, and run stat. Restore it on another browser to keep playing there.
+                    Export a save file with every deck, card rating, discovery, Mutation, and expedition. Restore it on another browser to keep playing there.
                   </p>
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <button
@@ -5782,7 +6091,7 @@ export default function App() {
               Choose Starting Cards
             </h2>
             <p className="mt-2 text-sm text-gray-400">
-              Pick up to {draftTarget || RUN_START_CARD_TARGET} vocab cards for this run. The rest can appear as rewards later.
+              Preview up to {draftTarget || RUN_START_CARD_TARGET} starting cards. Pip will meet the rest gradually during this deck-world&apos;s expedition.
             </p>
           </div>
 
@@ -5811,12 +6120,12 @@ export default function App() {
                 )}
               </div>
               <button
-                onClick={() => beginCombatRun(starterDraftDeck)}
+                onClick={() => beginCombatRun(starterDraftDeck, save, starterDraftDeck.length)}
                 disabled={!canStartDraftRun}
                 className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-[#E94560] py-3 font-bold text-white transition-all hover:bg-[#ff5b72] disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
               >
-                <Sword className="h-4 w-4" />
-                Start Run
+                <Play className="h-4 w-4" />
+                Begin Expedition
               </button>
             </div>
 
@@ -5878,10 +6187,61 @@ export default function App() {
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_menu_blob.png")} />
         <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-6xl flex-col items-center justify-start px-4 py-6 sm:justify-center">
           <h2 className="mb-2 text-2xl font-bold text-white sm:text-3xl" style={{ fontFamily: "Cinzel, Georgia, serif", textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
-            Choose Your Party
+            Prepare Pip&apos;s Expedition
           </h2>
           <div className="mb-5 max-w-xl rounded-lg border border-cyan-400/30 bg-black/35 px-4 py-2 text-center text-sm text-cyan-100">
-            Pick up to {MAX_ACTIVE_PARTY_SIZE} unlocked characters for <span className="font-bold text-white">{activeDeck.name}</span>. Tutorial guests fill open slots during the opening floors.
+            Each deck is its own paused world. Pip leads every expedition; pick up to {MAX_HELPER_SIZE} unlocked helpers and choose how much new vocabulary to meet.
+          </div>
+
+          {activeDeck.activeExpedition && (
+            <button
+              type="button"
+              onClick={resumeActiveExpedition}
+              className="mb-5 flex w-full max-w-xl items-center justify-between gap-3 rounded-lg border border-green-300/50 bg-green-300/14 px-4 py-3 text-left text-green-50 shadow-lg transition-all hover:bg-green-300/22"
+            >
+              <span>
+                <span className="block text-xs font-black uppercase tracking-wide text-green-100/75">Paused deck-world</span>
+                <span className="font-black">Resume Floor {activeDeck.activeExpedition.floor}, Region {activeDeck.activeExpedition.region}</span>
+              </span>
+              <Play className="h-5 w-5 shrink-0" />
+            </button>
+          )}
+
+          <div className="mb-5 grid w-full max-w-3xl gap-3 rounded-lg border border-white/12 bg-black/30 p-3 text-sm text-white backdrop-blur-sm sm:grid-cols-3">
+            <label className="rounded-md bg-white/6 p-2">
+              <span className="mb-1 block text-xs font-black uppercase tracking-wide text-cyan-100/70">New cards</span>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={contractNewCards}
+                onChange={event => setContractNewCards(Math.max(0, Math.min(100, Number(event.target.value) || 0)))}
+                className="w-full rounded-md border border-white/15 bg-black/25 px-2 py-1.5 font-bold text-white"
+              />
+            </label>
+            <label className="rounded-md bg-white/6 p-2">
+              <span className="mb-1 block text-xs font-black uppercase tracking-wide text-cyan-100/70">Study minutes</span>
+              <input
+                type="number"
+                min="5"
+                max="120"
+                value={contractMinutes}
+                onChange={event => setContractMinutes(Math.max(5, Math.min(120, Number(event.target.value) || 5)))}
+                className="w-full rounded-md border border-white/15 bg-black/25 px-2 py-1.5 font-bold text-white"
+              />
+            </label>
+            <label className="rounded-md bg-white/6 p-2">
+              <span className="mb-1 block text-xs font-black uppercase tracking-wide text-cyan-100/70">Region start</span>
+              <select
+                value={selectedRegionStart}
+                onChange={event => setSelectedRegionStart(Number(event.target.value) || 1)}
+                className="w-full rounded-md border border-white/15 bg-[#16213E] px-2 py-1.5 font-bold text-white"
+              >
+                {(activeDeck.unlockedRegionStartFloors || [1]).map(floor => (
+                  <option key={floor} value={floor}>Floor {floor}</option>
+                ))}
+              </select>
+            </label>
           </div>
           
           <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -5891,12 +6251,13 @@ export default function App() {
               const tile = TILE_DEFS[character.element];
               const skill = getSkillById(character.skillId);
               const ultimate = getUltimateById(character.ultimateId);
+              const isPip = character.id === "linguist";
               const selectionBlocked = !isSelected && selectedPartyIds.length >= MAX_ACTIVE_PARTY_SIZE;
               return (
                 <button
                   type="button"
                   key={character.id}
-                  disabled={!isUnlocked || selectionBlocked}
+                  disabled={!isUnlocked || selectionBlocked || isPip}
                   onClick={() => togglePartyCharacter(character.id)}
                   className={`cute-sticker relative overflow-hidden rounded-lg border-2 p-3 text-left transition-all ${
                     isSelected
@@ -5931,7 +6292,7 @@ export default function App() {
                       <div className="mt-1"><span className="font-bold text-yellow-100">{ultimate?.name}</span>: {ultimate?.description}</div>
                     </div>
                     <div className={`mt-2 text-xs font-bold ${isUnlocked ? isSelected ? "text-green-200" : "text-cyan-200" : "text-gray-500"}`}>
-                      {isUnlocked ? isSelected ? "Selected" : selectionBlocked ? "Party full" : "Tap to select" : character.unlockHint}
+                      {isPip ? "Always leads this deck-world" : isUnlocked ? isSelected ? "Helper selected" : selectionBlocked ? "Helper slots full" : "Tap to bring helper" : character.unlockHint}
                     </div>
                   </div>
                 </button>
@@ -5951,8 +6312,8 @@ export default function App() {
               onClick={startRun}
               className="flex items-center gap-2 rounded-lg bg-[#E94560] px-6 py-3 font-bold text-white transition-all hover:bg-[#ff5b72]"
             >
-              <Sword className="h-5 w-5" />
-              {getIntroducedStudyCards(save).length > 0 ? "Start Run" : "Draft Starting Cards"}
+              <Play className="h-5 w-5" />
+              {getIntroducedStudyCards(save).length > 0 ? "Start Fresh Expedition" : "Preview Starting Cards"}
             </button>
           </div>
         </div>
@@ -6078,7 +6439,7 @@ export default function App() {
                 </div>
                 <div className="action-exposed-marker">
                   <Star className="h-4 w-4" />
-                  <span>Exposed</span>
+                  <span>Wobbly</span>
                 </div>
               </>
             )}
@@ -6146,9 +6507,9 @@ export default function App() {
         {showTutorial && (
           <div className="absolute inset-x-0 bottom-0 z-50 flex items-end justify-center bg-gradient-to-t from-black/80 via-black/30 to-transparent px-3 pb-3 pt-28 sm:inset-0 sm:items-center sm:bg-black/60 sm:p-4">
             <div className="cute-sheet w-full max-w-md rounded-t-lg border border-[#0F3460] bg-[#16213E]/94 p-4 shadow-2xl backdrop-blur-md sm:rounded-2xl sm:p-6">
-              <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Welcome to the Dungeon!</h3>
+              <h3 className="mb-2 text-lg font-bold text-white sm:mb-3 sm:text-xl">Pip is hungry for words!</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-4 sm:text-sm">
-                Resolve adaptive AP hands of flashcards, then spend the AP you earned on party commands before the enemy reaches you.
+                Resolve adaptive AP hands of flashcards, then spend the AP you earned on Pip&apos;s body tricks and helper commands before trouble reaches you.
               </p>
               <button
                 onClick={() => setShowTutorial(false)}
@@ -6321,7 +6682,7 @@ export default function App() {
                   {(hasWard || hasGuard) && (
                     <div className={`battlefield-party-protection ${hasWard ? "battlefield-party-protection-ward" : "battlefield-party-protection-guard"}`}>
                       <Shield className="h-5 w-5" />
-                      <span>{hasWard ? "Ward" : "Guard"}</span>
+                      <span>{hasWard ? "Bubble" : "Brace"}</span>
                     </div>
                   )}
                 </div>
@@ -6356,7 +6717,7 @@ export default function App() {
                   {combat.exposedTurns > 0 && (
                     <div className="battlefield-exposed-badge">
                       <Star className="h-3 w-3" />
-                      <span>Exposed {combat.exposedTurns}</span>
+                      <span>Wobbly {combat.exposedTurns}</span>
                     </div>
                   )}
                   <div className="battlefield-enemy-matchups">
@@ -6475,7 +6836,7 @@ export default function App() {
                 {activeCinematic && cinematicShowsEnemyResponse && activeCinematic.wardBlocked && (
                   <div className="battlefield-ward-block">
                     <Shield className="h-5 w-5" />
-                    <span>Ward</span>
+                    <span>Bubble</span>
                   </div>
                 )}
               </div>
@@ -6928,7 +7289,7 @@ export default function App() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 text-white">
                         <Sword className="h-4 w-4 text-cyan-200" />
-                        <span className="font-bold">Party Command</span>
+                        <span className="font-bold">Pip & Helpers</span>
                       </div>
                       <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-gray-400 sm:text-xs">{combat.boardMessage}</p>
                     </div>
@@ -6972,7 +7333,7 @@ export default function App() {
 
                   <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
                     <div className="rounded-md bg-black/25 p-2">
-                      <div className="text-gray-500">Focus</div>
+                      <div className="text-gray-500">Gusto</div>
                       <div className="font-bold text-cyan-100">{combat.skillCharge}/12</div>
                     </div>
                     <div className="rounded-md bg-black/25 p-2">
@@ -7007,7 +7368,7 @@ export default function App() {
                         <p className="mt-0.5 line-clamp-2 text-[11px] text-gray-400 sm:text-xs">
                           {combat.mode === "studyReady" && "Answer cards to build AP for this turn."}
                           {combat.mode === "study" && `${studyAnswered} answered.`}
-                          {combat.mode === "commandReady" && `${formatAp(combat.actionPointsEarnedThisRush)} AP earned. Inspect intent, then command the party.`}
+                          {combat.mode === "commandReady" && `${formatAp(combat.actionPointsEarnedThisRush)} AP earned. Inspect intent, then choose Pip's next trick.`}
                           {combat.mode === "command" && activeCommandCharacter && `${activeCommandCharacter.name} is acting now.`}
                           {combat.mode === "enemyAction" && "The enemy is resolving its intent."}
                         </p>
@@ -7066,6 +7427,16 @@ export default function App() {
                           </div>
                         </div>
 
+                        <div className="flex flex-wrap gap-1 text-[10px] font-bold text-lime-50/90">
+                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Bulk {combat.blobStats.bulk}</span>
+                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Bop {combat.blobStats.bop}</span>
+                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Bounce {combat.blobStats.bounce}</span>
+                          <span className="rounded-full bg-lime-300/12 px-2 py-1">Gusto {combat.blobStats.gusto}</span>
+                          {combat.runCurioIds.length > 0 && (
+                            <span className="rounded-full bg-cyan-300/12 px-2 py-1 text-cyan-100">{combat.runCurioIds.length} curios</span>
+                          )}
+                        </div>
+
                         <div className="grid grid-cols-3 gap-2">
                           {(["attack", "defend", "skill"] as PlayerActionId[]).map(action => {
                             const cost = getPlayerActionCost(activeCommandCharacter, action, combat);
@@ -7109,11 +7480,26 @@ export default function App() {
                             <span className="flex min-w-0 items-center gap-2">
                               <Zap className="h-4 w-4 shrink-0" />
                               <span className="min-w-0">
-                                <span className="block truncate text-xs font-black uppercase tracking-wide">Ultimate: {activeCommandUltimate.name}</span>
+                                <span className="block truncate text-xs font-black uppercase tracking-wide">Big Trick: {activeCommandUltimate.name}</span>
                                 <span className="block truncate text-[10px]">{activeCommandUltimate.description}</span>
                               </span>
                             </span>
-                            <span className="shrink-0 rounded bg-black/25 px-2 py-1 text-[10px] font-black">{activeCommandUltimate.focusCost} Focus</span>
+                            <span className="shrink-0 rounded bg-black/25 px-2 py-1 text-[10px] font-black">{activeCommandUltimate.focusCost} Gusto</span>
+                          </button>
+                        )}
+
+                        {combat.snackId && (
+                          <button
+                            type="button"
+                            onClick={useSnack}
+                            disabled={combat.phase !== "answering"}
+                            className="flex w-full items-center justify-between gap-2 rounded-md border border-pink-200/35 bg-pink-300/10 px-3 py-2 text-left text-pink-50 transition-all hover:bg-pink-300/18 disabled:opacity-45"
+                          >
+                            <span className="flex min-w-0 items-center gap-2">
+                              <Cookie className="h-4 w-4 shrink-0" />
+                              <span className="truncate text-xs font-black">Snack: {getSnackById(combat.snackId)?.name}</span>
+                            </span>
+                            <span className="text-[10px] font-bold">Free</span>
                           </button>
                         )}
 
@@ -7641,7 +8027,7 @@ export default function App() {
               </div>
               <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Study Set Ready</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
-                Resolve an adaptive AP hand to open party commands. Hard cards are worth more; familiar cards and repeated practice gradually award smaller fractions.
+                Resolve an adaptive AP hand to open body tricks. Hard cards are worth more; familiar cards and repeated practice gradually award smaller fractions.
               </p>
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:mb-5 sm:gap-3 sm:text-sm">
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
@@ -7691,7 +8077,7 @@ export default function App() {
                   <div className="font-bold text-yellow-100">{formatAp(combat.actionPoints)}</div>
                 </div>
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
-                  <div className="text-xs text-gray-500">Focus</div>
+                  <div className="text-xs text-gray-500">Gusto</div>
                   <div className="font-bold text-purple-200">{combat.skillCharge}</div>
                 </div>
               </div>
@@ -7730,7 +8116,7 @@ export default function App() {
                   <div className="font-bold text-cyan-200">{combat.powerPoints}</div>
                 </div>
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
-                  <div className="text-xs text-gray-500">Focus</div>
+                  <div className="text-xs text-gray-500">Gusto</div>
                   <div className="font-bold text-purple-200">{combat.skillCharge}</div>
                 </div>
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
@@ -7866,7 +8252,7 @@ export default function App() {
                   </span>
                   {currentCardFocusBonus > 0 && (
                     <span className="rounded-md bg-purple-400/15 px-2 py-1.5 text-xs font-bold text-purple-100 sm:px-3 sm:py-2 sm:text-sm">
-                      +{currentCardFocusBonus} Focus
+                      +{currentCardFocusBonus} Gusto
                     </span>
                   )}
                   <span className="hidden rounded-md bg-black/30 px-2 py-1.5 text-xs font-bold text-gray-300 sm:inline-flex sm:px-3 sm:py-2 sm:text-sm">
@@ -8032,18 +8418,18 @@ export default function App() {
     const orbsEarned = combat.floor * 10;
     const rewardChoices = combat.rewardChoices;
     const pendingCharacterUnlocks = getPendingCharacterUnlocks(save, combat);
-    const rampStride = getDeckRampStride(Math.max(1, activeDeckCards));
     const isFirstRelicReward = combat.floor === 3 && combat.relicChoices.length > 0;
     
     return (
       <div className="cute-theme relative h-screen w-full overflow-auto bg-[#1A1A2E]">
         <div className="absolute inset-0 bg-cover bg-center opacity-58" style={assetBackground("/bg_combat_blob.png")} />
+        <div className="absolute inset-0 bg-[#073f50]/55" />
         <div className="relative z-10 flex min-h-full flex-col items-center justify-center px-4 py-6">
           <h2 
             className="text-4xl font-bold mb-2"
-            style={{ color: "#F39C12", textShadow: "0 0 20px rgba(243,156,18,0.5)", fontFamily: "Cinzel, Georgia, serif" }}
+            style={{ color: "#F9D84A", textShadow: "0 2px 0 rgba(7,63,80,0.45)", fontFamily: "ui-rounded, 'Arial Rounded MT Bold', system-ui, sans-serif" }}
           >
-            {isBossReward ? "BOSS DEFEATED!" : combat.encounter.isElite ? "ELITE CLEARED!" : "VICTORY!"}
+            {isBossReward ? "GUARDIAN EATEN!" : combat.encounter.isElite ? "ODDBALL EATEN!" : "SNACK TIME!"}
           </h2>
           <p className="text-gray-400 mb-6">Floor {combat.floor} cleared · {combat.encounter.rewardLabel}</p>
           
@@ -8065,19 +8451,53 @@ export default function App() {
 
           <div className="mb-5 grid w-full max-w-4xl gap-2 text-sm md:grid-cols-2">
             <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-cyan-100">
-              <div className="font-bold">Deck ramp</div>
+              <div className="font-bold">Study contract</div>
               <div className="text-xs text-cyan-100/75">
-                {activeDeckCards} cards: difficulty advances every {rampStride} floor{rampStride === 1 ? "" : "s"}.
+                {combat.studyContract.introducedThisContract}/{combat.studyContract.targetNewCards} new cards met · {Math.floor(combat.studyContract.studiedSeconds / 60)}/{combat.studyContract.targetStudyMinutes} study minutes.
               </div>
             </div>
             <div className="rounded-lg border border-yellow-300/20 bg-yellow-300/10 px-3 py-2 text-yellow-100">
               <div className="font-bold">Run milestones</div>
               <div className="text-xs text-yellow-100/75">
                 {pendingCharacterUnlocks.length > 0
-                  ? `${pendingCharacterUnlocks.map(character => character.name).join(", ")} will join this deck after the run.`
-                  : "No new character milestone pending yet."}
+                  ? `${pendingCharacterUnlocks.map(character => character.name).join(", ")} will become helper discoveries after the expedition.`
+                  : `Region ${combat.region} · Pip keeps growing until this expedition ends.`}
               </div>
             </div>
+          </div>
+
+          {combat.floor % 5 === 0 && combat.studyContract.introducedThisContract >= combat.studyContract.targetNewCards && (
+            <button
+              type="button"
+              onClick={extendStudyContract}
+              className="mb-5 rounded-lg border border-cyan-200/45 bg-cyan-300/12 px-4 py-2 text-sm font-bold text-cyan-50 transition-all hover:bg-cyan-300/20"
+            >
+              Extend contract: +10 new cards and +15 study minutes
+            </button>
+          )}
+
+          {combat.lastMeal && (
+            <div className="mb-5 w-full max-w-3xl rounded-lg border border-lime-300/45 bg-lime-300/14 px-4 py-3 text-lime-50 shadow-lg">
+              <div className="flex items-center gap-2 font-black">
+                <Utensils className="h-5 w-5" />
+                Pip absorbed {combat.lastMeal.enemyNames.join(" + ")}
+              </div>
+              <div className="mt-1 text-sm font-bold text-lime-50/80">
+                +{combat.lastMeal.growth.bulk} Bulk · +{combat.lastMeal.growth.bop} Bop · +{combat.lastMeal.growth.bounce} Bounce · +{combat.lastMeal.growth.gusto} Gusto
+              </div>
+            </div>
+          )}
+
+          <div className="mb-5 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 rounded-lg border border-white/12 bg-black/20 px-3 py-2 text-xs font-bold text-white/85">
+            <span className="flex items-center gap-1 text-lime-100"><CircleDot className="h-3.5 w-3.5" /> Pip</span>
+            <span>Bulk {combat.blobStats.bulk}</span>
+            <span>Bop {combat.blobStats.bop}</span>
+            <span>Bounce {combat.blobStats.bounce}</span>
+            <span>Gusto {combat.blobStats.gusto}</span>
+            {combat.runCurioIds.map(curioId => {
+              const curio = getCurioById(curioId);
+              return curio ? <span key={curio.id} className="rounded-full bg-cyan-300/12 px-2 py-1 text-cyan-100">{curio.name}</span> : null;
+            })}
           </div>
 
           {combat.recruitedCharacterIds.length > 0 && (
@@ -8089,9 +8509,9 @@ export default function App() {
                   <div key={character.id} className="flex items-center gap-3">
                     <img src={assetUrl(character.sprite)} alt="" className="h-14 w-14 object-contain" />
                     <div>
-                      <div className="text-xs font-black uppercase tracking-wide text-orange-200">Permanent deck recruit</div>
+                      <div className="text-xs font-black uppercase tracking-wide text-orange-200">Helper befriended</div>
                       <div className="text-lg font-black text-white">{character.name} joined {activeDeck.name}</div>
-                      <div className="text-xs text-orange-50/80">This character stays available for future runs.</div>
+                      <div className="text-xs text-orange-50/80">This little friend stays available in future expeditions.</div>
                     </div>
                   </div>
                 );
@@ -8103,11 +8523,11 @@ export default function App() {
             <div className="mb-6 w-full max-w-4xl">
               <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
                 <Sparkles className="h-5 w-5 text-yellow-300" />
-                {isFirstRelicReward ? "Choose Your First Relic" : "Choose a Deck Relic"}
+                {isFirstRelicReward ? "Choose Your First Mutation" : "Choose a Mutation"}
               </h3>
               {isFirstRelicReward && (
                 <p className="mx-auto mb-3 max-w-2xl rounded-lg border border-yellow-300/25 bg-yellow-300/10 px-3 py-2 text-center text-sm font-semibold text-yellow-50">
-                  Relics reshape this run. Pick the rule change that sounds fun, then add your next study card.
+                  Mutations reshape this expedition. Pick the odd little rule change that sounds fun.
                 </p>
               )}
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -8133,6 +8553,54 @@ export default function App() {
                     </button>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {combat.curioChoices.length > 0 && (
+            <div className="mb-6 w-full max-w-4xl">
+              <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
+                <Backpack className="h-5 w-5 text-cyan-200" />
+                Tuck Away One Curio
+              </h3>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {combat.curioChoices.map(curio => (
+                  <button
+                    type="button"
+                    key={curio.id}
+                    onClick={() => claimCurio(curio)}
+                    className="cute-sticker rounded-lg border-2 border-cyan-200/55 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="font-bold text-white">{curio.name}</span>
+                      <span className="rounded bg-black/30 px-2 py-0.5 text-xs capitalize text-cyan-100">{curio.rarity}</span>
+                    </div>
+                    <p className="text-sm text-gray-300">{curio.description}</p>
+                    <div className="mt-3 text-xs font-bold text-cyan-100">Equip up to {MAX_CURIO_SLOTS}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {combat.snackChoices.length > 0 && (
+            <div className="mb-6 w-full max-w-2xl">
+              <h3 className="mb-3 flex items-center justify-center gap-2 text-lg font-bold text-white">
+                <Cookie className="h-5 w-5 text-pink-200" />
+                Pack A Snack
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {combat.snackChoices.map(snack => (
+                  <button
+                    type="button"
+                    key={snack.id}
+                    onClick={() => claimSnack(snack)}
+                    className="cute-sticker rounded-lg border-2 border-pink-200/55 bg-[#071225]/90 p-4 text-left transition-all hover:scale-[1.02]"
+                  >
+                    <div className="font-bold text-white">{snack.name}</div>
+                    <p className="mt-1 text-sm text-gray-300">{snack.description}</p>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -8167,13 +8635,13 @@ export default function App() {
                       <button
                         key={rating.id}
                         onClick={() => claimRewardCard(rewardWord, rating.id)}
-                        disabled={combat.relicChoices.length > 0}
+                        disabled={combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0}
                         className="px-2 py-2 rounded-md border text-xs font-bold transition-all hover:scale-[1.03]"
                         style={{
                           borderColor: rating.color,
                           color: rating.color,
-                          backgroundColor: combat.relicChoices.length > 0 ? "rgba(80,80,95,0.18)" : `${rating.color}18`,
-                          opacity: combat.relicChoices.length > 0 ? 0.45 : 1,
+                          backgroundColor: combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0 ? "rgba(80,80,95,0.18)" : `${rating.color}18`,
+                          opacity: combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0 ? 0.45 : 1,
                         }}
                       >
                         {rating.shortLabel}
@@ -8187,11 +8655,11 @@ export default function App() {
           ) : (
             <button
               onClick={() => {
-                if (combat.relicChoices.length > 0) return;
+                if (combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0) return;
                 setSave(prev => ({ ...prev, wisdomOrbs: prev.wisdomOrbs + orbsEarned }));
                 nextFloor();
               }}
-              disabled={combat.relicChoices.length > 0}
+              disabled={combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0}
               className="px-8 py-3 mb-6 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold transition-all disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
             >
               Continue
@@ -8199,12 +8667,22 @@ export default function App() {
           )}
           
           <div className="flex items-center gap-3 text-gray-500 text-sm mb-4">
-            <span>{combat.relicChoices.length > 0 ? "Choose a relic first, then add one word" : "Choose one word and set its learning rank"}</span>
+            <span>{combat.relicChoices.length > 0 || combat.curioChoices.length > 0 || combat.snackChoices.length > 0 ? "Choose expedition rewards first" : rewardChoices.length > 0 ? `${combat.vocabPicksRemaining} optional new card${combat.vocabPicksRemaining === 1 ? "" : "s"} available` : "Ready for the next floor"}</span>
             <span className="flex items-center gap-1">
               <Layers className="w-4 h-4" />
               Deck: {combat.deck.length} cards
             </span>
           </div>
+
+          {rewardChoices.length > 0 && combat.relicChoices.length === 0 && combat.curioChoices.length === 0 && combat.snackChoices.length === 0 && (
+            <button
+              type="button"
+              onClick={skipVocabularyBatch}
+              className="mb-4 rounded-md border border-white/15 bg-white/8 px-4 py-2 text-sm font-bold text-gray-200 transition-all hover:bg-white/14"
+            >
+              Continue without more new cards
+            </button>
+          )}
           
           {/* Heal on boss kill */}
           {isBossReward && (
@@ -8279,7 +8757,7 @@ export default function App() {
               className="flex items-center gap-2 px-6 py-3 bg-[#0F3460] hover:bg-[#1a4a7a] rounded-lg text-white font-bold transition-all"
             >
               <Star className="w-5 h-5 text-yellow-400" />
-              Roster
+              Discoveries
             </button>
             <button
               onClick={() => {
@@ -8289,7 +8767,7 @@ export default function App() {
               className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold transition-all hover:scale-105"
             >
               <RotateCcw className="w-5 h-5" />
-              Try Again
+              Fresh Expedition
             </button>
             <button
               onClick={goToMenu}
@@ -8320,7 +8798,7 @@ export default function App() {
               <ChevronRight className="w-5 h-5 rotate-180" />
               Back
             </button>
-            <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "Cinzel, Georgia, serif" }}>Deck Roster</h2>
+            <h2 className="text-2xl font-bold text-white" style={{ fontFamily: "Cinzel, Georgia, serif" }}>Deck-World Discoveries</h2>
             <div className="flex items-center gap-2">
               <img src={assetUrl("/wisdom_orb_blob.svg")} alt="" className="h-6 w-6" />
               <span className="text-yellow-400 font-bold">{save.wisdomOrbs}</span>
@@ -8331,7 +8809,7 @@ export default function App() {
           <div className="flex-1 overflow-auto p-6">
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-300" />
-              {activeDeck.name} Characters
+              {activeDeck.name} Helpers
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-8">
               {CHARACTER_DEFS.map(character => {
