@@ -272,6 +272,11 @@ interface CombatState {
   studyQuestionsLeft: number;
   studyCorrectRound: number;
   studyWrongRound: number;
+  studyCorrectStreak: number;
+  studyImprovedCardIds: string[];
+  studyStruggledCardIds: string[];
+  studyMasteryEvents: string[];
+  studyEndReason: "goal" | "card_cap" | null;
   studyBoardTimeBonus: number;
   currentWord: VocabWord | null;
   currentStudyDirection: StudyDirection;
@@ -451,6 +456,8 @@ const CASCADE_PAUSE_MS = 120;
 const INLINE_COMBAT_BASE_MS = 2600;
 const MAX_STUDY_AP_PER_CARD = 5;
 const STUDY_RUSH_AP_CAP = 5;
+const STUDY_RUSH_CARD_CAP = 12;
+const STUDY_FLUENCY_STREAK_INTERVAL = 4;
 const PLAYER_ACTION_DELAY = 20;
 const ENEMY_ACTION_DELAY = 70;
 const MAX_ACTIVE_PARTY_SIZE = 3;
@@ -977,8 +984,27 @@ function isStudyRushComplete(state: CombatState): boolean {
   return getRemainingStudyRushAp(state) <= 0.01;
 }
 
+function shouldFinishStudyRush(state: CombatState): boolean {
+  return isStudyRushComplete(state) || state.studyQuestionsTotal >= STUDY_RUSH_CARD_CAP;
+}
+
 function clampStudyRushAp(state: CombatState, rawAp: number): number {
   return roundCombatAp(Math.min(getRemainingStudyRushAp(state), Math.max(0, rawAp)));
+}
+
+function getStudyFluencyBonus(state: CombatState): number {
+  const nextStreak = state.studyCorrectStreak + 1;
+  if (nextStreak % STUDY_FLUENCY_STREAK_INTERVAL !== 0) return 0;
+  return roundCombatAp(Math.min(0.5, 0.15 + (nextStreak / STUDY_FLUENCY_STREAK_INTERVAL) * 0.1));
+}
+
+function appendUniqueValue(values: string[], value: string): string[] {
+  return values.includes(value) ? values : [...values, value];
+}
+
+function appendStudyMasteryEvent(events: string[], event: string): string[] {
+  if (!event || events.includes(event)) return events;
+  return [...events, event].slice(-3);
 }
 
 function getProjectedStudyCardAp(state: CombatState, saveData: SaveData): number {
@@ -1131,11 +1157,12 @@ function drawStudyQuestionFromDeck(deck: VocabWord[], saveData: SaveData, previo
       options: generateStudyOptions(fallbackCard, fallbackDirection, saveData, settings.shuffleAnswers),
     };
   }
-  const totalWeight = pool.reduce((sum, candidate) => sum + getStudyProgressWeight(candidate.progress), 0);
+  const now = Date.now();
+  const totalWeight = pool.reduce((sum, candidate) => sum + getStudyProgressWeight(candidate.progress, now, candidate.card.difficulty), 0);
   let roll = Math.random() * totalWeight;
   let selected = pool[pool.length - 1];
   for (const candidate of pool) {
-    roll -= getStudyProgressWeight(candidate.progress);
+    roll -= getStudyProgressWeight(candidate.progress, now, candidate.card.difficulty);
     if (roll <= 0) {
       selected = candidate;
       break;
@@ -2585,6 +2612,11 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
     studyQuestionsLeft: 0,
     studyCorrectRound: 0,
     studyWrongRound: 0,
+    studyCorrectStreak: 0,
+    studyImprovedCardIds: [],
+    studyStruggledCardIds: [],
+    studyMasteryEvents: [],
+    studyEndReason: null,
     studyBoardTimeBonus: 0,
     ...studyQuestion,
     studyFeedback: null,
@@ -2869,6 +2901,11 @@ export default function App() {
       studyQuestionsLeft: 0,
       studyCorrectRound: 0,
       studyWrongRound: 0,
+      studyCorrectStreak: 0,
+      studyImprovedCardIds: [],
+      studyStruggledCardIds: [],
+      studyMasteryEvents: [],
+      studyEndReason: null,
       studyBoardTimeBonus: 0,
       selectedTileIndex: null,
       runeMoved: false,
@@ -2881,7 +2918,7 @@ export default function App() {
       dragTileStatus: null,
       pendingCinematic: null,
       cinematic: null,
-      boardMessage: `Study set started. Resolve ${studyApGoal} AP worth of cards to open commands${headStartAp ? " with a 1 AP head start" : ""}${hasStudyTax ? ". Enemy pressure added 1 AP to the hand" : ""}${combat.nextStudyShuffle ? ". Answers were scrambled" : ""}.`,
+      boardMessage: `Study set started. Resolve up to ${STUDY_RUSH_CARD_CAP} cards or ${studyApGoal} AP worth of cards to open commands${headStartAp ? " with a 1 AP head start" : ""}${hasStudyTax ? ". Enemy pressure added 1 AP to the hand" : ""}${combat.nextStudyShuffle ? ". Answers were scrambled" : ""}.`,
     });
   };
 
@@ -2900,6 +2937,10 @@ export default function App() {
 
     let exposedTurns = adjustedState.exposedTurns;
     let flameDiscountNext = adjustedState.flameDiscountNext;
+    const studyEndReason = isStudyRushComplete(adjustedState) ? "goal" : "card_cap";
+    const studyEndMessage = studyEndReason === "goal"
+      ? "AP goal filled."
+      : `Review cap reached after ${STUDY_RUSH_CARD_CAP} cards.`;
 
     if (perfectStudy && currentEnemy && adjustedState.runRelics.includes("clarity_lens")) {
       exposedTurns = Math.max(exposedTurns, 1);
@@ -2939,10 +2980,11 @@ export default function App() {
       activeBuffs: nextBuffs,
       exposedTurns,
       flameDiscountNext,
+      studyEndReason,
       pendingCinematic: null,
       cinematic: null,
       eventNotices: appendCombatNotices(adjustedState.eventNotices, studyNotices),
-      boardMessage: `Study set complete: ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${formatAp(adjustedState.actionPointsEarnedThisRush)} AP and ${adjustedState.skillCharge}/12 Gusto is ready.${studyStatusMessage}`,
+      boardMessage: `${studyEndMessage} ${formatStudyRushResult(state.studyCorrectRound, answered)}. Earned ${formatAp(adjustedState.actionPointsEarnedThisRush)} AP and ${adjustedState.skillCharge}/12 Gusto is ready.${studyStatusMessage}`,
     });
   };
 
@@ -3004,12 +3046,19 @@ export default function App() {
     const steadyGripBonus = state.runRelics.includes("steady_grip") && state.studyCorrectRound === 0 ? 1 : 0;
     const offeredAp = getProjectedStudyCardAp(state, save);
     const earnedAp = getProjectedCorrectAnswerAp(state, save);
+    const fluencyBonus = getStudyFluencyBonus(state);
+    const totalEarnedAp = roundCombatAp(earnedAp + fluencyBonus);
     const apCapped = offeredAp < getApForCorrectCard(state.currentWord, save, state.currentStudyDirection, state.currentStudyQuestionType) + hardEdgeBonus + steadyGripBonus;
     const difficultyFocusBonus = getFocusBonusForCorrectCard(state.currentWord);
+    const previousMasteryLabel = getMasteryLabel(getDirectionProgress(state.currentWord, save, state.currentStudyDirection).mastery);
     const nextSave = updateCardProgressFromAnswer(save, state.currentWord, state.currentStudyDirection, state.currentStudyQuestionType, true);
+    const nextMasteryLabel = getMasteryLabel(getDirectionProgress(state.currentWord, nextSave, state.currentStudyDirection).mastery);
+    const masteryEvent = previousMasteryLabel === nextMasteryLabel
+      ? ""
+      : `${state.currentWord.word} moved up to ${nextMasteryLabel}.`;
     const nextDeck = refillDeck(state.deck, nextSave);
     const answered = state.studyQuestionsTotal + 1;
-    const nextScore = Math.round(state.score + 20 + earnedAp * 5);
+    const nextScore = Math.round(state.score + 20 + totalEarnedAp * 5);
     const learnedMessage = getActiveDeck(nextSave).cardRatings?.[state.currentWord.id] === "known" ? " Mastered and removed from study." : "";
     const comboSparkFocus = state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? 2 : 0;
     const appetiteFocusBonus = Math.floor(state.blobStats.gusto / 4);
@@ -3019,6 +3068,7 @@ export default function App() {
       ...(steadyGripBonus > 0 ? [createCombatNotice("Mutation: First Bite", "First correct answer added +1 AP before cap.", "relic")] : []),
       ...(difficultyFocusBonus > 0 ? [createCombatNotice("Difficult Card", "Harder vocabulary charged +1 extra Gusto.", "good")] : []),
       ...(state.runRelics.includes("combo_spark") && state.studyCorrectRound + 1 === 4 ? [createCombatNotice("Mutation: Happy Wiggle", "4 correct in one study set: +2 Gusto.", "relic")] : []),
+      ...(fluencyBonus > 0 ? [createCombatNotice("Fluency Streak", `${state.studyCorrectStreak + 1} correct in a row: +${formatAp(fluencyBonus)} bonus AP.`, "good")] : []),
       ...(apCapped ? [createCombatNotice("Study Hand", `Study hand resolved at ${getStudyRushApCap(state)} possible AP.`, "good")] : []),
     ];
     setSave(nextSave);
@@ -3026,23 +3076,26 @@ export default function App() {
     const nextState = {
       ...state,
       deck: nextDeck,
-      powerPoints: state.powerPoints + earnedAp,
-      actionPoints: roundCombatAp(state.actionPoints + earnedAp),
-      actionPointsEarnedThisRush: roundCombatAp(state.actionPointsEarnedThisRush + earnedAp),
+      powerPoints: state.powerPoints + totalEarnedAp,
+      actionPoints: roundCombatAp(state.actionPoints + totalEarnedAp),
+      actionPointsEarnedThisRush: roundCombatAp(state.actionPointsEarnedThisRush + totalEarnedAp),
       studyApOfferedThisRush: roundCombatAp(state.studyApOfferedThisRush + offeredAp),
       apPenaltyNextRush: 0,
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
       studyCorrectRound: state.studyCorrectRound + 1,
+      studyCorrectStreak: state.studyCorrectStreak + 1,
+      studyImprovedCardIds: appendUniqueValue(state.studyImprovedCardIds, state.currentWord.id),
+      studyMasteryEvents: appendStudyMasteryEvent(state.studyMasteryEvents, masteryEvent),
       correctCount: state.correctCount + 1,
       skillCharge: Math.min(12, state.skillCharge + focusGain),
       score: nextScore,
       eventNotices: appendCombatNotices(state.eventNotices, answerNotices),
-      boardMessage: `+${earnedAp} AP${apCapped ? " (goal filled)" : ""}. +${focusGain} Gusto.${learnedMessage}`,
+      boardMessage: `+${formatAp(totalEarnedAp)} AP${fluencyBonus > 0 ? ` including a +${formatAp(fluencyBonus)} streak bonus` : ""}${apCapped ? " (goal filled)" : ""}. +${focusGain} Gusto.${learnedMessage}`,
       flashColor: "rgba(46,204,113,0.18)",
     };
 
-    if (isStudyRushComplete(nextState)) {
+    if (shouldFinishStudyRush(nextState)) {
       finishStudyRound(nextState, nextSave);
       return;
     }
@@ -3052,7 +3105,16 @@ export default function App() {
 
   const handleWrongAnswer = (state: CombatState, selectedOption: string) => {
     const missedWord = state.currentWord;
+    const previousMasteryLabel = missedWord
+      ? getMasteryLabel(getDirectionProgress(missedWord, save, state.currentStudyDirection).mastery)
+      : "";
     const nextSave = state.currentWord ? updateCardProgressFromAnswer(save, state.currentWord, state.currentStudyDirection, state.currentStudyQuestionType, false) : save;
+    const nextMasteryLabel = missedWord
+      ? getMasteryLabel(getDirectionProgress(missedWord, nextSave, state.currentStudyDirection).mastery)
+      : "";
+    const masteryEvent = missedWord
+      ? `${missedWord.word} needs another look${previousMasteryLabel !== nextMasteryLabel ? ` (${nextMasteryLabel})` : ""}.`
+      : "";
     setSave(nextSave);
     const bloodQuill = state.runRelics.includes("blood_quill");
     const answered = state.studyQuestionsTotal + 1;
@@ -3066,6 +3128,9 @@ export default function App() {
       studyQuestionsTotal: answered,
       studyQuestionsLeft: 0,
       studyWrongRound: state.studyWrongRound + 1,
+      studyCorrectStreak: 0,
+      studyStruggledCardIds: missedWord ? appendUniqueValue(state.studyStruggledCardIds, missedWord.id) : state.studyStruggledCardIds,
+      studyMasteryEvents: appendStudyMasteryEvent(state.studyMasteryEvents, masteryEvent),
       wrongCount: state.wrongCount + 1,
       skillCharge: Math.min(12, state.skillCharge + tidalMemoryFocus + bloodQuillFocus),
       phase: "wrong" as const,
@@ -3096,7 +3161,7 @@ export default function App() {
       const latestCombat = combatRef.current;
       if (!latestCombat || latestCombat.mode !== "study" || latestCombat.phase !== "wrong" || latestCombat.currentWord?.id !== missedWord?.id) return;
 
-      if (isStudyRushComplete(nextState)) {
+      if (shouldFinishStudyRush(nextState)) {
         finishStudyRound({
           ...nextState,
           phase: "answering",
@@ -5088,6 +5153,11 @@ export default function App() {
       absorbedElementHistory: snapshot.combat.absorbedElementHistory || [],
       lastClaimedTraitId: snapshot.combat.lastClaimedTraitId || null,
       showTraitTransformation: Boolean(snapshot.combat.showTraitTransformation),
+      studyCorrectStreak: snapshot.combat.studyCorrectStreak || 0,
+      studyImprovedCardIds: snapshot.combat.studyImprovedCardIds || [],
+      studyStruggledCardIds: snapshot.combat.studyStruggledCardIds || [],
+      studyMasteryEvents: snapshot.combat.studyMasteryEvents || [],
+      studyEndReason: snapshot.combat.studyEndReason || null,
       turnQueue: refreshedTurnQueue,
       isPaused: false,
       actionEffect: null,
@@ -5264,6 +5334,11 @@ export default function App() {
       studyQuestionsLeft: 0,
       studyCorrectRound: 0,
       studyWrongRound: 0,
+      studyCorrectStreak: 0,
+      studyImprovedCardIds: [],
+      studyStruggledCardIds: [],
+      studyMasteryEvents: [],
+      studyEndReason: null,
       studyBoardTimeBonus: 0,
       ...studyQuestion,
       timerMax,
@@ -5642,6 +5717,7 @@ export default function App() {
   const canUseRuneSkills = !!combat && combat.phase === "answering" && combat.mode === "boardReady" && !combat.isPaused && !combat.isResolvingRunes;
   const currentCardPower = combat?.currentWord ? getProjectedCorrectAnswerAp(combat, save) : 0;
   const currentCardStake = combat?.currentWord ? getProjectedStudyCardAp(combat, save) : 0;
+  const currentCardFluencyBonus = combat?.currentWord ? getStudyFluencyBonus(combat) : 0;
   const currentCardFocusBonus = combat?.currentWord ? getFocusBonusForCorrectCard(combat.currentWord) : 0;
   const currentStudyApCap = combat ? getStudyRushApCap(combat) : STUDY_RUSH_AP_CAP;
   const activeTurnActor = combat ? getCurrentActor(combat) : null;
@@ -7653,20 +7729,20 @@ export default function App() {
                             type="button"
                             onClick={handleUltimate}
                             disabled={combat.phase !== "answering" || combat.skillCharge < activeCommandUltimate.focusCost}
-                            className={`ultimate-command-button cute-ultimate-button flex w-full items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-left transition-all sm:px-3 sm:py-2 ${
+                            className={`ultimate-command-button cute-ultimate-button flex min-h-14 w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-left transition-all sm:px-3 sm:py-2.5 ${
                               combat.skillCharge >= activeCommandUltimate.focusCost
                                 ? "ultimate-command-ready border-yellow-200/70 bg-yellow-300/14 text-yellow-50 shadow-[0_0_20px_rgba(255,216,77,0.2)] hover:bg-yellow-300/22"
                                 : "cursor-not-allowed border-white/10 bg-white/4 text-gray-500 opacity-70"
                             }`}
                           >
                             <span className="flex min-w-0 items-center gap-2">
-                              <Zap className="h-4 w-4 shrink-0" />
+                              <Zap className="h-5 w-5 shrink-0" />
                               <span className="min-w-0">
-                                <span className="block truncate text-xs font-black uppercase tracking-wide">Big Trick: {activeCommandUltimate.name}</span>
-                                <span className="block truncate text-[10px]">{activeCommandUltimate.description}</span>
+                                <span className="block truncate text-sm font-black uppercase tracking-wide">Big Trick: {activeCommandUltimate.name}</span>
+                                <span className="block truncate text-[11px]">{activeCommandUltimate.description}</span>
                               </span>
                             </span>
-                            <span className="shrink-0 rounded bg-black/25 px-2 py-1 text-[10px] font-black">{activeCommandUltimate.focusCost} Gusto</span>
+                            <span className="shrink-0 rounded bg-black/25 px-2 py-1.5 text-xs font-black">{activeCommandUltimate.focusCost} Gusto</span>
                           </button>
                         )}
 
@@ -7675,13 +7751,13 @@ export default function App() {
                             type="button"
                             onClick={useSnack}
                             disabled={combat.phase !== "answering"}
-                            className="flex w-full items-center justify-between gap-2 rounded-md border border-pink-200/35 bg-pink-300/10 px-2 py-1.5 text-left text-pink-50 transition-all hover:bg-pink-300/18 disabled:opacity-45 sm:px-3 sm:py-2"
+                            className="snack-command-button flex min-h-12 w-full items-center justify-between gap-2 rounded-md border border-pink-200/35 bg-pink-300/10 px-3 py-2 text-left text-pink-50 transition-all hover:bg-pink-300/18 disabled:opacity-45 sm:px-3 sm:py-2.5"
                           >
                             <span className="flex min-w-0 items-center gap-2">
-                              <Cookie className="h-4 w-4 shrink-0" />
-                              <span className="truncate text-xs font-black">Snack: {getSnackById(combat.snackId)?.name}</span>
+                              <Cookie className="h-5 w-5 shrink-0" />
+                              <span className="truncate text-sm font-black">Snack: {getSnackById(combat.snackId)?.name}</span>
                             </span>
-                            <span className="text-[10px] font-bold">Free</span>
+                            <span className="rounded bg-black/20 px-2 py-1 text-xs font-bold">Free</span>
                           </button>
                         )}
 
@@ -8209,7 +8285,7 @@ export default function App() {
               </div>
               <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Study Set Ready</h3>
               <p className="mb-3 text-xs text-gray-300 sm:mb-5 sm:text-sm">
-                Resolve an adaptive AP hand to open body tricks. Hard cards are worth more; familiar cards and repeated practice gradually award smaller fractions.
+                Resolve an adaptive AP hand to open body tricks. The set stops when the AP goal is filled or after {STUDY_RUSH_CARD_CAP} cards, so familiar reviews stay brisk.
               </p>
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs sm:mb-5 sm:gap-3 sm:text-sm">
                 <div className="rounded-md bg-black/25 p-2 sm:p-3">
@@ -8239,6 +8315,13 @@ export default function App() {
                 <Sword className="h-6 w-6 sm:h-7 sm:w-7" />
               </div>
               <h3 className="mb-1 text-lg font-bold text-white sm:mb-2 sm:text-2xl">Commands Ready</h3>
+              <div className={`mx-auto mb-2 w-fit rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${
+                combat.studyEndReason === "card_cap"
+                  ? "border-cyan-200/35 bg-cyan-300/12 text-cyan-100"
+                  : "border-green-200/35 bg-green-300/12 text-green-100"
+              }`}>
+                {combat.studyEndReason === "card_cap" ? "Review cap reached" : "AP goal filled"}
+              </div>
               <div className="command-ap-burst mx-auto mb-2 w-fit rounded-full border border-yellow-200/35 bg-yellow-300/16 px-4 py-1.5 text-xl font-black text-yellow-100 shadow-[0_0_22px_rgba(255,216,77,0.25)] sm:mb-3 sm:text-2xl">
                 +{formatAp(combat.actionPointsEarnedThisRush)} AP
               </div>
@@ -8263,6 +8346,16 @@ export default function App() {
                   <div className="font-bold text-purple-200">{combat.skillCharge}</div>
                 </div>
               </div>
+              <div className="mb-3 flex flex-wrap justify-center gap-1.5 text-[10px] font-bold text-cyan-50 sm:mb-4 sm:text-xs">
+                <span className="rounded-full border border-cyan-200/20 bg-cyan-300/10 px-2 py-1">{combat.studyQuestionsTotal}/{STUDY_RUSH_CARD_CAP} reviewed</span>
+                <span className="rounded-full border border-green-200/20 bg-green-300/10 px-2 py-1">{combat.studyImprovedCardIds.length} improving</span>
+                <span className="rounded-full border border-pink-200/20 bg-pink-300/10 px-2 py-1">{combat.studyStruggledCardIds.length} needs work</span>
+              </div>
+              {combat.studyMasteryEvents.length > 0 && (
+                <div className="mb-3 space-y-1 text-left text-[10px] font-semibold text-gray-300 sm:mb-4 sm:text-xs">
+                  {combat.studyMasteryEvents.map(event => <div key={event}>- {event}</div>)}
+                </div>
+              )}
               <button
                 onClick={beginCommandPhase}
                 className="flex w-full items-center justify-center gap-2 rounded-md bg-[#E94560] py-3 font-bold text-white transition-all hover:bg-[#ff5b72]"
@@ -8418,7 +8511,7 @@ export default function App() {
                     <h3 className="text-base font-bold sm:text-xl">Study Set</h3>
                   </div>
                   <p className="mt-1 text-xs text-gray-400 sm:text-sm">
-                    {studyAnswered} answered
+                    {studyAnswered}/{STUDY_RUSH_CARD_CAP} reviewed
                   </p>
                 </div>
                 <div className="flex gap-1.5 sm:gap-2">
@@ -8435,6 +8528,11 @@ export default function App() {
                   {currentCardFocusBonus > 0 && (
                     <span className="rounded-md bg-purple-400/15 px-2 py-1.5 text-xs font-bold text-purple-100 sm:px-3 sm:py-2 sm:text-sm">
                       +{currentCardFocusBonus} Gusto
+                    </span>
+                  )}
+                  {currentCardFluencyBonus > 0 && (
+                    <span className="rounded-md bg-green-400/15 px-2 py-1.5 text-xs font-bold text-green-100 sm:px-3 sm:py-2 sm:text-sm">
+                      +{formatAp(currentCardFluencyBonus)} streak AP
                     </span>
                   )}
                   <span className="hidden rounded-md bg-black/30 px-2 py-1.5 text-xs font-bold text-gray-300 sm:inline-flex sm:px-3 sm:py-2 sm:text-sm">

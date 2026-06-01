@@ -127,11 +127,14 @@ export function chooseQuestionType(settings: DeckStudySettings, progress: Direct
   return "self_grade";
 }
 
-export function getStudyProgressWeight(progress: DirectionStudyProgress, now = Date.now()): number {
-  const dueWeight = progress.dueAt <= now ? 1.65 : 0.72;
-  const struggleWeight = 1 + progress.wrongStreak * 0.55;
-  const masteryWeight = 0.45 + (1 - progress.mastery) * 1.75;
-  return Math.max(0.08, dueWeight * struggleWeight * masteryWeight);
+export function getStudyProgressWeight(progress: DirectionStudyProgress, now = Date.now(), difficulty = 3): number {
+  const normalized = normalizeForToday(progress, now);
+  const dueWeight = normalized.dueAt <= now ? 2.2 : 0.48;
+  const struggleWeight = 1 + normalized.wrongStreak * 0.9;
+  const masteryWeight = 0.35 + (1 - normalized.mastery) * 2;
+  const difficultyWeight = 0.86 + Math.min(6, Math.max(1, difficulty)) * 0.08;
+  const dailyReviewWeight = 1 / (1 + normalized.reviewsToday * 0.55);
+  return Math.max(0.04, dueWeight * struggleWeight * masteryWeight * difficultyWeight * dailyReviewWeight);
 }
 
 export function getCorrectAnswerAp(progress: DirectionStudyProgress, questionType: StudyQuestionType, now = Date.now()): number {

@@ -1944,6 +1944,13 @@ img[src*="enemy_"] {
   animation: ultimateCommandReady 1.4s ease-in-out infinite;
 }
 
+.ultimate-command-button,
+.snack-command-button {
+  position: relative;
+  z-index: 2;
+  touch-action: manipulation;
+}
+
 .element-pip {
   display: inline-flex;
   width: 1.45rem;
