@@ -1,11 +1,10 @@
 export type StudyDirection = "term_to_definition" | "definition_to_term";
-export type StudyQuestionType = "multiple_choice" | "typed" | "self_grade";
+export type StudyQuestionType = "multiple_choice" | "self_grade";
 
 export interface DeckStudySettings {
   askTermToDefinition: boolean;
   askDefinitionToTerm: boolean;
   useMultipleChoice: boolean;
-  useTypedAnswer: boolean;
   useSelfGrade: boolean;
   shuffleAnswers: boolean;
 }
@@ -28,7 +27,6 @@ export const DEFAULT_STUDY_SETTINGS: DeckStudySettings = {
   askTermToDefinition: true,
   askDefinitionToTerm: true,
   useMultipleChoice: true,
-  useTypedAnswer: true,
   useSelfGrade: true,
   shuffleAnswers: true,
 };
@@ -51,7 +49,7 @@ export function normalizeStudySettings(settings?: Partial<DeckStudySettings> | n
   if (!normalized.askTermToDefinition && !normalized.askDefinitionToTerm) {
     normalized.askDefinitionToTerm = true;
   }
-  if (!normalized.useMultipleChoice && !normalized.useTypedAnswer && !normalized.useSelfGrade) {
+  if (!normalized.useMultipleChoice && !normalized.useSelfGrade) {
     normalized.useMultipleChoice = true;
   }
 
@@ -125,9 +123,7 @@ export function chooseQuestionType(settings: DeckStudySettings, progress: Direct
   const mastery = progress.mastery;
   const roll = Math.random();
   if (mastery >= 0.68 && settings.useSelfGrade && roll < 0.56) return "self_grade";
-  if (mastery >= 0.32 && settings.useTypedAnswer && roll < 0.78) return "typed";
   if (settings.useMultipleChoice) return "multiple_choice";
-  if (settings.useTypedAnswer) return "typed";
   return "self_grade";
 }
 
@@ -156,7 +152,7 @@ export function getCorrectAnswerAp(progress: DirectionStudyProgress, questionTyp
       : normalized.correctToday === 2
         ? 0.45
         : 0.25;
-  const questionReward = questionType === "self_grade" ? 1.12 : questionType === "typed" ? 1 : 0.88;
+  const questionReward = questionType === "self_grade" ? 1.12 : 0.88;
   const dueReward = normalized.dueAt <= now ? 1 : 0.82;
   return roundAp(Math.max(0.1, masteryReward * repeatReward * questionReward * dueReward));
 }
@@ -170,7 +166,7 @@ export function updateDirectionStudyProgress(
   const current = normalizeForToday(progress, now);
   const nextCorrectStreak = isCorrect ? current.correctStreak + 1 : 0;
   const nextWrongStreak = isCorrect ? 0 : current.wrongStreak + 1;
-  const formatStrength = questionType === "self_grade" ? 1.25 : questionType === "typed" ? 1.08 : 0.82;
+  const formatStrength = questionType === "self_grade" ? 1.25 : 0.82;
   const masteryChange = isCorrect
     ? (0.055 + Math.min(0.045, nextCorrectStreak * 0.008)) * formatStrength
     : -(0.11 + Math.min(0.12, nextWrongStreak * 0.035));
@@ -208,7 +204,6 @@ export function getMasteryLabel(mastery: number): string {
 function getEnabledQuestionTypes(settings: DeckStudySettings): StudyQuestionType[] {
   const types: StudyQuestionType[] = [];
   if (settings.useMultipleChoice) types.push("multiple_choice");
-  if (settings.useTypedAnswer) types.push("typed");
   if (settings.useSelfGrade) types.push("self_grade");
   return types.length > 0 ? types : ["multiple_choice"];
 }

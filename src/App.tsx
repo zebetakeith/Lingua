@@ -2515,7 +2515,6 @@ export default function App() {
   const [starterDraftDeck, setStarterDraftDeck] = useState<VocabWord[]>([]);
   const [starterDraftChoices, setStarterDraftChoices] = useState<VocabWord[]>([]);
   const [starterDraftMessage, setStarterDraftMessage] = useState("");
-  const [typedStudyAnswer, setTypedStudyAnswer] = useState("");
   const [contractNewCards, setContractNewCards] = useState(DEFAULT_CONTRACT_NEW_CARDS);
   const [contractMinutes, setContractMinutes] = useState(DEFAULT_CONTRACT_MINUTES);
   const [selectedRegionStart, setSelectedRegionStart] = useState(1);
@@ -2525,10 +2524,6 @@ export default function App() {
   const advancingCinematicRef = useRef<number | null>(null);
 
   combatRef.current = combat;
-
-  useEffect(() => {
-    setTypedStudyAnswer("");
-  }, [combat?.currentWord?.id, combat?.currentStudyDirection, combat?.currentStudyQuestionType]);
 
   // Keep save synced
   useEffect(() => {
@@ -5763,7 +5758,6 @@ export default function App() {
         title: "Question types",
         options: [
           { key: "useMultipleChoice", label: "Multiple choice", detail: "Recognition prompts for newer cards." },
-          { key: "useTypedAnswer", label: "Typed answers", detail: "Write the answer as familiarity grows." },
           { key: "useSelfGrade", label: "Flip and grade", detail: "Recall freely, flip the card, then grade yourself." },
         ],
       },
@@ -8287,7 +8281,7 @@ export default function App() {
                     {combat.currentStudyDirection === "term_to_definition" ? "Term" : "Definition"}
                   </p>
                   <span className="rounded-full border border-cyan-200/20 bg-cyan-200/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-cyan-100">
-                    {combat.currentStudyQuestionType === "multiple_choice" ? "Multiple choice" : combat.currentStudyQuestionType === "typed" ? "Type answer" : "Recall and flip"}
+                    {combat.currentStudyQuestionType === "multiple_choice" ? "Multiple choice" : "Recall and flip"}
                   </span>
                 </div>
                 <p className="text-base leading-relaxed text-white sm:text-xl">{getStudyPrompt(combat.currentWord, combat.currentStudyDirection)}</p>
@@ -8342,33 +8336,6 @@ export default function App() {
                   );
                   })}
                 </div>
-              )}
-
-              {combat.currentStudyQuestionType === "typed" && (
-                <form
-                  onSubmit={event => {
-                    event.preventDefault();
-                    if (typedStudyAnswer.trim()) handleAnswer(typedStudyAnswer);
-                  }}
-                  className="space-y-2"
-                >
-                  <input
-                    value={typedStudyAnswer}
-                    onChange={event => setTypedStudyAnswer(event.target.value)}
-                    disabled={combat.phase !== "answering" || combat.isPaused}
-                    autoFocus
-                    placeholder="Type your answer"
-                    className="w-full rounded-md border-2 border-cyan-300/35 bg-[#071225] px-3 py-3 text-base font-semibold text-white outline-none transition-all placeholder:text-gray-600 focus:border-cyan-300"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!typedStudyAnswer.trim() || combat.phase !== "answering" || combat.isPaused}
-                    className="flex w-full items-center justify-center gap-2 rounded-md bg-cyan-600 px-3 py-3 font-bold text-white transition-all hover:bg-cyan-500 disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
-                  >
-                    <Check className="h-4 w-4" />
-                    Check answer
-                  </button>
-                </form>
               )}
 
               {combat.currentStudyQuestionType === "self_grade" && (
