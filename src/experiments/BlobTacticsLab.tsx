@@ -50,6 +50,7 @@ import {
   isEnemyAt,
   isPipploAt,
   selectActionTile,
+  selectBlobImproviseMode,
   tapBoardTile,
   type BlobPosition,
   type BlobMutationId,
@@ -116,11 +117,10 @@ function ActionTile({
   return (
     <button
       type="button"
-      className={`blob-lab-action-tile ${selected ? "is-selected" : ""} ${tile.sour ? "is-sour" : ""}`}
+      className={`blob-lab-action-tile ${selected ? "is-selected" : ""} ${tile.sour ? "is-sour" : ""} ${disabledReason ? "is-native-disabled" : ""}`}
       style={{ "--tile-accent": info.accent } as React.CSSProperties}
-      disabled={Boolean(disabledReason)}
       onClick={onClick}
-      title={disabledReason || info.description}
+      title={disabledReason ? `${disabledReason} This tile can still be burned for an improvised action.` : info.description}
     >
       <span className="blob-lab-action-tile-face">
         <span className="blob-lab-action-tile-top">
@@ -256,6 +256,10 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
     playSound("clack");
     setState(current => selectActionTile(current, tile.id));
   };
+  const chooseImprovise = (mode: "move" | "bonk") => {
+    playSound("clack");
+    setState(current => selectBlobImproviseMode(current, mode));
+  };
   const tapTile = (position: BlobPosition) => {
     playSound("clack");
     setState(current => tapBoardTile(current, position));
@@ -353,6 +357,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
           <strong>{state.enemy.name}{state.enemy.boss && <b> Guardian</b>}</strong>
           <span>{state.enemy.hp}/{state.enemy.maxHp} HP</span>
           {state.enemy.maxShell > 0 && <span>{state.enemy.shell}/{state.enemy.maxShell} Shell</span>}
+          {state.enemyPressure > 0 && <span className="blob-lab-pursuit">Pursuit {state.enemyPressure}</span>}
           {state.enemy.enraged && <span className="blob-lab-enraged">Furious</span>}
         </div>
         <div className={`blob-lab-intent is-${enemyIntent.tone}`}>
@@ -437,7 +442,13 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
           <div className="blob-lab-tray-heading">
             <div>
               <p className="blob-lab-eyebrow">Tile hand</p>
-              <strong>{selectedTile ? getActionTilePrompt(selectedTile.type, Boolean(state.actionSourceId), state.enemy.name) : "Pick a tile, then tap highlighted tiles"}</strong>
+              <strong>{selectedTile
+                ? state.improviseMode === "move"
+                  ? "Tap an adjacent tile for a weaker 1 Mass Scoot"
+                  : state.improviseMode === "bonk"
+                    ? `Tap ${state.enemy.name} for a weaker 1 Mass Bonk`
+                    : getActionTilePrompt(selectedTile.type, Boolean(state.actionSourceId), state.enemy.name)
+                : "Pick a tile, then tap highlighted tiles"}</strong>
               <div className="blob-lab-chain" title="Every third tile restores Mass">
                 <span>Bounce chain</span>
                 {[0, 1, 2].map(index => <i key={index} className={index < chainStep ? "is-filled" : ""} />)}
@@ -451,6 +462,29 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
               <ArrowRight />
             </button>
           </div>
+          {selectedTile && (
+            <div className="blob-lab-improvise-bar">
+              <span>Burn selected tile: 1 Mass, no chain</span>
+              <button
+                type="button"
+                className={state.improviseMode === "move" ? "is-active" : ""}
+                disabled={state.mass < 1}
+                onClick={() => chooseImprovise("move")}
+              >
+                <Move />
+                Scoot
+              </button>
+              <button
+                type="button"
+                className={state.improviseMode === "bonk" ? "is-active" : ""}
+                disabled={state.mass < 1}
+                onClick={() => chooseImprovise("bonk")}
+              >
+                <Swords />
+                Bonk
+              </button>
+            </div>
+          )}
           <div className="blob-lab-action-tile-row">
             {state.hand.map(tile => (
               <ActionTile
@@ -602,6 +636,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             <p className="blob-lab-eyebrow">Tiny tactics primer</p>
             <h2>Split yourself to make options</h2>
             <p>Study creates temporary tiles. Tiles move Pipplo, crack Shell, or bud off little helpers. Every third tile played restores Mass.</p>
+            <p>Any tile can be burned for a weak 1 Mass Scoot or Bonk, but improvised actions do not advance the bounce chain. Ending a turn without hitting the enemy raises Pursuit and speeds up its next approach.</p>
             <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors to recover Mass.</p>
             <p>The board previews enemy paths, attacks, and hazards before the turn ends. Between fights, choose routes for mutations, recovery, or Tile Tinker bag upgrades.</p>
             <p>After the meadow, the Rootwild adds peculiar bargains and creatures that rebuild Shell or drain Mass when ignored.</p>

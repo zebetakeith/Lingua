@@ -3,6 +3,7 @@ export const BLOB_BOARD_COLS = 5;
 export const BLOB_RUN_ROOMS = 8;
 
 export type BlobStudyGrade = "bad" | "good" | "great";
+export type BlobImproviseMode = "move" | "bonk";
 export type BlobActionTileType =
   | "move"
   | "hop"
@@ -121,6 +122,9 @@ export interface BlobTacticsState {
   absorbedEnemies: BlobEnemyKind[];
   springFeetUsedThisRoom: boolean;
   tilesPlayedThisTurn: number;
+  attackedThisTurn: boolean;
+  enemyPressure: number;
+  improviseMode: BlobImproviseMode | null;
   mapDepth: number;
   mapChoices: BlobMapNodeId[];
   visitedNodeIds: BlobMapNodeId[];
@@ -709,6 +713,9 @@ export function createInitialBlobTacticsState(): BlobTacticsState {
     absorbedEnemies: [],
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
+    attackedThisTurn: false,
+    enemyPressure: 0,
+    improviseMode: null,
     mapDepth: 1,
     mapChoices: [],
     visitedNodeIds: ["shellGate"],
@@ -760,6 +767,7 @@ export function applyFakeStudyResult(state: BlobTacticsState, grade: BlobStudyGr
     hand: generated.tiles,
     selectedActionTileId: null,
     actionSourceId: null,
+    improviseMode: null,
     nextId: generated.nextId,
     lastStudyGrade: grade,
     tilesPlayedThisTurn: 0,
@@ -810,6 +818,14 @@ export function getValidTargetKeys(state: BlobTacticsState): Set<string> {
     });
   };
 
+  if (state.improviseMode === "move") {
+    addEmptyAdjacent(state.pipploPosition);
+    return keys;
+  }
+  if (state.improviseMode === "bonk") {
+    if (distance(state.pipploPosition, state.enemy.position) === 1) keys.add(positionKey(state.enemy.position));
+    return keys;
+  }
   if (tile.type === "move") addEmptyAdjacent(state.pipploPosition);
   if (tile.type === "hop") getEmptyTargetsWithin(state, state.pipploPosition, 2).forEach(target => keys.add(positionKey(target)));
   if (tile.type === "bump" && distance(state.pipploPosition, state.enemy.position) === 1) keys.add(positionKey(state.enemy.position));
@@ -871,17 +887,37 @@ export function selectActionTile(state: BlobTacticsState, tileId: string): BlobT
   const tile = state.hand.find(entry => entry.id === tileId);
   if (!tile) return state;
   const reason = getActionTileDisabledReason(state, tile);
-  if (reason) return withNotice(state, ACTION_TILE_INFO[tile.type].name, reason, "warn");
-  return {
+  const next = {
     ...state,
     selectedActionTileId: state.selectedActionTileId === tileId ? null : tileId,
     actionSourceId: null,
+    improviseMode: null,
   };
+  if (reason && next.selectedActionTileId) {
+    return withNotice(next, `${ACTION_TILE_INFO[tile.type].name} cannot be used normally`, `${reason} Burn it for an improvised Scoot or Bonk instead.`, "warn");
+  }
+  return next;
 }
 
-const consumeSelectedActionTile = (state: BlobTacticsState): BlobTacticsState => {
-  const tilesPlayedThisTurn = state.tilesPlayedThisTurn + 1;
+export function selectBlobImproviseMode(state: BlobTacticsState, mode: BlobImproviseMode): BlobTacticsState {
+  if (state.phase !== "player" || !state.selectedActionTileId) return state;
+  if (state.mass < 1) return withNotice(state, "Not enough Mass", "Improvising needs 1 Mass.", "warn");
+  const next = {
+    ...state,
+    actionSourceId: null,
+    improviseMode: state.improviseMode === mode ? null : mode,
+  };
+  return next.improviseMode
+    ? withNotice(next, mode === "move" ? "Improvise Scoot" : "Improvise Bonk",
+      mode === "move" ? "Burn this tile and spend 1 Mass to move one space." : "Burn this tile and spend 1 Mass for a weak adjacent hit.",
+      "plain")
+    : next;
+}
+
+const consumeSelectedActionTile = (state: BlobTacticsState, countForChain = true): BlobTacticsState => {
+  const tilesPlayedThisTurn = state.tilesPlayedThisTurn + (countForChain ? 1 : 0);
   const chainMass = tilesPlayedThisTurn % 3 === 0
+    && countForChain
     ? state.mutations.includes("rhythmJelly") ? 2 : 1
     : 0;
   return {
@@ -890,6 +926,7 @@ const consumeSelectedActionTile = (state: BlobTacticsState): BlobTacticsState =>
     hand: state.hand.filter(tile => tile.id !== state.selectedActionTileId),
     selectedActionTileId: null,
     actionSourceId: null,
+    improviseMode: null,
     tilesPlayedThisTurn,
   };
 };
@@ -911,6 +948,8 @@ const dealDamageToEnemy = (state: BlobTacticsState, damage: number, shellDamage:
   return withNotice({
     ...state,
     roomsCleared,
+    attackedThisTurn: true,
+    enemyPressure: 0,
     phase: finalRoom ? "won" : defeated ? "reward" : state.phase,
     enemy: { ...state.enemy, shell: nextShell, hp: nextHp },
     rewardChoices: defeated && !finalRoom ? getRewardChoices(state) : [],
@@ -923,6 +962,20 @@ const dealDamageToEnemy = (state: BlobTacticsState, damage: number, shellDamage:
     ? `${state.enemy.name} wobbled apart. Pipplo absorbed the leftovers!`
     : `${shellHit ? `${shellHit} Shell cracked. ` : ""}${hpDamage ? `${hpDamage} damage landed.` : "Its Shell softened the hit."}`,
   defeated ? "good" : "plain");
+};
+
+const useImprovisedActionAt = (state: BlobTacticsState, target: BlobPosition): BlobTacticsState => {
+  if (!state.improviseMode || !state.selectedActionTileId || state.mass < 1) return state;
+  const mode = state.improviseMode;
+  const next = consumeSelectedActionTile({ ...state, mass: state.mass - 1 }, false);
+  if (mode === "move") {
+    return withNotice(consumeSporeAt({
+      ...next,
+      pipploPosition: target,
+      animation: "pipplo",
+    }, target), "Improvised Scoot", "Pipplo burned a tile and spent 1 Mass to wobble away. Improvised tiles do not build the bounce chain.", "warn");
+  }
+  return dealDamageToEnemy(next, 1, 1, "Improvised Bonk");
 };
 
 const consumeSporeAt = (state: BlobTacticsState, position: BlobPosition): BlobTacticsState => {
@@ -1042,6 +1095,7 @@ export function tapBoardTile(state: BlobTacticsState, target: BlobPosition): Blo
   const validKeys = getValidTargetKeys(state);
   if (!validKeys.has(positionKey(target))) return state;
 
+  if (state.improviseMode) return useImprovisedActionAt(state, target);
   if (!state.actionSourceId && (tile.type === "slap" || tile.type === "spit" || tile.type === "goo")) {
     const sourceIsPipplo = samePosition(state.pipploPosition, target);
     const sourceBloblet = state.bloblets.find(bloblet => samePosition(bloblet.position, target));
@@ -1065,6 +1119,10 @@ const getSporeTarget = (state: BlobTacticsState): BlobPosition => {
     .filter(position => !state.tileEffects.some(effect => samePosition(effect.position, position)));
   return candidates[0] || state.pipploPosition;
 };
+
+const getEnemyMoveSteps = (state: BlobTacticsState, pouncing = false): number => (
+  Math.min(4, (pouncing ? 2 : state.enemy.moveRange) + state.enemyPressure)
+);
 
 export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
   if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "event" || state.phase === "won") {
@@ -1093,8 +1151,9 @@ export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
     };
   }
   if (state.enemy.kind === "nibbleImp" && targetDistance <= 3) {
-    return { label: "Pounce", detail: "Nibble Imp will dash closer and deal 1 HP if it reaches Pipplo.", tone: "attack", targetId: "pipplo" };
+    return { label: "Pounce", detail: `Nibble Imp will dash up to ${getEnemyMoveSteps(state, true)} tiles and deal 1 HP if it reaches Pipplo.`, tone: "attack", targetId: "pipplo" };
   }
+  const moveSteps = getEnemyMoveSteps(state);
   return {
     label: state.enemy.kind === "nibbleImp"
       ? "Skitter closer"
@@ -1105,7 +1164,7 @@ export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
           : state.enemy.kind === "bubbleCrab"
             ? "Side-step closer"
             : "Waddle closer",
-    detail: `${state.enemy.name} will move ${state.enemy.moveRange === 1 ? "one tile" : "up to two tiles"} toward Pipplo.`,
+    detail: `${state.enemy.name} will move ${moveSteps === 1 ? "one tile" : `up to ${moveSteps} tiles`} toward Pipplo${state.enemyPressure ? " while Pursuit is active" : ""}.`,
     tone: "move",
     targetId: "pipplo",
   };
@@ -1134,7 +1193,7 @@ export function getEnemyPreview(state: BlobTacticsState): BlobEnemyPreview {
     return preview;
   }
 
-  const steps = intent.label === "Pounce" ? 2 : state.enemy.moveRange;
+  const steps = getEnemyMoveSteps(state, intent.label === "Pounce");
   let simulated = state;
   for (let stepIndex = 0; stepIndex < steps; stepIndex += 1) {
     if (distance(simulated.enemy.position, simulated.pipploPosition) <= 1) break;
@@ -1209,14 +1268,17 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
     ...state,
     selectedActionTileId: null,
     actionSourceId: null,
+    improviseMode: null,
     hand: [],
     tilesPlayedThisTurn: 0,
+    attackedThisTurn: false,
+    enemyPressure: 0,
     animation: "enemy",
   };
 
   if (intent.tone === "attack" && intent.targetId) {
     if (intent.targetId === "pipplo" && intent.label === "Pounce") {
-      const moved = moveEnemyTowardPipplo(next, 2);
+      const moved = moveEnemyTowardPipplo(next, getEnemyMoveSteps(state, true));
       next = moved.state;
       next = distance(next.enemy.position, next.pipploPosition) === 1
         ? damagePipplo(next, 1, "Nibble Imp pounced!")
@@ -1261,7 +1323,7 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
       nextId: next.nextId + 1,
     }, intent.label, "A prickly patch appeared. Avoid stepping on it.", "warn");
   } else {
-    const moved = moveEnemyTowardPipplo(next, next.enemy.moveRange);
+    const moved = moveEnemyTowardPipplo(next, getEnemyMoveSteps(state));
     next = withNotice({
       ...moved.state,
       phase: "study",
@@ -1279,6 +1341,20 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
         : next.enemy,
     });
     if (enraged && !state.enemy.enraged) next = withNotice(next, "Root Lump is furious", "Below half HP, its attacks now hit harder.", "warn");
+  }
+  if (next.phase === "study") {
+    const enemyPressure = state.attackedThisTurn ? 0 : Math.min(3, state.enemyPressure + 1);
+    next = {
+      ...next,
+      attackedThisTurn: false,
+      enemyPressure,
+      notice: enemyPressure > state.enemyPressure
+        ? {
+            ...next.notice,
+            detail: `${next.notice.detail} Pursuit rose to ${enemyPressure}: hit the enemy to calm the chase.`,
+          }
+        : next.notice,
+    };
   }
   return { ...next, turn: next.turn + 1 };
 }
@@ -1298,10 +1374,13 @@ export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutat
     hand: [],
     selectedActionTileId: null,
     actionSourceId: null,
+    improviseMode: null,
     rewardChoices: [],
     mutations,
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
+    attackedThisTurn: false,
+    enemyPressure: 0,
     mapChoices: getMapChoicesAfterDepth(state.mapDepth),
     eventChoices: [],
   }, "Choose a path",
@@ -1323,11 +1402,14 @@ const enterEncounter = (state: BlobTacticsState, node: BlobMapNodeDef): BlobTact
     hand: [],
     selectedActionTileId: null,
     actionSourceId: null,
+    improviseMode: null,
     mapChoices: [],
     eventChoices: [],
     visitedNodeIds: [...state.visitedNodeIds, node.id],
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
+    attackedThisTurn: false,
+    enemyPressure: 0,
   }, `${node.name}: ${enemy.name}`,
   node.kind === "guardian" ? "The guardian is waiting. Study for a fresh tile hand." : "Study for a fresh tile hand and absorb another mutation.",
   "plain");

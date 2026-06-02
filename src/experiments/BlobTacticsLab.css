@@ -212,6 +212,14 @@
 }
 .blob-lab-enemy-copy span { margin-top: 0.18rem; color: #4b7a82; font-size: 0.63rem; font-weight: 800; }
 .blob-lab-enemy-copy .blob-lab-enraged { color: #d4514d; text-transform: uppercase; }
+.blob-lab-enemy-copy .blob-lab-pursuit {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: #ff866c;
+  color: #fff;
+  padding: 0.12rem 0.3rem;
+  text-transform: uppercase;
+}
 .blob-lab-intent { display: grid; grid-template-columns: auto 1fr; gap: 0.05rem 0.34rem; min-width: 0; }
 .blob-lab-intent span { grid-row: span 2; align-self: center; color: #b36e43; font-size: 0.55rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
 .blob-lab-intent strong { overflow: hidden; color: #945738; font-size: 0.73rem; text-overflow: ellipsis; white-space: nowrap; }
@@ -666,6 +674,8 @@
   transition: transform 140ms ease, opacity 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 .blob-lab-action-tile:disabled { filter: grayscale(0.7); opacity: 0.45; }
+.blob-lab-action-tile.is-native-disabled { filter: grayscale(0.52); opacity: 0.64; }
+.blob-lab-action-tile.is-native-disabled.is-selected { filter: none; opacity: 1; }
 .blob-lab-action-tile:active { box-shadow: 0 0.14rem 0 color-mix(in srgb, var(--tile-accent) 56%, #43747a); transform: translateY(0.22rem); }
 .blob-lab-action-tile.is-selected {
   background: #fff7c5;
@@ -673,6 +683,44 @@
   transform: translateY(-0.16rem);
 }
 .blob-lab-action-tile.is-sour { background: #fff0fa; }
+.blob-lab-improvise-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-top: 1px solid rgba(22, 143, 153, 0.16);
+  border-bottom: 1px solid rgba(22, 143, 153, 0.16);
+  background: rgba(220, 249, 240, 0.7);
+  padding: 0.3rem 0.08rem;
+}
+.blob-lab-improvise-bar span {
+  flex: 1 1 auto;
+  color: #5b8084;
+  font-size: 0.56rem;
+  font-weight: 900;
+  line-height: 1.08;
+  text-transform: uppercase;
+}
+.blob-lab-improvise-bar button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.16rem;
+  min-height: 2rem;
+  border: 0.12rem solid rgba(61, 142, 150, 0.34);
+  border-radius: 0.52rem;
+  background: #fff;
+  color: #3d7880;
+  padding: 0.28rem 0.42rem;
+  font-size: 0.62rem;
+  font-weight: 900;
+}
+.blob-lab-improvise-bar button.is-active {
+  border-color: #ffb339;
+  background: #fff6cb;
+  box-shadow: 0 0.16rem 0 #e4b64a;
+}
+.blob-lab-improvise-bar button:disabled { filter: grayscale(0.8); opacity: 0.45; }
+.blob-lab-improvise-bar svg { width: 0.82rem; height: 0.82rem; stroke-width: 3; }
 .blob-lab-action-tile-face {
   display: grid;
   grid-template-rows: minmax(0, 1fr) 0.13rem minmax(0, 1fr);
