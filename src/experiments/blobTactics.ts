@@ -1,6 +1,6 @@
 export const BLOB_BOARD_ROWS = 4;
 export const BLOB_BOARD_COLS = 5;
-export const BLOB_RUN_ROOMS = 5;
+export const BLOB_RUN_ROOMS = 8;
 
 export type BlobStudyGrade = "bad" | "good" | "great";
 export type BlobActionTileType =
@@ -17,8 +17,8 @@ export type BlobActionTileType =
   | "bubble"
   | "sourSplit";
 export type BlobletKind = "basic" | "bubble";
-export type BlobEnemyKind = "shellSlime" | "nibbleImp" | "sporeBud" | "rootLump";
-export type BlobMapNodeKind = "encounter" | "rest" | "workshop" | "guardian";
+export type BlobEnemyKind = "shellSlime" | "nibbleImp" | "sporeBud" | "bubbleCrab" | "echoMoth" | "rootLump";
+export type BlobMapNodeKind = "encounter" | "rest" | "workshop" | "event" | "guardian";
 export type BlobMapNodeId =
   | "shellGate"
   | "nibbleBurrow"
@@ -27,7 +27,15 @@ export type BlobMapNodeId =
   | "tileTinker"
   | "shellHollow"
   | "softNest"
+  | "bubbleGrotto"
+  | "wobbleWell"
+  | "echoCanopy"
+  | "secondTinker"
+  | "thornGallery"
+  | "finalNest"
   | "rootSanctum";
+export type BlobEventChoiceId = "sipWell" | "wishWell" | "listenWell";
+export type BlobRegionId = "dewMeadow" | "rootwild";
 export type BlobMutationId =
   | "plumpCore"
   | "springFeet"
@@ -37,7 +45,7 @@ export type BlobMutationId =
   | "studySnacks"
   | "rhythmJelly"
   | "rollingShoulder";
-export type BlobTacticsPhase = "study" | "player" | "reward" | "map" | "workshop" | "won" | "lost";
+export type BlobTacticsPhase = "study" | "player" | "reward" | "map" | "workshop" | "event" | "won" | "lost";
 export type TileEffect = "goo" | "spore";
 
 export interface BlobPosition {
@@ -118,6 +126,9 @@ export interface BlobTacticsState {
   visitedNodeIds: BlobMapNodeId[];
   tileBag: BlobActionTileType[];
   workshopChoices: BlobActionTileType[];
+  eventChoices: BlobEventChoiceId[];
+  eventHistory: BlobEventChoiceId[];
+  nextStudyBonusUpgrades: number;
 }
 
 export interface BlobStudyResult {
@@ -156,6 +167,19 @@ export interface BlobMapNodeDef {
   description: string;
   accent: string;
   enemyKind?: BlobEnemyKind;
+}
+
+export interface BlobEventChoiceDef {
+  id: BlobEventChoiceId;
+  name: string;
+  description: string;
+  accent: string;
+}
+
+export interface BlobRegionDef {
+  id: BlobRegionId;
+  name: string;
+  description: string;
 }
 
 export const ACTION_TILE_INFO: Record<BlobActionTileType, {
@@ -389,12 +413,63 @@ export const BLOB_MAP_NODES: Record<BlobMapNodeId, BlobMapNodeDef> = {
     depth: 4,
     kind: "rest",
     name: "Soft Nest",
-    description: "Recover 4 HP and fully refill Mass before the guardian.",
+    description: "Recover 4 HP and fully refill Mass before crossing into the Rootwild.",
+    accent: "#ff7895",
+  },
+  bubbleGrotto: {
+    id: "bubbleGrotto",
+    depth: 5,
+    kind: "encounter",
+    name: "Bubble Grotto",
+    description: "Fight a shell-mending crab for another body mutation.",
+    accent: "#69c6e8",
+    enemyKind: "bubbleCrab",
+  },
+  wobbleWell: {
+    id: "wobbleWell",
+    depth: 5,
+    kind: "event",
+    name: "Wobble Well",
+    description: "A humming puddle offers three peculiar bargains.",
+    accent: "#a987e7",
+  },
+  echoCanopy: {
+    id: "echoCanopy",
+    depth: 6,
+    kind: "encounter",
+    name: "Echo Canopy",
+    description: "A floating moth drains Mass when left alone.",
+    accent: "#a987e7",
+    enemyKind: "echoMoth",
+  },
+  secondTinker: {
+    id: "secondTinker",
+    depth: 6,
+    kind: "workshop",
+    name: "Rootwild Tinker",
+    description: "Add one more favored domino before the last climb.",
+    accent: "#f5aa49",
+  },
+  thornGallery: {
+    id: "thornGallery",
+    depth: 7,
+    kind: "encounter",
+    name: "Thorn Gallery",
+    description: "Crack an armored roller to earn a final mutation.",
+    accent: "#8fbd57",
+    enemyKind: "shellSlime",
+  },
+  finalNest: {
+    id: "finalNest",
+    depth: 7,
+    kind: "rest",
+    name: "Warm Hollow",
+    description: "Recover 5 HP and refill Mass before the guardian.",
     accent: "#ff7895",
   },
   rootSanctum: {
     id: "rootSanctum",
-    depth: 5,
+    depth: 8,
     kind: "guardian",
     name: "Root Sanctum",
     description: "The route converges on Root Lump.",
@@ -402,6 +477,42 @@ export const BLOB_MAP_NODES: Record<BlobMapNodeId, BlobMapNodeDef> = {
     enemyKind: "rootLump",
   },
 };
+
+export const BLOB_EVENT_CHOICES: Record<BlobEventChoiceId, BlobEventChoiceDef> = {
+  sipWell: {
+    id: "sipWell",
+    name: "Sip the sour puddle",
+    description: "Recover 3 HP, but add one risky Sour Split to the tile bag.",
+    accent: "#d982ba",
+  },
+  wishWell: {
+    id: "wishWell",
+    name: "Feed it a chunk",
+    description: "Lose 1 max HP. Add Bubble Bud and Bump tiles to the bag.",
+    accent: "#69c6e8",
+  },
+  listenWell: {
+    id: "listenWell",
+    name: "Listen to the hum",
+    description: "Recover 2 Mass. Your next study hand gains one extra upgraded tile.",
+    accent: "#ffdf5d",
+  },
+};
+
+export function getBlobRegion(depth: number): BlobRegionDef {
+  if (depth >= 5) {
+    return {
+      id: "rootwild",
+      name: "Rootwild",
+      description: "Stranger creatures and meaner bargains wait beneath the roots.",
+    };
+  }
+  return {
+    id: "dewMeadow",
+    name: "Dew Meadow",
+    description: "A bright practice trail full of bouncy trouble.",
+  };
+}
 
 const samePosition = (a: BlobPosition, b: BlobPosition) => a.row === b.row && a.col === b.col;
 const distance = (a: BlobPosition, b: BlobPosition) => Math.abs(a.row - b.row) + Math.abs(a.col - b.col);
@@ -443,8 +554,9 @@ const getStudyResult = (grade: BlobStudyGrade): BlobStudyResult => {
   return { grade, tileCount: 4, massGain: 1, upgradedCount: 0, sourCount: 0 };
 };
 
-const createEnemyForRoom = (room: number): BlobEnemy => {
-  if (room === 2) {
+const createEnemyForRoom = (room: number, kind?: BlobEnemyKind): BlobEnemy => {
+  const enemyKind = kind || (room === 1 ? "shellSlime" : room === 8 ? "rootLump" : "shellSlime");
+  if (enemyKind === "nibbleImp") {
     return {
       kind: "nibbleImp",
       name: "Nibble Imp",
@@ -457,7 +569,7 @@ const createEnemyForRoom = (room: number): BlobEnemy => {
       position: { row: 1, col: 4 },
     };
   }
-  if (room === 3) {
+  if (enemyKind === "sporeBud") {
     return {
       kind: "sporeBud",
       name: "Spore Bud",
@@ -470,7 +582,60 @@ const createEnemyForRoom = (room: number): BlobEnemy => {
       position: { row: 0, col: 4 },
     };
   }
-  if (room === 4) {
+  if (enemyKind === "bubbleCrab") {
+    return {
+      kind: "bubbleCrab",
+      name: "Bubble Crab",
+      hp: 16,
+      maxHp: 16,
+      shell: 6,
+      maxShell: 6,
+      attack: 2,
+      moveRange: 1,
+      position: { row: 1, col: 4 },
+    };
+  }
+  if (enemyKind === "echoMoth") {
+    return {
+      kind: "echoMoth",
+      name: "Echo Moth",
+      hp: 14,
+      maxHp: 14,
+      shell: 0,
+      maxShell: 0,
+      attack: 2,
+      moveRange: 2,
+      position: { row: 0, col: 4 },
+    };
+  }
+  if (enemyKind === "rootLump") {
+    return {
+      kind: "rootLump",
+      name: "Root Lump",
+      hp: 30,
+      maxHp: 30,
+      shell: 6,
+      maxShell: 6,
+      attack: 4,
+      moveRange: 1,
+      position: { row: 1, col: 4 },
+      boss: true,
+    };
+  }
+  if (room >= 7) {
+    return {
+      kind: "shellSlime",
+      name: "Thornshell Roller",
+      hp: 20,
+      maxHp: 20,
+      shell: 9,
+      maxShell: 9,
+      attack: 3,
+      moveRange: 1,
+      position: { row: 1, col: 4 },
+    };
+  }
+  if (room >= 4) {
     return {
       kind: "shellSlime",
       name: "Shell Slime Duo",
@@ -481,20 +646,6 @@ const createEnemyForRoom = (room: number): BlobEnemy => {
       attack: 2,
       moveRange: 1,
       position: { row: 1, col: 4 },
-    };
-  }
-  if (room === 5) {
-    return {
-      kind: "rootLump",
-      name: "Root Lump",
-      hp: 22,
-      maxHp: 22,
-      shell: 4,
-      maxShell: 4,
-      attack: 3,
-      moveRange: 1,
-      position: { row: 1, col: 4 },
-      boss: true,
     };
   }
   return {
@@ -514,7 +665,10 @@ const getMapChoicesAfterDepth = (depth: number): BlobMapNodeId[] => {
   if (depth === 1) return ["nibbleBurrow", "snackSpring"];
   if (depth === 2) return ["sporeGarden", "tileTinker"];
   if (depth === 3) return ["shellHollow", "softNest"];
-  if (depth === 4) return ["rootSanctum"];
+  if (depth === 4) return ["bubbleGrotto", "wobbleWell"];
+  if (depth === 5) return ["echoCanopy", "secondTinker"];
+  if (depth === 6) return ["thornGallery", "finalNest"];
+  if (depth === 7) return ["rootSanctum"];
   return [];
 };
 
@@ -560,6 +714,9 @@ export function createInitialBlobTacticsState(): BlobTacticsState {
     visitedNodeIds: ["shellGate"],
     tileBag: [...STARTING_TILE_BAG],
     workshopChoices: [],
+    eventChoices: [],
+    eventHistory: [],
+    nextStudyBonusUpgrades: 0,
   };
 }
 
@@ -588,7 +745,11 @@ export function createActionTilesFromStudyResult(
 
 export function applyFakeStudyResult(state: BlobTacticsState, grade: BlobStudyGrade): BlobTacticsState {
   if (state.phase !== "study") return state;
-  const result = getStudyResult(grade);
+  const baseResult = getStudyResult(grade);
+  const result = {
+    ...baseResult,
+    upgradedCount: baseResult.upgradedCount + state.nextStudyBonusUpgrades,
+  };
   const generated = createActionTilesFromStudyResult(result, state.nextId, state.tileBag);
   const snackBonus = grade !== "bad" && state.mutations.includes("studySnacks") ? 1 : 0;
   const massGain = result.massGain + snackBonus;
@@ -602,10 +763,11 @@ export function applyFakeStudyResult(state: BlobTacticsState, grade: BlobStudyGr
     nextId: generated.nextId,
     lastStudyGrade: grade,
     tilesPlayedThisTurn: 0,
+    nextStudyBonusUpgrades: 0,
   }, grade === "great" ? "Great study!" : grade === "good" ? "Good study" : "Messy study",
   grade === "bad"
-    ? "Three regular tiles and one risky Sour Split appeared."
-    : `${result.tileCount} tiles appeared${massGain ? ` and Pipplo recovered ${massGain} Mass` : ""}.`,
+    ? `Three tiles${result.upgradedCount ? ` with ${result.upgradedCount} upgraded` : ""} and one risky Sour Split appeared.`
+    : `${result.tileCount} tiles appeared${result.upgradedCount ? ` with ${result.upgradedCount} upgraded` : ""}${massGain ? ` and Pipplo recovered ${massGain} Mass` : ""}.`,
   grade === "bad" ? "warn" : "good");
 }
 
@@ -905,7 +1067,7 @@ const getSporeTarget = (state: BlobTacticsState): BlobPosition => {
 };
 
 export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
-  if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "won") {
+  if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "event" || state.phase === "won") {
     return { label: "Absorbed", detail: "The room is clear.", tone: "shell", targetId: null };
   }
   const target = getEnemyTarget(state);
@@ -915,6 +1077,12 @@ export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
   }
   if (state.enemy.kind === "rootLump" && state.turn % 2 === 0 && targetDistance > 1) {
     return { label: "Root sprout", detail: "Root Lump will grow a prickly patch near Pipplo.", tone: "hazard", targetId: null };
+  }
+  if (state.enemy.kind === "bubbleCrab" && state.enemy.shell > 0 && state.enemy.shell < state.enemy.maxShell && state.turn % 2 === 0 && targetDistance > 1) {
+    return { label: "Rebubble", detail: "Bubble Crab will restore 2 Shell unless Pipplo keeps pressuring it.", tone: "shell", targetId: null };
+  }
+  if (state.enemy.kind === "echoMoth" && state.turn % 2 === 0 && targetDistance > 1) {
+    return { label: "Dust drain", detail: "Echo Moth will siphon 2 Mass unless Pipplo closes the distance.", tone: "hazard", targetId: null };
   }
   if (targetDistance === 1) {
     return {
@@ -928,7 +1096,15 @@ export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
     return { label: "Pounce", detail: "Nibble Imp will dash closer and deal 1 HP if it reaches Pipplo.", tone: "attack", targetId: "pipplo" };
   }
   return {
-    label: state.enemy.kind === "nibbleImp" ? "Skitter closer" : state.enemy.kind === "rootLump" ? "Stomp closer" : "Waddle closer",
+    label: state.enemy.kind === "nibbleImp"
+      ? "Skitter closer"
+      : state.enemy.kind === "rootLump"
+        ? "Stomp closer"
+        : state.enemy.kind === "echoMoth"
+          ? "Flutter closer"
+          : state.enemy.kind === "bubbleCrab"
+            ? "Side-step closer"
+            : "Waddle closer",
     detail: `${state.enemy.name} will move ${state.enemy.moveRange === 1 ? "one tile" : "up to two tiles"} toward Pipplo.`,
     tone: "move",
     targetId: "pipplo",
@@ -945,8 +1121,9 @@ const chooseEnemyStep = (state: BlobTacticsState): BlobPosition => {
 
 export function getEnemyPreview(state: BlobTacticsState): BlobEnemyPreview {
   const preview: BlobEnemyPreview = { pathKeys: new Set(), dangerKeys: new Set(), hazardKeys: new Set() };
-  if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "won" || state.phase === "lost") return preview;
+  if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "event" || state.phase === "won" || state.phase === "lost") return preview;
   const intent = getEnemyIntent(state);
+  if (intent.label === "Rebubble" || intent.label === "Dust drain") return preview;
   if (intent.tone === "hazard") {
     preview.hazardKeys.add(positionKey(getSporeTarget(state)));
     return preview;
@@ -1056,6 +1233,22 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
       target?.kind === "bubble" ? "The shield helper absorbed the hit." : "The helper protected Pipplo from the hit.",
       target?.kind === "bubble" ? "good" : "warn");
     }
+  } else if (intent.label === "Rebubble") {
+    next = withNotice({
+      ...next,
+      phase: "study",
+      enemy: { ...next.enemy, shell: Math.min(next.enemy.maxShell, next.enemy.shell + 2) },
+    }, "Bubble Crab rebubbled", "Its soft Shell recovered 2 points. Keep up the pressure.", "warn");
+  } else if (intent.label === "Dust drain") {
+    const drainedMass = Math.min(2, next.mass);
+    next = withNotice({
+      ...next,
+      phase: "study",
+      mass: Math.max(0, next.mass - drainedMass),
+    }, "Echo Moth drank the rhythm", drainedMass
+      ? `Pipplo lost ${drainedMass} Mass. Move in before it siphons again.`
+      : "Pipplo had no Mass left to drain. Move in before the next flutter.",
+    "warn");
   } else if (intent.tone === "hazard") {
     const sporeTarget = getSporeTarget(next);
     next = withNotice({
@@ -1110,30 +1303,35 @@ export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutat
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
     mapChoices: getMapChoicesAfterDepth(state.mapDepth),
+    eventChoices: [],
   }, "Choose a path",
   `${MUTATION_DEFS[mutationId].name} absorbed. Pipplo recovered 1 HP and can choose the next stop.`,
   "good");
 }
 
-const enterEncounter = (state: BlobTacticsState, node: BlobMapNodeDef): BlobTacticsState => withNotice({
-  ...state,
-  room: node.depth,
-  mapDepth: node.depth,
-  phase: "study",
-  pipploPosition: { row: 2, col: 0 },
-  enemy: createEnemyForRoom(node.depth),
-  bloblets: [],
-  tileEffects: [],
-  hand: [],
-  selectedActionTileId: null,
-  actionSourceId: null,
-  mapChoices: [],
-  visitedNodeIds: [...state.visitedNodeIds, node.id],
-  springFeetUsedThisRoom: false,
-  tilesPlayedThisTurn: 0,
-}, `${node.name}: ${createEnemyForRoom(node.depth).name}`,
-node.kind === "guardian" ? "The guardian is waiting. Study for a fresh tile hand." : "Study for a fresh tile hand and absorb another mutation.",
-"plain");
+const enterEncounter = (state: BlobTacticsState, node: BlobMapNodeDef): BlobTacticsState => {
+  const enemy = createEnemyForRoom(node.depth, node.enemyKind);
+  return withNotice({
+    ...state,
+    room: node.depth,
+    mapDepth: node.depth,
+    phase: "study",
+    pipploPosition: { row: 2, col: 0 },
+    enemy,
+    bloblets: [],
+    tileEffects: [],
+    hand: [],
+    selectedActionTileId: null,
+    actionSourceId: null,
+    mapChoices: [],
+    eventChoices: [],
+    visitedNodeIds: [...state.visitedNodeIds, node.id],
+    springFeetUsedThisRoom: false,
+    tilesPlayedThisTurn: 0,
+  }, `${node.name}: ${enemy.name}`,
+  node.kind === "guardian" ? "The guardian is waiting. Study for a fresh tile hand." : "Study for a fresh tile hand and absorb another mutation.",
+  "plain");
+};
 
 const completeSupportStop = (state: BlobTacticsState, node: BlobMapNodeDef, title: string, detail: string): BlobTacticsState => withNotice({
   ...state,
@@ -1149,15 +1347,26 @@ export function chooseBlobMapNode(state: BlobTacticsState, nodeId: BlobMapNodeId
   const node = BLOB_MAP_NODES[nodeId];
   if (node.kind === "encounter" || node.kind === "guardian") return enterEncounter(state, node);
   if (node.kind === "rest") {
-    const isSoftNest = node.id === "softNest";
-    const hpGain = isSoftNest ? 4 : 3;
+    const isFullRest = node.id === "softNest" || node.id === "finalNest";
+    const hpGain = node.id === "finalNest" ? 5 : isFullRest ? 4 : 3;
     return completeSupportStop({
       ...state,
       pipploHp: Math.min(state.pipploMaxHp, state.pipploHp + hpGain),
-      mass: isSoftNest ? state.massMax : Math.min(state.massMax, state.mass + 2),
-    }, node, node.name, isSoftNest
-      ? "Pipplo curled up, recovered 4 HP, and refilled Mass."
+      mass: isFullRest ? state.massMax : Math.min(state.massMax, state.mass + 2),
+    }, node, node.name, isFullRest
+      ? `Pipplo curled up, recovered ${hpGain} HP, and refilled Mass.`
       : "Pipplo splashed around, recovered 3 HP, and gained 2 Mass.");
+  }
+  if (node.kind === "event") {
+    return withNotice({
+      ...state,
+      room: node.depth,
+      mapDepth: node.depth,
+      phase: "event",
+      mapChoices: [],
+      visitedNodeIds: [...state.visitedNodeIds, node.id],
+      eventChoices: ["sipWell", "wishWell", "listenWell"],
+    }, node.name, "The humming puddle offers three strange bargains.", "plain");
   }
   return withNotice({
     ...state,
@@ -1168,6 +1377,44 @@ export function chooseBlobMapNode(state: BlobTacticsState, nodeId: BlobMapNodeId
     visitedNodeIds: [...state.visitedNodeIds, node.id],
     workshopChoices: getWorkshopChoices(state),
   }, node.name, "Choose one domino tile to add to Pipplo's study bag.", "good");
+}
+
+export function claimBlobEventChoice(state: BlobTacticsState, choiceId: BlobEventChoiceId): BlobTacticsState {
+  if (state.phase !== "event" || !state.eventChoices.includes(choiceId)) return state;
+  const nextMapChoices = getMapChoicesAfterDepth(state.mapDepth);
+  if (choiceId === "sipWell") {
+    return withNotice({
+      ...state,
+      phase: "map",
+      pipploHp: Math.min(state.pipploMaxHp, state.pipploHp + 3),
+      tileBag: [...state.tileBag, "sourSplit"],
+      eventChoices: [],
+      eventHistory: [...state.eventHistory, choiceId],
+      mapChoices: nextMapChoices,
+    }, "Sour sip", "Pipplo recovered 3 HP. A risky Sour Split joined the tile bag.", "good");
+  }
+  if (choiceId === "wishWell") {
+    const pipploMaxHp = Math.max(4, state.pipploMaxHp - 1);
+    return withNotice({
+      ...state,
+      phase: "map",
+      pipploMaxHp,
+      pipploHp: Math.min(pipploMaxHp, state.pipploHp),
+      tileBag: [...state.tileBag, "bubble", "bump"],
+      eventChoices: [],
+      eventHistory: [...state.eventHistory, choiceId],
+      mapChoices: nextMapChoices,
+    }, "A soft chunk traded away", "Pipplo lost 1 max HP. Bubble Bud and Bump joined the tile bag.", "warn");
+  }
+  return withNotice({
+    ...state,
+    phase: "map",
+    mass: Math.min(state.massMax, state.mass + 2),
+    nextStudyBonusUpgrades: state.nextStudyBonusUpgrades + 1,
+    eventChoices: [],
+    eventHistory: [...state.eventHistory, choiceId],
+    mapChoices: nextMapChoices,
+  }, "The well hummed back", "Pipplo recovered 2 Mass. The next study hand gains an upgraded tile.", "good");
 }
 
 export function claimWorkshopTile(state: BlobTacticsState, tileType: BlobActionTileType): BlobTacticsState {

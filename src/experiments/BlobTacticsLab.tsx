@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -19,17 +19,21 @@ import {
   Sparkles,
   Swords,
   Target,
+  Volume2,
+  VolumeX,
   Wrench,
   X,
 } from "lucide-react";
 import {
   BLOB_BOARD_COLS,
   BLOB_BOARD_ROWS,
+  BLOB_EVENT_CHOICES,
   BLOB_MAP_NODES,
   BLOB_RUN_ROOMS,
   MUTATION_DEFS,
   ACTION_TILE_INFO,
   applyFakeStudyResult,
+  claimBlobEventChoice,
   claimBlobMutation,
   claimWorkshopTile,
   chooseBlobMapNode,
@@ -39,6 +43,7 @@ import {
   getBoardTileKey,
   getEnemyIntent,
   getEnemyPreview,
+  getBlobRegion,
   getActionTileDisabledReason,
   getTileEffectAt,
   getValidTargetKeys,
@@ -51,6 +56,7 @@ import {
   type BlobMapNodeId,
   type BlobActionTile,
   type BlobActionTileType,
+  type BlobEventChoiceId,
   type BlobStudyGrade,
 } from "./blobTactics";
 import "./BlobTacticsLab.css";
@@ -134,9 +140,10 @@ function ActionTile({
   );
 }
 
-function MapNodeIcon({ kind }: { kind: "encounter" | "rest" | "workshop" | "guardian" }) {
+function MapNodeIcon({ kind }: { kind: "encounter" | "rest" | "workshop" | "event" | "guardian" }) {
   if (kind === "rest") return <Coffee />;
   if (kind === "workshop") return <Wrench />;
+  if (kind === "event") return <Sparkles />;
   if (kind === "guardian") return <Award />;
   return <Footprints />;
 }
@@ -187,11 +194,47 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
   const [helpOpen, setHelpOpen] = useState(false);
   const [traitsOpen, setTraitsOpen] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const validTargetKeys = useMemo(() => getValidTargetKeys(state), [state]);
   const selectedTile = state.hand.find(tile => tile.id === state.selectedActionTileId) || null;
   const enemyIntent = getEnemyIntent(state);
   const enemyPreview = useMemo(() => getEnemyPreview(state), [state]);
   const chainStep = state.tilesPlayedThisTurn % 3;
+  const region = getBlobRegion(state.mapDepth);
+
+  const playSound = useCallback((kind: "clack" | "study" | "pop" | "route" | "enemy") => {
+    if (!soundEnabled) return;
+    const AudioContextConstructor = window.AudioContext
+      || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    const context = audioContextRef.current || new AudioContextConstructor();
+    audioContextRef.current = context;
+    if (context.state === "suspended") void context.resume();
+    const notes = kind === "clack"
+      ? [185, 130]
+      : kind === "study"
+        ? [440, 620]
+        : kind === "pop"
+          ? [280, 460, 720]
+          : kind === "route"
+            ? [350, 520]
+            : [120, 90];
+    notes.forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const start = context.currentTime + (index * 0.045);
+      oscillator.type = kind === "clack" || kind === "enemy" ? "square" : "sine";
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(kind === "enemy" ? 0.045 : 0.032, start + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.085);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.09);
+    });
+  }, [soundEnabled]);
 
   useEffect(() => {
     if (state.animation === "idle") return;
@@ -201,13 +244,42 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
     return () => window.clearTimeout(timeout);
   }, [state.animation, state.notice.id]);
 
-  const reset = () => setState(createInitialBlobTacticsState());
-  const chooseStudyGrade = (grade: BlobStudyGrade) => setState(current => applyFakeStudyResult(current, grade));
-  const chooseActionTile = (tile: BlobActionTile) => setState(current => selectActionTile(current, tile.id));
-  const tapTile = (position: BlobPosition) => setState(current => tapBoardTile(current, position));
-  const claimMutation = (mutationId: BlobMutationId) => setState(current => claimBlobMutation(current, mutationId));
-  const chooseMapNode = (nodeId: BlobMapNodeId) => setState(current => chooseBlobMapNode(current, nodeId));
-  const chooseWorkshopTile = (type: BlobActionTileType) => setState(current => claimWorkshopTile(current, type));
+  const reset = () => {
+    playSound("route");
+    setState(createInitialBlobTacticsState());
+  };
+  const chooseStudyGrade = (grade: BlobStudyGrade) => {
+    playSound("study");
+    setState(current => applyFakeStudyResult(current, grade));
+  };
+  const chooseActionTile = (tile: BlobActionTile) => {
+    playSound("clack");
+    setState(current => selectActionTile(current, tile.id));
+  };
+  const tapTile = (position: BlobPosition) => {
+    playSound("clack");
+    setState(current => tapBoardTile(current, position));
+  };
+  const endTurn = () => {
+    playSound("enemy");
+    setState(endBlobTacticsTurn);
+  };
+  const claimMutation = (mutationId: BlobMutationId) => {
+    playSound("pop");
+    setState(current => claimBlobMutation(current, mutationId));
+  };
+  const chooseMapNode = (nodeId: BlobMapNodeId) => {
+    playSound("route");
+    setState(current => chooseBlobMapNode(current, nodeId));
+  };
+  const chooseWorkshopTile = (type: BlobActionTileType) => {
+    playSound("clack");
+    setState(current => claimWorkshopTile(current, type));
+  };
+  const chooseEvent = (choiceId: BlobEventChoiceId) => {
+    playSound("pop");
+    setState(current => claimBlobEventChoice(current, choiceId));
+  };
   const bagCounts = state.tileBag.reduce<Partial<Record<BlobActionTileType, number>>>((counts, type) => {
     counts[type] = (counts[type] || 0) + 1;
     return counts;
@@ -219,7 +291,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
   }));
 
   return (
-    <main className="blob-lab-shell">
+    <main className={`blob-lab-shell is-region-${region.id}`}>
       <div className="blob-lab-cloud blob-lab-cloud-one" />
       <div className="blob-lab-cloud blob-lab-cloud-two" />
       <header className="blob-lab-topbar">
@@ -230,13 +302,18 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
           <span><Beaker /> Combat Lab</span>
           <strong>Micro Blob Tactics</strong>
         </div>
-        <button type="button" className="blob-lab-icon-button" onClick={() => setHelpOpen(true)} aria-label="How to play">
-          <HelpCircle />
-        </button>
+        <div className="blob-lab-top-actions">
+          <button type="button" className="blob-lab-icon-button" onClick={() => setSoundEnabled(enabled => !enabled)} aria-label={soundEnabled ? "Mute sound effects" : "Enable sound effects"}>
+            {soundEnabled ? <Volume2 /> : <VolumeX />}
+          </button>
+          <button type="button" className="blob-lab-icon-button" onClick={() => setHelpOpen(true)} aria-label="How to play">
+            <HelpCircle />
+          </button>
+        </div>
       </header>
 
       <section className="blob-lab-route" aria-label="Micro-run route">
-        <span>Run</span>
+        <span>{region.name}</span>
         {Array.from({ length: BLOB_RUN_ROOMS }, (_, index) => (
           <i
             key={index}
@@ -325,6 +402,8 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
                     {state.enemy.kind === "shellSlime" && <i className="blob-lab-shell-plate" />}
                     {state.enemy.kind === "nibbleImp" && <><i className="blob-lab-imp-horn left" /><i className="blob-lab-imp-horn right" /></>}
                     {state.enemy.kind === "sporeBud" && <i className="blob-lab-spore-cap" />}
+                    {state.enemy.kind === "bubbleCrab" && <><i className="blob-lab-crab-claw left" /><i className="blob-lab-crab-claw right" /><i className="blob-lab-crab-bubble" /></>}
+                    {state.enemy.kind === "echoMoth" && <><i className="blob-lab-moth-wing left" /><i className="blob-lab-moth-wing right" /><i className="blob-lab-moth-dot" /></>}
                     {state.enemy.kind === "rootLump" && <><i className="blob-lab-root-horn left" /><i className="blob-lab-root-horn right" /></>}
                     <i className="blob-lab-slime-face"><b /><b /><em /></i>
                   </span>
@@ -367,7 +446,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
                 </b>
               </div>
             </div>
-            <button type="button" className="blob-lab-end-button" onClick={() => setState(endBlobTacticsTurn)}>
+            <button type="button" className="blob-lab-end-button" onClick={endTurn}>
               End Turn
               <ArrowRight />
             </button>
@@ -420,7 +499,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             <Map />
             <p className="blob-lab-eyebrow">Expedition route</p>
             <h2>Where should Pipplo wobble next?</h2>
-            <p>Fight for more mutations, recover before danger, or tune the tile bag.</p>
+            <p>{region.description}</p>
             <div className="blob-lab-map-grid">
               {state.mapChoices.map(nodeId => {
                 const node = BLOB_MAP_NODES[nodeId];
@@ -465,15 +544,49 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
         </aside>
       )}
 
+      {state.phase === "event" && (
+        <aside className="blob-lab-map-backdrop">
+          <section className="blob-lab-map-sheet blob-lab-event-sheet">
+            <Sparkles />
+            <p className="blob-lab-eyebrow">Rootwild curiosity</p>
+            <h2>The Wobble Well hums at Pipplo</h2>
+            <p>Choose one bargain. The puddle is probably trustworthy enough.</p>
+            <div className="blob-lab-event-grid">
+              {state.eventChoices.map(choiceId => {
+                const choice = BLOB_EVENT_CHOICES[choiceId];
+                return (
+                  <button
+                    key={choiceId}
+                    type="button"
+                    style={{ "--node-accent": choice.accent } as React.CSSProperties}
+                    onClick={() => chooseEvent(choiceId)}
+                  >
+                    <Sparkles />
+                    <strong>{choice.name}</strong>
+                    <span>{choice.description}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
+      )}
+
       {(state.phase === "won" || state.phase === "lost") && (
         <section className={`blob-lab-result is-${state.phase}`}>
           <Sparkles />
           <p className="blob-lab-eyebrow">{state.phase === "won" ? "Micro-run cleared" : "Experiment over"}</p>
           <h2>{state.phase === "won" ? "Root Lump absorbed!" : "Pipplo needs another try"}</h2>
           <p>{state.phase === "won"
-            ? `Pipplo reached Root Sanctum with ${state.mutations.length} body mutations and ${state.tileBag.length} tiles in the bag.`
+            ? `Pipplo crossed Dew Meadow and the Rootwild, then absorbed the guardian.`
             : `Pipplo reached Room ${state.room}. Try splitting helpers to block danger and reclaiming survivors for Mass.`}</p>
-          <div>
+          <div className="blob-lab-result-stats">
+            <span><b>{state.roomsCleared}</b> fights</span>
+            <span><b>{state.mutations.length}</b> traits</span>
+            <span><b>{state.tileBag.length}</b> bag tiles</span>
+            <span><b>{state.eventHistory.length}</b> bargains</span>
+          </div>
+          <div className="blob-lab-result-actions">
             <button type="button" onClick={reset}><RefreshCcw /> Restart Lab</button>
             <button type="button" onClick={onExit}><ArrowLeft /> Main Menu</button>
           </div>
@@ -491,6 +604,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             <p>Study creates temporary tiles. Tiles move Pipplo, crack Shell, or bud off little helpers. Every third tile played restores Mass.</p>
             <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors to recover Mass.</p>
             <p>The board previews enemy paths, attacks, and hazards before the turn ends. Between fights, choose routes for mutations, recovery, or Tile Tinker bag upgrades.</p>
+            <p>After the meadow, the Rootwild adds peculiar bargains and creatures that rebuild Shell or drain Mass when ignored.</p>
           </section>
         </aside>
       )}
