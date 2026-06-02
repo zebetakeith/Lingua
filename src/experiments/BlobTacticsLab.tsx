@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Award,
   Beaker,
+  BookOpen,
   CircleDot,
   Coffee,
   Dna,
@@ -32,7 +33,7 @@ import {
   BLOB_RUN_ROOMS,
   MUTATION_DEFS,
   ACTION_TILE_INFO,
-  applyFakeStudyResult,
+  applyBlobStudyResult,
   claimBlobEventChoice,
   claimBlobMutation,
   claimWorkshopTile,
@@ -58,8 +59,20 @@ import {
   type BlobActionTile,
   type BlobActionTileType,
   type BlobEventChoiceId,
-  type BlobStudyGrade,
+  type BlobStudyResult,
 } from "./blobTactics";
+import {
+  answerBlobStudyQuestion,
+  clearBlobTacticsRun,
+  drawBlobStudyQuestion,
+  getBlobStudyDecks,
+  getSelectedBlobStudyDeckId,
+  loadBlobTacticsRun,
+  saveBlobTacticsRun,
+  selectBlobStudyDeck,
+  type BlobStudyDeckSummary,
+  type BlobStudyQuestion,
+} from "./blobStudyBridge";
 import "./BlobTacticsLab.css";
 
 interface BlobTacticsLabProps {
@@ -81,16 +94,41 @@ const ACTION_TILE_ICONS: Record<BlobActionTileType, ReactNode> = {
   sourSplit: <CircleDot />,
 };
 
-const STUDY_GRADES: Array<{
-  grade: BlobStudyGrade;
-  title: string;
-  detail: string;
-  accent: string;
-}> = [
-  { grade: "bad", title: "Messy", detail: "3 tiles + sour", accent: "#d982ba" },
-  { grade: "good", title: "Good", detail: "4 tiles + Mass", accent: "#54bfb4" },
-  { grade: "great", title: "Great", detail: "5 tiles + upgrade", accent: "#ff866c" },
-];
+const BLOB_STUDY_CORRECT_TARGET = 4;
+const BLOB_STUDY_REVIEW_CAP = 6;
+
+interface LabStudySession {
+  reviewed: number;
+  correct: number;
+  wrong: number;
+  upgraded: number;
+  masteryEvents: string[];
+  previousKey?: string;
+}
+
+const createLabStudySession = (): LabStudySession => ({
+  reviewed: 0,
+  correct: 0,
+  wrong: 0,
+  upgraded: 0,
+  masteryEvents: [],
+});
+
+const isLabStudySessionComplete = (session: LabStudySession) => (
+  session.correct >= BLOB_STUDY_CORRECT_TARGET || session.reviewed >= BLOB_STUDY_REVIEW_CAP
+);
+
+const createBlobStudyResult = (session: LabStudySession): BlobStudyResult => ({
+  grade: session.correct >= BLOB_STUDY_CORRECT_TARGET && session.wrong === 0
+    ? "great"
+    : session.correct >= 3
+      ? "good"
+      : "bad",
+  tileCount: Math.min(6, Math.max(1, session.correct + (session.correct >= 3 ? 1 : 0))),
+  massGain: session.correct >= 3 ? 1 : 0,
+  upgradedCount: Math.min(3, session.upgraded + (session.correct >= BLOB_STUDY_CORRECT_TARGET && session.wrong === 0 ? 1 : 0)),
+  sourCount: session.wrong,
+});
 
 function getActionTilePrompt(type: BlobActionTileType, hasSource: boolean, enemyName: string): string {
   if (type === "slap") return hasSource ? `Tap ${enemyName}` : "Tap Pipplo or an adjacent bloblet";
@@ -164,33 +202,153 @@ function WorkshopTileOption({ type, onClick }: { type: BlobActionTileType; onCli
   );
 }
 
-function StudySimulator({ onChoose }: { onChoose: (grade: BlobStudyGrade) => void }) {
+function DeckPicker({
+  decks,
+  selectedDeckId,
+  onChoose,
+}: {
+  decks: BlobStudyDeckSummary[];
+  selectedDeckId: string;
+  onChoose: (deckId: string) => void;
+}) {
   return (
-    <section className="blob-lab-study-sheet" aria-label="Fake study result generator">
+    <aside className="blob-lab-map-backdrop">
+      <section className="blob-lab-map-sheet blob-lab-deck-sheet">
+        <BookOpen />
+        <p className="blob-lab-eyebrow">Choose a study world</p>
+        <h2>Which deck should Pipplo explore?</h2>
+        <p>Reviews update the same saved deck progress used by the main game.</p>
+        <div className="blob-lab-deck-grid">
+          {decks.map(deck => (
+            <button
+              key={deck.id}
+              type="button"
+              className={deck.id === selectedDeckId ? "is-selected" : ""}
+              onClick={() => onChoose(deck.id)}
+            >
+              <BookOpen />
+              <strong>{deck.name}</strong>
+              <span>{deck.cardCount} cards</span>
+              <small>{deck.introducedCount || "Starter"} active · {deck.reviewCount} reviews</small>
+            </button>
+          ))}
+        </div>
+      </section>
+    </aside>
+  );
+}
+
+function StudyReadySheet({ deckName, onBegin }: { deckName: string; onBegin: () => void }) {
+  return (
+    <section className="blob-lab-study-sheet">
       <div>
-        <p className="blob-lab-eyebrow">Study simulator</p>
-        <h2>How did that flashcard hand go?</h2>
-        <p>This is temporary. The real study engine can plug in after the combat feels good.</p>
+        <p className="blob-lab-eyebrow">Study hand · {deckName}</p>
+        <h2>Load the next dominoes</h2>
+        <p>Answer until you earn four correct reviews. Misses add Sour Splits and keep the hand going.</p>
       </div>
-      <div className="blob-lab-study-buttons">
-        {STUDY_GRADES.map(option => (
-          <button
-            key={option.grade}
-            type="button"
-            style={{ "--grade-accent": option.accent } as React.CSSProperties}
-            onClick={() => onChoose(option.grade)}
-          >
-            <strong>{option.title}</strong>
-            <span>{option.detail}</span>
-          </button>
-        ))}
+      <button type="button" className="blob-lab-study-start" onClick={onBegin}>
+        <BookOpen />
+        Begin reviews
+      </button>
+    </section>
+  );
+}
+
+function StudyQuestionSheet({
+  question,
+  session,
+  reveal,
+  feedback,
+  onOption,
+  onReveal,
+  onSelfGrade,
+  onContinue,
+}: {
+  question: BlobStudyQuestion;
+  session: LabStudySession;
+  reveal: boolean;
+  feedback: string | null;
+  onOption: (option: string) => void;
+  onReveal: () => void;
+  onSelfGrade: (correct: boolean) => void;
+  onContinue: () => void;
+}) {
+  return (
+    <section className="blob-lab-study-sheet blob-lab-real-study-sheet">
+      <div className="blob-lab-study-progress">
+        <span>{session.correct}/{BLOB_STUDY_CORRECT_TARGET} correct</span>
+        <span>{session.reviewed}/{BLOB_STUDY_REVIEW_CAP} reviewed</span>
+        <span>{question.masteryLabel}</span>
       </div>
+      <p className="blob-lab-eyebrow">{question.direction === "term_to_definition" ? "Term → definition" : "Definition → term"}</p>
+      <h2>{question.prompt}</h2>
+      {feedback ? (
+        <button type="button" className="blob-lab-answer-feedback" onClick={onContinue}>
+          <strong>Correct answer</strong>
+          <span>{question.answer}</span>
+          <small>Tap to continue</small>
+        </button>
+      ) : question.questionType === "multiple_choice" ? (
+        <div className="blob-lab-answer-grid">
+          {question.options.map(option => (
+            <button key={option} type="button" onClick={() => onOption(option)}>{option}</button>
+          ))}
+        </div>
+      ) : reveal ? (
+        <div className="blob-lab-self-grade">
+          <strong>{question.answer}</strong>
+          <span>Did you recall it before flipping?</span>
+          <div>
+            <button type="button" onClick={() => onSelfGrade(false)}>Not yet</button>
+            <button type="button" onClick={() => onSelfGrade(true)}>Got it</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="blob-lab-study-start" onClick={onReveal}>
+          Flip card
+        </button>
+      )}
+    </section>
+  );
+}
+
+function StudyRecapSheet({ session, onClaim }: { session: LabStudySession; onClaim: () => void }) {
+  const result = createBlobStudyResult(session);
+  return (
+    <section className="blob-lab-study-sheet blob-lab-study-recap">
+      <div>
+        <p className="blob-lab-eyebrow">Study hand resolved</p>
+        <h2>{session.wrong === 0 ? "Clean recall!" : "Dominoes loaded"}</h2>
+        <p>{result.tileCount} action tiles / {result.upgradedCount} upgraded / {result.sourCount} Sour Split{result.sourCount === 1 ? "" : "s"}</p>
+      </div>
+      <div className="blob-lab-study-recap-stats">
+        <span><b>{session.correct}</b> correct</span>
+        <span><b>{session.wrong}</b> misses</span>
+        <span><b>{session.reviewed}</b> reviews</span>
+      </div>
+      {session.masteryEvents.length > 0 && <small>{session.masteryEvents.join(" ")}</small>}
+      <button type="button" className="blob-lab-study-start" onClick={onClaim}>
+        Load dominoes
+      </button>
     </section>
   );
 }
 
 export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
-  const [state, setState] = useState(createInitialBlobTacticsState);
+  const [initialLab] = useState(() => {
+    const deckId = getSelectedBlobStudyDeckId();
+    return { deckId, restored: loadBlobTacticsRun(deckId) };
+  });
+  const [state, setState] = useState(initialLab.restored || createInitialBlobTacticsState);
+  const [selectedDeckId, setSelectedDeckId] = useState(initialLab.deckId);
+  const [deckSummaries, setDeckSummaries] = useState(getBlobStudyDecks);
+  const [runStarted, setRunStarted] = useState(Boolean(initialLab.restored));
+  const [deckPickerOpen, setDeckPickerOpen] = useState(!initialLab.restored);
+  const [studySession, setStudySession] = useState<LabStudySession | null>(null);
+  const [studyQuestion, setStudyQuestion] = useState<BlobStudyQuestion | null>(null);
+  const [studyFeedback, setStudyFeedback] = useState<string | null>(null);
+  const [studyReveal, setStudyReveal] = useState(false);
+  const [studyRecap, setStudyRecap] = useState<LabStudySession | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [traitsOpen, setTraitsOpen] = useState(false);
   const [bagOpen, setBagOpen] = useState(false);
@@ -244,13 +402,92 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
     return () => window.clearTimeout(timeout);
   }, [state.animation, state.notice.id]);
 
+  useEffect(() => {
+    if (runStarted) saveBlobTacticsRun(selectedDeckId, state);
+  }, [runStarted, selectedDeckId, state]);
+
   const reset = () => {
     playSound("route");
+    clearBlobTacticsRun(selectedDeckId);
     setState(createInitialBlobTacticsState());
+    setRunStarted(true);
+    setStudySession(null);
+    setStudyQuestion(null);
+    setStudyFeedback(null);
+    setStudyRecap(null);
   };
-  const chooseStudyGrade = (grade: BlobStudyGrade) => {
+  const chooseDeck = (deckId: string) => {
+    playSound("route");
+    selectBlobStudyDeck(deckId);
+    const restored = loadBlobTacticsRun(deckId);
+    setSelectedDeckId(deckId);
+    setState(restored || createInitialBlobTacticsState());
+    setRunStarted(true);
+    setDeckPickerOpen(false);
+    setDeckSummaries(getBlobStudyDecks());
+    setStudySession(null);
+    setStudyQuestion(null);
+    setStudyFeedback(null);
+    setStudyRecap(null);
+  };
+  const drawNextStudyQuestion = (session: LabStudySession) => {
+    setStudyQuestion(drawBlobStudyQuestion(selectedDeckId, session.previousKey));
+    setStudyReveal(false);
+    setStudyFeedback(null);
+  };
+  const beginStudyHand = () => {
     playSound("study");
-    setState(current => applyFakeStudyResult(current, grade));
+    const session = createLabStudySession();
+    setStudySession(session);
+    setStudyRecap(null);
+    drawNextStudyQuestion(session);
+  };
+  const finishStudyReview = (correct: boolean) => {
+    if (!studyQuestion || !studySession) return;
+    const answer = answerBlobStudyQuestion(selectedDeckId, studyQuestion, correct);
+    const nextSession: LabStudySession = {
+      reviewed: studySession.reviewed + 1,
+      correct: studySession.correct + (correct ? 1 : 0),
+      wrong: studySession.wrong + (correct ? 0 : 1),
+      upgraded: studySession.upgraded + (answer.upgraded ? 1 : 0),
+      masteryEvents: answer.masteryEvent
+        ? [...studySession.masteryEvents, answer.masteryEvent].slice(-3)
+        : studySession.masteryEvents,
+      previousKey: `${studyQuestion.cardId}::${studyQuestion.direction}`,
+    };
+    setDeckSummaries(getBlobStudyDecks());
+    setStudySession(nextSession);
+    if (!correct) {
+      playSound("enemy");
+      setStudyFeedback(answer.answer);
+      return;
+    }
+    playSound("study");
+    if (isLabStudySessionComplete(nextSession)) {
+      setStudyRecap(nextSession);
+      setStudyQuestion(null);
+      return;
+    }
+    drawNextStudyQuestion(nextSession);
+  };
+  const continueAfterWrongAnswer = () => {
+    if (!studySession) return;
+    if (isLabStudySessionComplete(studySession)) {
+      setStudyRecap(studySession);
+      setStudyQuestion(null);
+      setStudyFeedback(null);
+      return;
+    }
+    drawNextStudyQuestion(studySession);
+  };
+  const claimStudyDominoes = () => {
+    if (!studyRecap) return;
+    playSound("pop");
+    setState(current => applyBlobStudyResult(current, createBlobStudyResult(studyRecap)));
+    setStudySession(null);
+    setStudyQuestion(null);
+    setStudyFeedback(null);
+    setStudyRecap(null);
   };
   const chooseActionTile = (tile: BlobActionTile) => {
     playSound("clack");
@@ -307,6 +544,9 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
           <strong>Micro Blob Tactics</strong>
         </div>
         <div className="blob-lab-top-actions">
+          <button type="button" className="blob-lab-icon-button" onClick={() => setDeckPickerOpen(true)} aria-label="Choose study deck">
+            <BookOpen />
+          </button>
           <button type="button" className="blob-lab-icon-button" onClick={() => setSoundEnabled(enabled => !enabled)} aria-label={soundEnabled ? "Mute sound effects" : "Enable sound effects"}>
             {soundEnabled ? <Volume2 /> : <VolumeX />}
           </button>
@@ -435,7 +675,29 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
         <span>{state.notice.detail}</span>
       </section>
 
-      {state.phase === "study" && <StudySimulator onChoose={chooseStudyGrade} />}
+      {state.phase === "study" && !studySession && !studyRecap && (
+        <StudyReadySheet
+          deckName={deckSummaries.find(deck => deck.id === selectedDeckId)?.name || "Saved deck"}
+          onBegin={beginStudyHand}
+        />
+      )}
+
+      {state.phase === "study" && studyQuestion && studySession && (
+        <StudyQuestionSheet
+          question={studyQuestion}
+          session={studySession}
+          reveal={studyReveal}
+          feedback={studyFeedback}
+          onOption={option => finishStudyReview(option === studyQuestion.answer)}
+          onReveal={() => setStudyReveal(true)}
+          onSelfGrade={finishStudyReview}
+          onContinue={continueAfterWrongAnswer}
+        />
+      )}
+
+      {state.phase === "study" && studyRecap && (
+        <StudyRecapSheet session={studyRecap} onClaim={claimStudyDominoes} />
+      )}
 
       {state.phase === "player" && (
         <section className="blob-lab-command-tray" aria-label="Tile hand">
@@ -637,11 +899,15 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             <h2>Split yourself to make options</h2>
             <p>Study creates temporary tiles. Tiles move Pipplo, crack Shell, or bud off little helpers. Every third tile played restores Mass.</p>
             <p>Any tile can be burned for a weak 1 Mass Scoot or Bonk, but improvised actions do not advance the bounce chain. Ending a turn without hitting the enemy raises Pursuit and speeds up its next approach.</p>
-            <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors to recover Mass.</p>
+            <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors, or slurp the puddle left by a dissolved helper, to recover Mass.</p>
             <p>The board previews enemy paths, attacks, and hazards before the turn ends. Between fights, choose routes for mutations, recovery, or Tile Tinker bag upgrades.</p>
             <p>After the meadow, the Rootwild adds peculiar bargains and creatures that rebuild Shell or drain Mass when ignored.</p>
           </section>
         </aside>
+      )}
+
+      {deckPickerOpen && (
+        <DeckPicker decks={deckSummaries} selectedDeckId={selectedDeckId} onChoose={chooseDeck} />
       )}
 
       {traitsOpen && (

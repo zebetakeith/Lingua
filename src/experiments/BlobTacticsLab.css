@@ -116,6 +116,13 @@
 .blob-lab-title span svg { width: 0.78rem; height: 0.78rem; }
 .blob-lab-title strong { display: block; margin-top: 0.22rem; color: #27596a; font-size: 1.16rem; }
 
+@media (max-width: 399px) {
+  .blob-lab-topbar { grid-template-columns: 2.38rem minmax(0, 1fr) auto; gap: 0.25rem; }
+  .blob-lab-top-actions { gap: 0.2rem; }
+  .blob-lab-topbar .blob-lab-icon-button { width: 2.38rem; height: 2.38rem; }
+  .blob-lab-title strong { font-size: 1.02rem; }
+}
+
 .blob-lab-route {
   display: flex;
   align-items: center;
@@ -483,6 +490,17 @@
     #9bd16b;
   box-shadow: 0 0 0 0.18rem rgba(122, 180, 83, 0.18);
 }
+.blob-lab-tile-effect.is-puddle {
+  bottom: 8%;
+  width: 68%;
+  height: 24%;
+  border: 0.12rem solid rgba(109, 117, 207, 0.48);
+  background:
+    radial-gradient(circle at 32% 48%, rgba(255, 255, 255, 0.82) 0 0.13rem, transparent 0.15rem),
+    radial-gradient(circle at 70% 33%, rgba(255, 255, 255, 0.68) 0 0.1rem, transparent 0.12rem),
+    rgba(176, 157, 235, 0.7);
+  box-shadow: 0 0 0 0.2rem rgba(188, 175, 240, 0.2);
+}
 
 .blob-lab-shell-slime.is-nibbleImp {
   border-radius: 50% 50% 43% 43%;
@@ -808,6 +826,74 @@
 }
 .blob-lab-study-buttons strong { font-size: 0.76rem; }
 .blob-lab-study-buttons span { color: #718b8d; font-size: 0.56rem; font-weight: 800; }
+.blob-lab-study-start {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  width: 100%;
+  min-height: 2.7rem;
+  margin-top: 0.55rem;
+  border: 0;
+  border-radius: 0.62rem;
+  background: #54bfb4;
+  color: #fff;
+  box-shadow: 0 0.2rem 0 #3d9495;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+.blob-lab-study-start svg { width: 1rem; height: 1rem; }
+.blob-lab-study-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.22rem;
+  margin-bottom: 0.42rem;
+}
+.blob-lab-study-progress span {
+  border-radius: 999px;
+  background: rgba(197, 241, 228, 0.86);
+  color: #3d7880;
+  padding: 0.16rem 0.34rem;
+  font-size: 0.55rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.blob-lab-real-study-sheet h2 { overflow-wrap: anywhere; font-size: 0.94rem; line-height: 1.18; }
+.blob-lab-answer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.34rem; margin-top: 0.52rem; }
+.blob-lab-answer-grid button,
+.blob-lab-answer-feedback,
+.blob-lab-self-grade {
+  border: 0.12rem solid rgba(84, 191, 180, 0.5);
+  border-radius: 0.58rem;
+  background: #fff;
+  color: #426d76;
+  padding: 0.48rem;
+  font-size: 0.67rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.blob-lab-answer-feedback {
+  display: grid;
+  gap: 0.18rem;
+  width: 100%;
+  margin-top: 0.52rem;
+  border-color: rgba(255, 134, 108, 0.76);
+  background: #fff2ed;
+  text-align: left;
+}
+.blob-lab-answer-feedback strong { color: #c56050; font-size: 0.58rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.blob-lab-answer-feedback span { color: #754e4b; font-size: 0.78rem; }
+.blob-lab-answer-feedback small { color: #b26a60; font-size: 0.56rem; text-transform: uppercase; }
+.blob-lab-self-grade { display: grid; gap: 0.28rem; margin-top: 0.52rem; text-align: center; }
+.blob-lab-self-grade strong { font-size: 0.8rem; }
+.blob-lab-self-grade span { color: #66868a; font-size: 0.62rem; }
+.blob-lab-self-grade div { display: grid; grid-template-columns: 1fr 1fr; gap: 0.32rem; }
+.blob-lab-self-grade button { border: 0; border-radius: 0.48rem; background: #ffddd7; color: #a84f49; padding: 0.42rem; font-size: 0.67rem; font-weight: 900; }
+.blob-lab-self-grade button:last-child { background: #cdf2d8; color: #397f65; }
+.blob-lab-study-recap-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.28rem; margin-top: 0.55rem; }
+.blob-lab-study-recap-stats span { display: grid; gap: 0.05rem; border-radius: 0.48rem; background: rgba(213, 247, 232, 0.78); color: #588187; padding: 0.3rem; font-size: 0.54rem; font-weight: 900; text-align: center; text-transform: uppercase; }
+.blob-lab-study-recap-stats b { color: #33727b; font-size: 0.86rem; }
+.blob-lab-study-recap > small { display: block; margin-top: 0.42rem; color: #66868a; font-size: 0.62rem; font-weight: 700; }
 
 .blob-lab-result,
 .blob-lab-help-backdrop,
@@ -996,6 +1082,24 @@
 }
 .blob-lab-event-grid strong { font-size: 0.78rem; }
 .blob-lab-event-grid span { color: #66868a; font-size: 0.65rem; font-weight: 700; line-height: 1.18; }
+.blob-lab-deck-grid { display: grid; gap: 0.48rem; margin-top: 0.72rem; }
+.blob-lab-deck-grid button {
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 1fr) auto;
+  gap: 0.06rem 0.42rem;
+  align-items: center;
+  border: 0.14rem solid rgba(84, 191, 180, 0.45);
+  border-radius: 0.68rem;
+  background: #fff;
+  color: #3b6873;
+  padding: 0.52rem;
+  text-align: left;
+}
+.blob-lab-deck-grid button.is-selected { border-color: #f5aa49; background: #fffbe7; box-shadow: 0 0.18rem 0 #deb45e; }
+.blob-lab-deck-grid svg { grid-row: 1 / 3; width: 1.3rem; height: 1.3rem; color: #45a8b5; }
+.blob-lab-deck-grid strong { font-size: 0.76rem; }
+.blob-lab-deck-grid span { color: #4f858c; font-size: 0.62rem; font-weight: 900; }
+.blob-lab-deck-grid small { grid-column: 2 / 4; color: #718b8d; font-size: 0.58rem; font-weight: 700; }
 .blob-lab-workshop-tile {
   --tile-accent: #54bfb4;
   display: grid;

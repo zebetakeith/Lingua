@@ -47,7 +47,7 @@ export type BlobMutationId =
   | "rhythmJelly"
   | "rollingShoulder";
 export type BlobTacticsPhase = "study" | "player" | "reward" | "map" | "workshop" | "event" | "won" | "lost";
-export type TileEffect = "goo" | "spore";
+export type TileEffect = "goo" | "spore" | "puddle";
 
 export interface BlobPosition {
   row: number;
@@ -752,13 +752,17 @@ export function createActionTilesFromStudyResult(
 
 export function applyFakeStudyResult(state: BlobTacticsState, grade: BlobStudyGrade): BlobTacticsState {
   if (state.phase !== "study") return state;
-  const baseResult = getStudyResult(grade);
-  const result = {
-    ...baseResult,
-    upgradedCount: baseResult.upgradedCount + state.nextStudyBonusUpgrades,
+  return applyBlobStudyResult(state, getStudyResult(grade));
+}
+
+export function applyBlobStudyResult(state: BlobTacticsState, result: BlobStudyResult): BlobTacticsState {
+  if (state.phase !== "study") return state;
+  const adjustedResult = {
+    ...result,
+    upgradedCount: result.upgradedCount + state.nextStudyBonusUpgrades,
   };
-  const generated = createActionTilesFromStudyResult(result, state.nextId, state.tileBag);
-  const snackBonus = grade !== "bad" && state.mutations.includes("studySnacks") ? 1 : 0;
+  const generated = createActionTilesFromStudyResult(adjustedResult, state.nextId, state.tileBag);
+  const snackBonus = result.grade !== "bad" && state.mutations.includes("studySnacks") ? 1 : 0;
   const massGain = result.massGain + snackBonus;
   return withNotice({
     ...state,
@@ -769,14 +773,14 @@ export function applyFakeStudyResult(state: BlobTacticsState, grade: BlobStudyGr
     actionSourceId: null,
     improviseMode: null,
     nextId: generated.nextId,
-    lastStudyGrade: grade,
+    lastStudyGrade: result.grade,
     tilesPlayedThisTurn: 0,
     nextStudyBonusUpgrades: 0,
-  }, grade === "great" ? "Great study!" : grade === "good" ? "Good study" : "Messy study",
-  grade === "bad"
-    ? `Three tiles${result.upgradedCount ? ` with ${result.upgradedCount} upgraded` : ""} and one risky Sour Split appeared.`
-    : `${result.tileCount} tiles appeared${result.upgradedCount ? ` with ${result.upgradedCount} upgraded` : ""}${massGain ? ` and Pipplo recovered ${massGain} Mass` : ""}.`,
-  grade === "bad" ? "warn" : "good");
+  }, result.grade === "great" ? "Great study!" : result.grade === "good" ? "Good study" : "Messy study",
+  result.grade === "bad"
+    ? `${adjustedResult.tileCount} tiles${adjustedResult.upgradedCount ? ` with ${adjustedResult.upgradedCount} upgraded` : ""} and ${adjustedResult.sourCount} risky Sour Split${adjustedResult.sourCount === 1 ? "" : "s"} appeared.`
+    : `${adjustedResult.tileCount} tiles appeared${adjustedResult.upgradedCount ? ` with ${adjustedResult.upgradedCount} upgraded` : ""}${massGain ? ` and Pipplo recovered ${massGain} Mass` : ""}.`,
+  result.grade === "bad" ? "warn" : "good");
 }
 
 const isOccupied = (state: BlobTacticsState, position: BlobPosition) => (
@@ -969,7 +973,7 @@ const useImprovisedActionAt = (state: BlobTacticsState, target: BlobPosition): B
   const mode = state.improviseMode;
   const next = consumeSelectedActionTile({ ...state, mass: state.mass - 1 }, false);
   if (mode === "move") {
-    return withNotice(consumeSporeAt({
+    return withNotice(consumeBoardEffectsAt({
       ...next,
       pipploPosition: target,
       animation: "pipplo",
@@ -978,16 +982,46 @@ const useImprovisedActionAt = (state: BlobTacticsState, target: BlobPosition): B
   return dealDamageToEnemy(next, 1, 1, "Improvised Bonk");
 };
 
-const consumeSporeAt = (state: BlobTacticsState, position: BlobPosition): BlobTacticsState => {
+const addMassPuddle = (state: BlobTacticsState, position: BlobPosition): BlobTacticsState => {
+  if (state.tileEffects.some(effect => effect.type === "puddle" && samePosition(effect.position, position))) return state;
+  return {
+    ...state,
+    tileEffects: [
+      ...state.tileEffects,
+      { id: `puddle-${state.nextId}`, type: "puddle", position, turnsLeft: 4 },
+    ],
+    nextId: state.nextId + 1,
+  };
+};
+
+const consumeBoardEffectsAt = (state: BlobTacticsState, position: BlobPosition): BlobTacticsState => {
   const spore = state.tileEffects.find(effect => effect.type === "spore" && samePosition(effect.position, position));
-  if (!spore) return state;
-  const nextHp = Math.max(0, state.pipploHp - 1);
+  const puddle = state.tileEffects.find(effect => effect.type === "puddle" && samePosition(effect.position, position));
+  if (!spore && !puddle) return state;
+  const nextHp = Math.max(0, state.pipploHp - (spore ? 1 : 0));
+  const nextMass = Math.min(state.massMax, state.mass + (puddle ? 1 : 0));
+  const consumedIds = new Set([spore?.id, puddle?.id].filter(Boolean));
   return withNotice({
     ...state,
     pipploHp: nextHp,
+    mass: nextMass,
     phase: nextHp === 0 ? "lost" : state.phase,
-    tileEffects: state.tileEffects.filter(effect => effect.id !== spore.id),
-  }, "Pipplo stepped on spores", nextHp === 0 ? "The prickly patch flattened Pipplo." : "Pipplo lost 1 HP.", "warn");
+    tileEffects: state.tileEffects.filter(effect => !consumedIds.has(effect.id)),
+  }, nextHp === 0
+    ? "Pipplo stepped on spores"
+    : spore && puddle
+      ? "A prickly slurp"
+      : spore
+        ? "Pipplo stepped on spores"
+        : "Pipplo slurped a puddle",
+  nextHp === 0
+    ? "The prickly patch flattened Pipplo."
+    : spore && puddle
+      ? "Pipplo lost 1 HP but recovered 1 Mass from the puddle."
+      : spore
+        ? "Pipplo lost 1 HP."
+        : "A dissolved helper restored 1 Mass.",
+  spore ? "warn" : "good");
 };
 
 const pushEnemyAwayFromPipplo = (state: BlobTacticsState): BlobTacticsState => {
@@ -1007,7 +1041,7 @@ const useActionTileAt = (state: BlobTacticsState, target: BlobPosition): BlobTac
 
   if (tile.type === "move" || tile.type === "hop") {
     const healed = tile.type === "hop" && state.mutations.includes("springFeet") && !state.springFeetUsedThisRoom;
-    next = consumeSporeAt({
+    next = consumeBoardEffectsAt({
       ...next,
       pipploPosition: target,
       pipploHp: healed ? Math.min(state.pipploMaxHp, state.pipploHp + 1) : state.pipploHp,
@@ -1234,19 +1268,21 @@ const moveEnemyTowardPipplo = (state: BlobTacticsState, steps: number): { state:
 };
 
 const ageTemporaryEffects = (state: BlobTacticsState): BlobTacticsState => {
-  const survivingBloblets = state.bloblets
-    .map(bloblet => ({ ...bloblet, turnsLeft: bloblet.turnsLeft - 1 }))
-    .filter(bloblet => bloblet.turnsLeft > 0);
-  const melted = state.bloblets.length - survivingBloblets.length;
-  const next: BlobTacticsState = {
+  const agedBloblets = state.bloblets.map(bloblet => ({ ...bloblet, turnsLeft: bloblet.turnsLeft - 1 }));
+  const survivingBloblets = agedBloblets.filter(bloblet => bloblet.turnsLeft > 0);
+  const meltedBloblets = agedBloblets.filter(bloblet => bloblet.turnsLeft <= 0);
+  let next: BlobTacticsState = {
     ...state,
     bloblets: survivingBloblets,
     tileEffects: state.tileEffects
-      .map(effect => effect.type === "spore" ? { ...effect, turnsLeft: effect.turnsLeft - 1 } : effect)
+      .map(effect => effect.type === "spore" || effect.type === "puddle" ? { ...effect, turnsLeft: effect.turnsLeft - 1 } : effect)
       .filter(effect => effect.turnsLeft > 0),
   };
-  return melted > 0
-    ? withNotice(next, "Bloblet melted", `${melted} temporary helper${melted === 1 ? "" : "s"} dissolved.`, "warn")
+  meltedBloblets.forEach(bloblet => {
+    next = addMassPuddle(next, bloblet.position);
+  });
+  return meltedBloblets.length > 0
+    ? withNotice(next, "Bloblet melted", `${meltedBloblets.length} temporary helper${meltedBloblets.length === 1 ? "" : "s"} dissolved into a Mass puddle.`, "plain")
     : next;
 };
 
@@ -1287,12 +1323,12 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
       next = damagePipplo(next, next.enemy.attack, `${next.enemy.name} struck!`);
     } else {
       const target = next.bloblets.find(bloblet => bloblet.id === intent.targetId);
-      next = withNotice({
+      next = withNotice(addMassPuddle({
         ...next,
         phase: "study",
         bloblets: next.bloblets.filter(bloblet => bloblet.id !== intent.targetId),
-      }, target?.kind === "bubble" ? "Bubble Bud blocked it!" : "Bloblet popped!",
-      target?.kind === "bubble" ? "The shield helper absorbed the hit." : "The helper protected Pipplo from the hit.",
+      }, target?.position || next.enemy.position), target?.kind === "bubble" ? "Bubble Bud blocked it!" : "Bloblet popped!",
+      target?.kind === "bubble" ? "The shield helper absorbed the hit and left a Mass puddle." : "The helper protected Pipplo and left a Mass puddle.",
       target?.kind === "bubble" ? "good" : "warn");
     }
   } else if (intent.label === "Rebubble") {
