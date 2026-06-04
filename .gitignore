@@ -10,7 +10,28 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.vite
+.cache
+coverage
+playwright-report
+test-results
 *.local
+*.tsbuildinfo
+
+# Local-only previews, captures, exports, and bulky source/reference assets.
+# These folders are safe to keep on your computer, but Codex should not drag
+# them into normal project work unless you explicitly ask.
+screenshots/
+recordings/
+captures/
+exports/
+tmp/
+temp/
+raw-assets/
+source-assets/
+reference-images/
+generated-assets/
+asset-sources/
 
 # Keep bulky prototype/source art local; the app ships optimized .webp sprites.
 public/*.png

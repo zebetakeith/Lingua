@@ -192,12 +192,13 @@
 
 .blob-lab-enemy-strip {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(5.4rem, 0.72fr) minmax(0, 1fr);
   align-items: stretch;
   gap: 0.4rem;
 }
 
 .blob-lab-enemy-copy,
+.blob-lab-objective,
 .blob-lab-intent {
   border: 1px solid rgba(22, 143, 153, 0.22);
   border-radius: 0.72rem;
@@ -226,6 +227,37 @@
   color: #fff;
   padding: 0.12rem 0.3rem;
   text-transform: uppercase;
+}
+.blob-lab-objective {
+  display: grid;
+  align-content: center;
+  gap: 0.08rem;
+  min-width: 0;
+  border-color: rgba(245, 170, 73, 0.45);
+  background: rgba(255, 251, 231, 0.88);
+  line-height: 1.04;
+}
+.blob-lab-objective span {
+  color: #b36e43;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.blob-lab-objective strong {
+  overflow: hidden;
+  color: #7d5b29;
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blob-lab-objective small {
+  overflow: hidden;
+  color: #5f7c80;
+  font-size: 0.56rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .blob-lab-intent { display: grid; grid-template-columns: auto 1fr; gap: 0.05rem 0.34rem; min-width: 0; }
 .blob-lab-intent span { grid-row: span 2; align-self: center; color: #b36e43; font-size: 0.55rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -500,6 +532,16 @@
     radial-gradient(circle at 70% 33%, rgba(255, 255, 255, 0.68) 0 0.1rem, transparent 0.12rem),
     rgba(176, 157, 235, 0.7);
   box-shadow: 0 0 0 0.2rem rgba(188, 175, 240, 0.2);
+}
+.blob-lab-tile-effect.is-snack {
+  bottom: 18%;
+  width: 48%;
+  height: 48%;
+  border-radius: 48% 52% 46% 54%;
+  background:
+    radial-gradient(circle at 28% 28%, rgba(255, 255, 255, 0.9) 0 0.13rem, transparent 0.15rem),
+    #ffdf5d;
+  box-shadow: inset -0.18rem -0.18rem 0 rgba(224, 143, 63, 0.22), 0 0 0 0.2rem rgba(255, 223, 93, 0.24);
 }
 
 .blob-lab-shell-slime.is-nibbleImp {
@@ -804,6 +846,18 @@
 .blob-lab-chain i.is-filled { background: #45b4d1; }
 .blob-lab-chain b { margin-left: 0.08rem; color: #3b8796; font-size: 0.54rem; }
 .blob-lab-chain b.is-popped { color: #d45e53; animation: blobLabChainPop 420ms ease-out; }
+.blob-lab-combo-hint {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.2rem;
+  border-radius: 999px;
+  background: rgba(255, 223, 93, 0.36);
+  color: #8d6a22;
+  padding: 0.16rem 0.36rem;
+  font-size: 0.55rem;
+  font-weight: 900;
+  line-height: 1.12;
+}
 
 .blob-lab-study-sheet { padding: 0.58rem; }
 .blob-lab-study-sheet h2,
@@ -1200,10 +1254,13 @@
   .blob-lab-status-pill,
   .blob-lab-room-pill { min-height: 2.35rem; font-size: 0.8rem; }
   .blob-lab-enemy-copy,
+  .blob-lab-objective,
   .blob-lab-intent { padding: 0.55rem 0.72rem; }
   .blob-lab-enemy-copy strong,
+  .blob-lab-objective strong,
   .blob-lab-intent strong { font-size: 0.84rem; }
   .blob-lab-enemy-copy span,
+  .blob-lab-objective small,
   .blob-lab-intent small { font-size: 0.68rem; }
   .blob-lab-board { width: min(100%, 30rem, calc((100dvh - 24.5rem) * 1.25)); }
   .blob-lab-notice { min-height: 2.55rem; padding: 0.55rem 0.7rem; font-size: 0.75rem; }

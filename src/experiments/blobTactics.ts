@@ -20,6 +20,7 @@ export type BlobActionTileType =
 export type BlobletKind = "basic" | "bubble";
 export type BlobEnemyKind = "shellSlime" | "nibbleImp" | "sporeBud" | "bubbleCrab" | "echoMoth" | "rootLump";
 export type BlobMapNodeKind = "encounter" | "rest" | "workshop" | "event" | "guardian";
+export type BlobRoomGoalType = "defeat" | "breakShell" | "reachSnack" | "survive" | "rescueBloblet";
 export type BlobMapNodeId =
   | "shellGate"
   | "nibbleBurrow"
@@ -47,7 +48,7 @@ export type BlobMutationId =
   | "rhythmJelly"
   | "rollingShoulder";
 export type BlobTacticsPhase = "study" | "player" | "reward" | "map" | "workshop" | "event" | "won" | "lost";
-export type TileEffect = "goo" | "spore" | "puddle";
+export type TileEffect = "goo" | "spore" | "puddle" | "snack";
 
 export interface BlobPosition {
   row: number;
@@ -99,6 +100,7 @@ export interface BlobTacticsNotice {
 
 export interface BlobTacticsState {
   turn: number;
+  roomTurn: number;
   room: number;
   roomsCleared: number;
   phase: BlobTacticsPhase;
@@ -122,6 +124,7 @@ export interface BlobTacticsState {
   absorbedEnemies: BlobEnemyKind[];
   springFeetUsedThisRoom: boolean;
   tilesPlayedThisTurn: number;
+  lastActionTileType: BlobActionTileType | null;
   attackedThisTurn: boolean;
   enemyPressure: number;
   improviseMode: BlobImproviseMode | null;
@@ -154,6 +157,14 @@ export interface BlobEnemyPreview {
   pathKeys: Set<string>;
   dangerKeys: Set<string>;
   hazardKeys: Set<string>;
+}
+
+export interface BlobRoomObjective {
+  type: BlobRoomGoalType;
+  title: string;
+  detail: string;
+  progress: string;
+  done: boolean;
 }
 
 export interface BlobMutationDef {
@@ -521,6 +532,11 @@ export function getBlobRegion(depth: number): BlobRegionDef {
 const samePosition = (a: BlobPosition, b: BlobPosition) => a.row === b.row && a.col === b.col;
 const distance = (a: BlobPosition, b: BlobPosition) => Math.abs(a.row - b.row) + Math.abs(a.col - b.col);
 const positionKey = (position: BlobPosition) => `${position.row}:${position.col}`;
+const currentNodeId = (state: BlobTacticsState): BlobMapNodeId | null => (
+  state.visitedNodeIds[state.visitedNodeIds.length - 1] || null
+);
+const getRoomTurn = (state: BlobTacticsState) => state.roomTurn || 1;
+const getSurvivedTurns = (state: BlobTacticsState) => Math.max(0, getRoomTurn(state) - 1);
 const isInsideBoard = (position: BlobPosition) => (
   position.row >= 0
   && position.row < BLOB_BOARD_ROWS
@@ -544,6 +560,68 @@ const withNotice = (
   ...state,
   notice: { id: state.notice.id + 1, title, detail, tone },
 });
+
+const getRoomGoalType = (state: BlobTacticsState): BlobRoomGoalType => {
+  const nodeId = currentNodeId(state);
+  if (nodeId === "shellGate") return "breakShell";
+  if (nodeId === "nibbleBurrow") return "reachSnack";
+  if (nodeId === "sporeGarden") return "survive";
+  if (nodeId === "shellHollow") return "rescueBloblet";
+  return "defeat";
+};
+
+export function getBlobRoomObjective(state: BlobTacticsState): BlobRoomObjective {
+  const type = getRoomGoalType(state);
+  if (type === "breakShell") {
+    const shellCracked = Math.max(0, state.enemy.maxShell - state.enemy.shell);
+    return {
+      type,
+      title: "Crack the Shell",
+      detail: "Break all Shell to scare this wobble away.",
+      progress: state.enemy.maxShell ? `${shellCracked}/${state.enemy.maxShell} cracked` : "No Shell left",
+      done: state.enemy.maxShell > 0 && state.enemy.shell <= 0,
+    };
+  }
+  if (type === "reachSnack") {
+    const snackWaiting = state.tileEffects.some(effect => effect.type === "snack");
+    const roomAlreadyClear = state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "event" || state.phase === "won";
+    return {
+      type,
+      title: "Reach the snack",
+      detail: "Grab the snack and escape before the imp eats it.",
+      progress: snackWaiting ? "Snack waiting" : roomAlreadyClear ? "Snack reached" : "Snack gone",
+      done: !snackWaiting && roomAlreadyClear,
+    };
+  }
+  if (type === "survive") {
+    const survived = Math.min(3, getSurvivedTurns(state));
+    return {
+      type,
+      title: "Survive spores",
+      detail: "Last 3 enemy turns while the garden gets prickly.",
+      progress: `${survived}/3 turns`,
+      done: survived >= 3,
+    };
+  }
+  if (type === "rescueBloblet") {
+    const rescueWaiting = state.bloblets.some(bloblet => bloblet.id.startsWith("rescue-"));
+    const roomAlreadyClear = state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "event" || state.phase === "won";
+    return {
+      type,
+      title: "Rescue the bloblet",
+      detail: "Rejoin the stranded helper before it gets popped.",
+      progress: rescueWaiting ? "Helper waiting" : roomAlreadyClear ? "Helper rescued" : "Helper gone",
+      done: !rescueWaiting && roomAlreadyClear,
+    };
+  }
+  return {
+    type,
+    title: "Absorb the enemy",
+    detail: "Defeat it, then choose a body mutation.",
+    progress: `${state.enemy.hp}/${state.enemy.maxHp} HP`,
+    done: state.enemy.hp <= 0,
+  };
+}
 
 const makeActionTile = (
   type: BlobActionTileType,
@@ -685,6 +763,7 @@ const getWorkshopChoices = (state: BlobTacticsState): BlobActionTileType[] => {
 export function createInitialBlobTacticsState(): BlobTacticsState {
   return {
     turn: 1,
+    roomTurn: 1,
     room: 1,
     roomsCleared: 0,
     phase: "study",
@@ -702,7 +781,7 @@ export function createInitialBlobTacticsState(): BlobTacticsState {
     notice: {
       id: 1,
       title: "Room 1: crack the Shell",
-      detail: "Study to grow a tile hand. Spit Chunk is especially good at breaking Shell.",
+      detail: "Break all Shell to scare this wobble away. Spit Chunk is especially good at cracking Shell.",
       tone: "plain",
     },
     nextId: 10,
@@ -713,6 +792,7 @@ export function createInitialBlobTacticsState(): BlobTacticsState {
     absorbedEnemies: [],
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
+    lastActionTileType: null,
     attackedThisTurn: false,
     enemyPressure: 0,
     improviseMode: null,
@@ -775,6 +855,7 @@ export function applyBlobStudyResult(state: BlobTacticsState, result: BlobStudyR
     nextId: generated.nextId,
     lastStudyGrade: result.grade,
     tilesPlayedThisTurn: 0,
+    lastActionTileType: null,
     nextStudyBonusUpgrades: 0,
   }, result.grade === "great" ? "Great study!" : result.grade === "good" ? "Good study" : "Messy study",
   result.grade === "bad"
@@ -919,6 +1000,7 @@ export function selectBlobImproviseMode(state: BlobTacticsState, mode: BlobImpro
 }
 
 const consumeSelectedActionTile = (state: BlobTacticsState, countForChain = true): BlobTacticsState => {
+  const consumedTile = getSelectedActionTile(state);
   const tilesPlayedThisTurn = state.tilesPlayedThisTurn + (countForChain ? 1 : 0);
   const chainMass = tilesPlayedThisTurn % 3 === 0
     && countForChain
@@ -932,6 +1014,9 @@ const consumeSelectedActionTile = (state: BlobTacticsState, countForChain = true
     actionSourceId: null,
     improviseMode: null,
     tilesPlayedThisTurn,
+    lastActionTileType: countForChain
+      ? consumedTile?.type || state.lastActionTileType
+      : state.lastActionTileType,
   };
 };
 
@@ -941,31 +1026,107 @@ const getRewardChoices = (state: BlobTacticsState): BlobMutationId[] => {
   return Array.from({ length: Math.min(3, available.length) }, (_, index) => available[(offset + index) % available.length]);
 };
 
+const completeBlobRoom = (state: BlobTacticsState, title: string, detail: string): BlobTacticsState => {
+  const finalRoom = state.enemy.boss;
+  return withNotice({
+    ...state,
+    roomsCleared: state.roomsCleared + 1,
+    phase: finalRoom ? "won" : "reward",
+    enemy: { ...state.enemy, hp: finalRoom ? 0 : state.enemy.hp },
+    rewardChoices: finalRoom ? [] : getRewardChoices(state),
+    absorbedEnemies: [...state.absorbedEnemies, state.enemy.kind],
+    hand: [],
+    selectedActionTileId: null,
+    actionSourceId: null,
+    improviseMode: null,
+    tilesPlayedThisTurn: 0,
+    lastActionTileType: null,
+    attackedThisTurn: false,
+    animation: finalRoom ? "pop" : "pipplo",
+  }, title, detail, "good");
+};
+
 const dealDamageToEnemy = (state: BlobTacticsState, damage: number, shellDamage: number, title: string): BlobTacticsState => {
   const shellHit = Math.min(state.enemy.shell, shellDamage);
   const nextShell = state.enemy.shell - shellHit;
   const hpDamage = state.enemy.shell === 0 ? damage : Math.max(0, damage - shellHit);
   const nextHp = Math.max(0, state.enemy.hp - hpDamage);
   const defeated = nextHp === 0;
-  const roomsCleared = defeated ? state.roomsCleared + 1 : state.roomsCleared;
-  const finalRoom = defeated && state.enemy.boss;
-  return withNotice({
+  const nextState = {
     ...state,
-    roomsCleared,
     attackedThisTurn: true,
     enemyPressure: 0,
-    phase: finalRoom ? "won" : defeated ? "reward" : state.phase,
     enemy: { ...state.enemy, shell: nextShell, hp: nextHp },
-    rewardChoices: defeated && !finalRoom ? getRewardChoices(state) : [],
-    absorbedEnemies: defeated ? [...state.absorbedEnemies, state.enemy.kind] : state.absorbedEnemies,
-    hand: defeated ? [] : state.hand,
-    selectedActionTileId: defeated ? null : state.selectedActionTileId,
-    actionSourceId: defeated ? null : state.actionSourceId,
-    animation: defeated ? "pop" : "enemy",
-  }, title, defeated
-    ? `${state.enemy.name} wobbled apart. Pipplo absorbed the leftovers!`
-    : `${shellHit ? `${shellHit} Shell cracked. ` : ""}${hpDamage ? `${hpDamage} damage landed.` : "Its Shell softened the hit."}`,
-  defeated ? "good" : "plain");
+  };
+  if (defeated) {
+    return completeBlobRoom(nextState, title, `${state.enemy.name} wobbled apart. Pipplo absorbed the leftovers!`);
+  }
+  if (getRoomGoalType(nextState) === "breakShell" && state.enemy.maxShell > 0 && nextShell <= 0) {
+    return completeBlobRoom(nextState, "Shell cracked!", `${state.enemy.name} panicked and rolled away. Pipplo absorbed the room reward.`);
+  }
+  return withNotice({
+    ...nextState,
+    animation: "enemy",
+  }, title, `${shellHit ? `${shellHit} Shell cracked. ` : ""}${hpDamage ? `${hpDamage} damage landed.` : "Its Shell softened the hit."}`, "plain");
+};
+
+const appendBlobletAutoHelpNotice = (state: BlobTacticsState, messages: string[]): BlobTacticsState => {
+  if (messages.length === 0 || state.phase === "reward" || state.phase === "won" || state.phase === "lost") return state;
+  return {
+    ...state,
+    notice: {
+      ...state.notice,
+      detail: `${messages.join(" ")} ${state.notice.detail}`,
+    },
+  };
+};
+
+const runBlobletAutoHelp = (state: BlobTacticsState): { state: BlobTacticsState; messages: string[] } => {
+  if (state.bloblets.length === 0) return { state, messages: [] };
+  let next = state;
+  const messages: string[] = [];
+  const bonkers = next.bloblets.filter(bloblet => distance(bloblet.position, next.enemy.position) === 1);
+
+  if (bonkers.length > 0) {
+    next = dealDamageToEnemy(next, bonkers.length, bonkers.length, bonkers.length === 1 ? "Bloblet bonk" : "Bloblet bonk squad");
+    messages.push(`${bonkers.length === 1 ? "A helper bonked" : `${bonkers.length} helpers bonked`} ${state.enemy.name}.`);
+    if (next.phase !== "player") return { state: next, messages };
+  }
+
+  const claimedEffectIds = new Set<string>();
+  let snacksClaimed = 0;
+  let puddlesClaimed = 0;
+  const bloblets = next.bloblets.map(bloblet => {
+    const treat = next.tileEffects
+      .filter(effect => (effect.type === "snack" || effect.type === "puddle") && !claimedEffectIds.has(effect.id))
+      .filter(effect => distance(effect.position, bloblet.position) <= 1)
+      .sort((a, b) => {
+        if (a.type !== b.type) return a.type === "snack" ? -1 : 1;
+        return distance(a.position, next.enemy.position) - distance(b.position, next.enemy.position);
+      })[0];
+    if (!treat) return bloblet;
+    claimedEffectIds.add(treat.id);
+    if (treat.type === "snack") snacksClaimed += 1;
+    if (treat.type === "puddle") puddlesClaimed += 1;
+    return { ...bloblet, position: treat.position };
+  });
+
+  if (claimedEffectIds.size > 0) {
+    next = {
+      ...next,
+      mass: Math.min(next.massMax, next.mass + (puddlesClaimed * 1) + (snacksClaimed * 2)),
+      bloblets,
+      tileEffects: next.tileEffects.filter(effect => !claimedEffectIds.has(effect.id)),
+      animation: "pipplo",
+    };
+    if (snacksClaimed > 0 && getRoomGoalType(next) === "reachSnack") {
+      return { state: completeBlobRoom(next, "Snack rescued!", "A bloblet grabbed the snack and Pipplo slipped past the imp."), messages };
+    }
+    if (snacksClaimed > 0) messages.push(`${snacksClaimed === 1 ? "A helper grabbed a snack" : `${snacksClaimed} helpers grabbed snacks`} for ${snacksClaimed * 2} Mass.`);
+    if (puddlesClaimed > 0) messages.push(`${puddlesClaimed === 1 ? "A helper slurped a puddle" : `${puddlesClaimed} helpers slurped puddles`} for ${puddlesClaimed} Mass.`);
+  }
+
+  return { state: next, messages };
 };
 
 const useImprovisedActionAt = (state: BlobTacticsState, target: BlobPosition): BlobTacticsState => {
@@ -973,11 +1134,13 @@ const useImprovisedActionAt = (state: BlobTacticsState, target: BlobPosition): B
   const mode = state.improviseMode;
   const next = consumeSelectedActionTile({ ...state, mass: state.mass - 1 }, false);
   if (mode === "move") {
-    return withNotice(consumeBoardEffectsAt({
+    const moved = consumeBoardEffectsAt({
       ...next,
       pipploPosition: target,
       animation: "pipplo",
-    }, target), "Improvised Scoot", "Pipplo burned a tile and spent 1 Mass to wobble away. Improvised tiles do not build the bounce chain.", "warn");
+    }, target);
+    if (moved.phase !== "player") return moved;
+    return withNotice(moved, "Improvised Scoot", "Pipplo burned a tile and spent 1 Mass to wobble away. Improvised tiles do not build the bounce chain.", "warn");
   }
   return dealDamageToEnemy(next, 1, 1, "Improvised Bonk");
 };
@@ -997,18 +1160,25 @@ const addMassPuddle = (state: BlobTacticsState, position: BlobPosition): BlobTac
 const consumeBoardEffectsAt = (state: BlobTacticsState, position: BlobPosition): BlobTacticsState => {
   const spore = state.tileEffects.find(effect => effect.type === "spore" && samePosition(effect.position, position));
   const puddle = state.tileEffects.find(effect => effect.type === "puddle" && samePosition(effect.position, position));
-  if (!spore && !puddle) return state;
+  const snack = state.tileEffects.find(effect => effect.type === "snack" && samePosition(effect.position, position));
+  if (!spore && !puddle && !snack) return state;
   const nextHp = Math.max(0, state.pipploHp - (spore ? 1 : 0));
-  const nextMass = Math.min(state.massMax, state.mass + (puddle ? 1 : 0));
-  const consumedIds = new Set([spore?.id, puddle?.id].filter(Boolean));
-  return withNotice({
+  const nextMass = Math.min(state.massMax, state.mass + (puddle ? 1 : 0) + (snack ? 2 : 0));
+  const consumedIds = new Set([spore?.id, puddle?.id, snack?.id].filter(Boolean));
+  const next = {
     ...state,
     pipploHp: nextHp,
     mass: nextMass,
     phase: nextHp === 0 ? "lost" : state.phase,
     tileEffects: state.tileEffects.filter(effect => !consumedIds.has(effect.id)),
-  }, nextHp === 0
+  };
+  if (nextHp > 0 && snack && getRoomGoalType(state) === "reachSnack") {
+    return completeBlobRoom(next, "Snack reached!", "Pipplo gobbled the room snack and slipped past the imp.");
+  }
+  return withNotice(next, nextHp === 0
     ? "Pipplo stepped on spores"
+    : snack
+      ? "Snack slurped"
     : spore && puddle
       ? "A prickly slurp"
       : spore
@@ -1016,6 +1186,8 @@ const consumeBoardEffectsAt = (state: BlobTacticsState, position: BlobPosition):
         : "Pipplo slurped a puddle",
   nextHp === 0
     ? "The prickly patch flattened Pipplo."
+    : snack
+      ? "Pipplo recovered 2 Mass from the snack."
     : spore && puddle
       ? "Pipplo lost 1 HP but recovered 1 Mass from the puddle."
       : spore
@@ -1037,6 +1209,7 @@ const useActionTileAt = (state: BlobTacticsState, target: BlobPosition): BlobTac
   const info = ACTION_TILE_INFO[tile.type];
   const damageBonus = tile.upgraded ? 1 : 0;
   const pipploDamageBonus = state.mutations.includes("sharpCheeks") ? 1 : 0;
+  const previousActionTileType = state.lastActionTileType;
   let next = consumeSelectedActionTile({ ...state, mass: Math.max(0, state.mass - info.massCost) });
 
   if (tile.type === "move" || tile.type === "hop") {
@@ -1048,6 +1221,7 @@ const useActionTileAt = (state: BlobTacticsState, target: BlobPosition): BlobTac
       springFeetUsedThisRoom: healed ? true : state.springFeetUsedThisRoom,
       animation: "pipplo",
     }, target);
+    if (next.phase !== "player") return next;
     return withNotice(next, tile.type === "hop" ? "Long Scoot" : "Scoot",
       healed ? "Pipplo bounced into position and Spring Feet restored 1 HP." : "Pipplo bounced into position.",
       "good");
@@ -1076,20 +1250,53 @@ const useActionTileAt = (state: BlobTacticsState, target: BlobPosition): BlobTac
   if (tile.type === "rejoin") {
     const absorbed = state.bloblets.find(bloblet => samePosition(bloblet.position, target));
     if (!absorbed) return state;
-    const recoveredMass = tile.upgraded ? 2 : 1;
-    return withNotice({
+    const splitRejoinBonus = !absorbed.id.startsWith("rescue-")
+      && (previousActionTileType === "split" || previousActionTileType === "bubble" || previousActionTileType === "sourSplit")
+      ? 1
+      : 0;
+    const recoveredMass = (tile.upgraded ? 2 : 1) + splitRejoinBonus;
+    const rejoined: BlobTacticsState = {
       ...next,
       mass: Math.min(state.massMax, next.mass + recoveredMass),
       bloblets: state.bloblets.filter(bloblet => bloblet.id !== absorbed.id),
       animation: "pipplo",
-    }, "Rejoin", `Pipplo slurped the bloblet back up and recovered ${recoveredMass} Mass.`, "good");
+    };
+    if (getRoomGoalType(state) === "rescueBloblet" && absorbed.id.startsWith("rescue-")) {
+      return completeBlobRoom(rejoined, "Helper rescued!", `Pipplo rejoined the stranded bloblet and recovered ${recoveredMass} Mass.`);
+    }
+    return withNotice(rejoined, splitRejoinBonus ? "Split-Rejoin pop" : "Rejoin",
+      splitRejoinBonus
+        ? `Fast rejoining squeezed out bonus Mass. Pipplo recovered ${recoveredMass} Mass.`
+        : `Pipplo slurped the bloblet back up and recovered ${recoveredMass} Mass.`,
+      "good");
   }
   if (tile.type === "stretch") return dealDamageToEnemy(next, 1 + damageBonus + pipploDamageBonus, 2 + damageBonus, "Stretch Slap");
-  if (tile.type === "bellyFlop") return dealDamageToEnemy(next, 3 + damageBonus + pipploDamageBonus, 2 + damageBonus, "Belly Flop");
+  if (tile.type === "bellyFlop") {
+    const hopFlopBonus = previousActionTileType === "hop" ? 1 : 0;
+    return dealDamageToEnemy(
+      next,
+      3 + damageBonus + pipploDamageBonus + hopFlopBonus,
+      2 + damageBonus + hopFlopBonus,
+      hopFlopBonus ? "Hop-Flop Slam" : "Belly Flop",
+    );
+  }
   if (tile.type === "bump") {
     const shoulderBonus = state.mutations.includes("rollingShoulder") ? 1 : 0;
-    const bumped = dealDamageToEnemy(next, 1 + damageBonus + shoulderBonus, 1 + damageBonus + shoulderBonus, "Bump");
-    return bumped.phase === "reward" || bumped.phase === "won" ? bumped : pushEnemyAwayFromPipplo(bumped);
+    const gooBumpBonus = previousActionTileType === "goo"
+      || state.tileEffects.some(effect => effect.type === "goo" && distance(effect.position, state.enemy.position) <= 1)
+      ? 1
+      : 0;
+    const bumped = dealDamageToEnemy(
+      next,
+      1 + damageBonus + shoulderBonus + gooBumpBonus,
+      1 + damageBonus + shoulderBonus + gooBumpBonus,
+      gooBumpBonus ? "Goo Bumper" : "Bump",
+    );
+    if (bumped.phase === "reward" || bumped.phase === "won") return bumped;
+    const pushed = pushEnemyAwayFromPipplo(gooBumpBonus ? pushEnemyAwayFromPipplo(bumped) : bumped);
+    return gooBumpBonus
+      ? withNotice(pushed, "Goo Bumper", `${bumped.notice.detail} Sticky momentum slid ${state.enemy.name} farther.`, "good")
+      : pushed;
   }
   if (tile.type === "slap") {
     const sourceIsPipplo = state.actionSourceId === "pipplo";
@@ -1154,6 +1361,13 @@ const getSporeTarget = (state: BlobTacticsState): BlobPosition => {
   return candidates[0] || state.pipploPosition;
 };
 
+const getTreatTarget = (state: BlobTacticsState): BlobTileEffect | null => {
+  if (state.enemy.kind !== "nibbleImp") return null;
+  return state.tileEffects
+    .filter(effect => effect.type === "snack" || effect.type === "puddle")
+    .sort((a, b) => distance(a.position, state.enemy.position) - distance(b.position, state.enemy.position))[0] || null;
+};
+
 const getEnemyMoveSteps = (state: BlobTacticsState, pouncing = false): number => (
   Math.min(4, (pouncing ? 2 : state.enemy.moveRange) + state.enemyPressure)
 );
@@ -1175,6 +1389,24 @@ export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
   }
   if (state.enemy.kind === "echoMoth" && state.turn % 2 === 0 && targetDistance > 1) {
     return { label: "Dust drain", detail: "Echo Moth will siphon 2 Mass unless Pipplo closes the distance.", tone: "hazard", targetId: null };
+  }
+  const treatTarget = getTreatTarget(state);
+  const treatDistance = treatTarget ? distance(treatTarget.position, state.enemy.position) : 99;
+  if (treatTarget && targetDistance > 1 && treatDistance <= 1) {
+    return {
+      label: treatTarget.type === "snack" ? "Gobble snack" : "Sip puddle",
+      detail: `Nibble Imp will eat the ${treatTarget.type === "snack" ? "snack" : "Mass puddle"} before Pipplo can use it.`,
+      tone: "hazard",
+      targetId: treatTarget.id,
+    };
+  }
+  if (treatTarget && targetDistance > 1 && treatDistance <= 4) {
+    return {
+      label: treatTarget.type === "snack" ? "Chase snack" : "Chase puddle",
+      detail: `Nibble Imp smells the ${treatTarget.type === "snack" ? "snack" : "puddle"} and may steal it.`,
+      tone: "move",
+      targetId: treatTarget.id,
+    };
   }
   if (targetDistance === 1) {
     return {
@@ -1204,18 +1436,40 @@ export function getEnemyIntent(state: BlobTacticsState): BlobEnemyIntent {
   };
 }
 
-const chooseEnemyStep = (state: BlobTacticsState): BlobPosition => {
+const chooseEnemyStepToward = (state: BlobTacticsState, target: BlobPosition): BlobPosition => {
   const options = adjacentPositions(state.enemy.position)
     .filter(position => !samePosition(position, state.pipploPosition))
     .filter(position => !state.bloblets.some(bloblet => samePosition(bloblet.position, position)))
-    .sort((a, b) => distance(a, state.pipploPosition) - distance(b, state.pipploPosition));
+    .sort((a, b) => distance(a, target) - distance(b, target));
   return options[0] || state.enemy.position;
 };
+
+const chooseEnemyStep = (state: BlobTacticsState): BlobPosition => chooseEnemyStepToward(state, state.pipploPosition);
 
 export function getEnemyPreview(state: BlobTacticsState): BlobEnemyPreview {
   const preview: BlobEnemyPreview = { pathKeys: new Set(), dangerKeys: new Set(), hazardKeys: new Set() };
   if (state.phase === "reward" || state.phase === "map" || state.phase === "workshop" || state.phase === "event" || state.phase === "won" || state.phase === "lost") return preview;
   const intent = getEnemyIntent(state);
+  if (intent.label === "Gobble snack" || intent.label === "Sip puddle") {
+    const target = state.tileEffects.find(effect => effect.id === intent.targetId);
+    if (target) preview.hazardKeys.add(positionKey(target.position));
+    return preview;
+  }
+  if (intent.label === "Chase snack" || intent.label === "Chase puddle") {
+    const target = state.tileEffects.find(effect => effect.id === intent.targetId);
+    if (target) {
+      preview.hazardKeys.add(positionKey(target.position));
+      let simulated = state;
+      for (let stepIndex = 0; stepIndex < getEnemyMoveSteps(state); stepIndex += 1) {
+        if (samePosition(simulated.enemy.position, target.position)) break;
+        const step = chooseEnemyStepToward(simulated, target.position);
+        if (samePosition(step, simulated.enemy.position)) break;
+        preview.pathKeys.add(positionKey(step));
+        simulated = { ...simulated, enemy: { ...simulated.enemy, position: step } };
+      }
+    }
+    return preview;
+  }
   if (intent.label === "Rebubble" || intent.label === "Dust drain") return preview;
   if (intent.tone === "hazard") {
     preview.hazardKeys.add(positionKey(getSporeTarget(state)));
@@ -1267,6 +1521,38 @@ const moveEnemyTowardPipplo = (state: BlobTacticsState, steps: number): { state:
   return { state: next, stuck };
 };
 
+const moveEnemyTowardPosition = (state: BlobTacticsState, target: BlobPosition, steps: number): BlobTacticsState => {
+  let next = state;
+  for (let stepIndex = 0; stepIndex < steps; stepIndex += 1) {
+    if (samePosition(next.enemy.position, target)) break;
+    const step = chooseEnemyStepToward(next, target);
+    if (samePosition(step, next.enemy.position)) break;
+    next = { ...next, enemy: { ...next.enemy, position: step } };
+    if (samePosition(next.enemy.position, target)) break;
+  }
+  return next;
+};
+
+const wobbleBlobletsTowardPipplo = (state: BlobTacticsState): BlobTacticsState => {
+  const occupied = new Set<string>([
+    positionKey(state.pipploPosition),
+    positionKey(state.enemy.position),
+  ]);
+  const bloblets = state.bloblets.map(bloblet => {
+    if (distance(bloblet.position, state.pipploPosition) <= 1) {
+      occupied.add(positionKey(bloblet.position));
+      return bloblet;
+    }
+    const step = adjacentPositions(bloblet.position)
+      .filter(position => !occupied.has(positionKey(position)))
+      .sort((a, b) => distance(a, state.pipploPosition) - distance(b, state.pipploPosition))[0];
+    const moved = step ? { ...bloblet, position: step } : bloblet;
+    occupied.add(positionKey(moved.position));
+    return moved;
+  });
+  return { ...state, bloblets };
+};
+
 const ageTemporaryEffects = (state: BlobTacticsState): BlobTacticsState => {
   const agedBloblets = state.bloblets.map(bloblet => ({ ...bloblet, turnsLeft: bloblet.turnsLeft - 1 }));
   const survivingBloblets = agedBloblets.filter(bloblet => bloblet.turnsLeft > 0);
@@ -1299,7 +1585,6 @@ const damagePipplo = (state: BlobTacticsState, damage: number, title: string): B
 
 export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
   if (state.phase !== "player") return state;
-  const intent = getEnemyIntent(state);
   let next: BlobTacticsState = {
     ...state,
     selectedActionTileId: null,
@@ -1307,14 +1592,18 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
     improviseMode: null,
     hand: [],
     tilesPlayedThisTurn: 0,
-    attackedThisTurn: false,
-    enemyPressure: 0,
+    lastActionTileType: null,
+    enemyPressure: state.enemyPressure,
     animation: "enemy",
   };
+  const autoHelp = runBlobletAutoHelp(next);
+  next = autoHelp.state;
+  if (next.phase !== "player") return { ...next, turn: next.turn + 1, roomTurn: getRoomTurn(state) + 1 };
+  const intent = getEnemyIntent(next);
 
   if (intent.tone === "attack" && intent.targetId) {
     if (intent.targetId === "pipplo" && intent.label === "Pounce") {
-      const moved = moveEnemyTowardPipplo(next, getEnemyMoveSteps(state, true));
+      const moved = moveEnemyTowardPipplo(next, getEnemyMoveSteps(next, true));
       next = moved.state;
       next = distance(next.enemy.position, next.pipploPosition) === 1
         ? damagePipplo(next, 1, "Nibble Imp pounced!")
@@ -1331,6 +1620,32 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
       target?.kind === "bubble" ? "The shield helper absorbed the hit and left a Mass puddle." : "The helper protected Pipplo and left a Mass puddle.",
       target?.kind === "bubble" ? "good" : "warn");
     }
+  } else if ((intent.label === "Gobble snack" || intent.label === "Sip puddle") && intent.targetId) {
+    const treat = next.tileEffects.find(effect => effect.id === intent.targetId);
+    next = withNotice({
+      ...next,
+      phase: "study",
+      tileEffects: next.tileEffects.filter(effect => effect.id !== intent.targetId),
+    }, intent.label === "Gobble snack" ? "Snack stolen!" : "Puddle stolen!",
+    treat?.type === "snack" ? "Nibble Imp ate the snack first. Defeat it the old-fashioned way." : "Nibble Imp sipped the Mass puddle before Pipplo could.",
+    "warn");
+  } else if ((intent.label === "Chase snack" || intent.label === "Chase puddle") && intent.targetId) {
+    const treat = next.tileEffects.find(effect => effect.id === intent.targetId);
+    const moved = treat ? moveEnemyTowardPosition(next, treat.position, getEnemyMoveSteps(next)) : next;
+    const reachedTreat = treat && samePosition(moved.enemy.position, treat.position);
+    next = withNotice({
+      ...moved,
+      phase: "study",
+      tileEffects: reachedTreat
+        ? moved.tileEffects.filter(effect => effect.id !== intent.targetId)
+        : moved.tileEffects,
+    }, reachedTreat
+      ? (treat?.type === "snack" ? "Snack stolen!" : "Puddle stolen!")
+      : "Imp chased a treat",
+    reachedTreat
+      ? (treat?.type === "snack" ? "Nibble Imp got there first. Pipplo can still win by fighting." : "Nibble Imp drank the Mass puddle.")
+      : "Nibble Imp moved toward the nearest treat instead of Pipplo.",
+    reachedTreat ? "warn" : "plain");
   } else if (intent.label === "Rebubble") {
     next = withNotice({
       ...next,
@@ -1359,7 +1674,7 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
       nextId: next.nextId + 1,
     }, intent.label, "A prickly patch appeared. Avoid stepping on it.", "warn");
   } else {
-    const moved = moveEnemyTowardPipplo(next, getEnemyMoveSteps(state));
+    const moved = moveEnemyTowardPipplo(next, getEnemyMoveSteps(next));
     next = withNotice({
       ...moved.state,
       phase: "study",
@@ -1370,16 +1685,17 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
 
   if (next.phase !== "lost") {
     const enraged = next.enemy.kind === "rootLump" && next.enemy.hp <= Math.ceil(next.enemy.maxHp / 2);
-    next = ageTemporaryEffects({
+    next = ageTemporaryEffects(wobbleBlobletsTowardPipplo({
       ...next,
       enemy: enraged && !next.enemy.enraged
         ? { ...next.enemy, enraged: true, attack: next.enemy.attack + 1 }
         : next.enemy,
-    });
+    }));
     if (enraged && !state.enemy.enraged) next = withNotice(next, "Root Lump is furious", "Below half HP, its attacks now hit harder.", "warn");
   }
   if (next.phase === "study") {
-    const enemyPressure = state.attackedThisTurn ? 0 : Math.min(3, state.enemyPressure + 1);
+    next = appendBlobletAutoHelpNotice(next, autoHelp.messages);
+    const enemyPressure = next.attackedThisTurn ? 0 : Math.min(3, state.enemyPressure + 1);
     next = {
       ...next,
       attackedThisTurn: false,
@@ -1392,7 +1708,11 @@ export function endBlobTacticsTurn(state: BlobTacticsState): BlobTacticsState {
         : next.notice,
     };
   }
-  return { ...next, turn: next.turn + 1 };
+  const advanced = { ...next, turn: next.turn + 1, roomTurn: getRoomTurn(state) + 1 };
+  if (advanced.phase === "study" && getRoomGoalType(advanced) === "survive" && getBlobRoomObjective(advanced).done) {
+    return completeBlobRoom(advanced, "Spores survived!", "Pipplo outlasted the garden and absorbed a body mutation.");
+  }
+  return advanced;
 }
 
 export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutationId): BlobTacticsState {
@@ -1415,6 +1735,7 @@ export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutat
     mutations,
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
+    lastActionTileType: null,
     attackedThisTurn: false,
     enemyPressure: 0,
     mapChoices: getMapChoicesAfterDepth(state.mapDepth),
@@ -1426,15 +1747,33 @@ export function claimBlobMutation(state: BlobTacticsState, mutationId: BlobMutat
 
 const enterEncounter = (state: BlobTacticsState, node: BlobMapNodeDef): BlobTacticsState => {
   const enemy = createEnemyForRoom(node.depth, node.enemyKind);
+  const rescueBloblet: Bloblet | null = node.id === "shellHollow"
+    ? {
+        id: `rescue-${state.nextId}`,
+        kind: "basic",
+        hp: 1,
+        turnsLeft: 9,
+        position: { row: 0, col: 0 },
+      }
+    : null;
+  const snackEffect: BlobTileEffect | null = node.id === "nibbleBurrow"
+    ? {
+        id: `snack-${state.nextId + (rescueBloblet ? 1 : 0)}`,
+        type: "snack",
+        position: { row: 3, col: 3 },
+        turnsLeft: 99,
+      }
+    : null;
   return withNotice({
     ...state,
     room: node.depth,
+    roomTurn: 1,
     mapDepth: node.depth,
     phase: "study",
     pipploPosition: { row: 2, col: 0 },
     enemy,
-    bloblets: [],
-    tileEffects: [],
+    bloblets: rescueBloblet ? [rescueBloblet] : [],
+    tileEffects: snackEffect ? [snackEffect] : [],
     hand: [],
     selectedActionTileId: null,
     actionSourceId: null,
@@ -1442,12 +1781,20 @@ const enterEncounter = (state: BlobTacticsState, node: BlobMapNodeDef): BlobTact
     mapChoices: [],
     eventChoices: [],
     visitedNodeIds: [...state.visitedNodeIds, node.id],
+    nextId: state.nextId + (rescueBloblet ? 1 : 0) + (snackEffect ? 1 : 0),
     springFeetUsedThisRoom: false,
     tilesPlayedThisTurn: 0,
+    lastActionTileType: null,
     attackedThisTurn: false,
     enemyPressure: 0,
   }, `${node.name}: ${enemy.name}`,
-  node.kind === "guardian" ? "The guardian is waiting. Study for a fresh tile hand." : "Study for a fresh tile hand and absorb another mutation.",
+  node.id === "nibbleBurrow"
+    ? "Grab the snack to escape fast, or fight the imp if it gets there first."
+    : node.id === "sporeGarden"
+      ? "Survive three enemy turns while spores spread, or defeat the bud early."
+      : node.id === "shellHollow"
+        ? "A little helper is stranded. Rejoin it to clear the room, or fight through."
+        : node.kind === "guardian" ? "The guardian is waiting. Study for a fresh tile hand." : "Study for a fresh tile hand and absorb another mutation.",
   "plain");
 };
 

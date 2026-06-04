@@ -42,6 +42,7 @@ import {
   endBlobTacticsTurn,
   getBlobletAt,
   getBoardTileKey,
+  getBlobRoomObjective,
   getEnemyIntent,
   getEnemyPreview,
   getBlobRegion,
@@ -138,6 +139,20 @@ function getActionTilePrompt(type: BlobActionTileType, hasSource: boolean, enemy
   if (type === "split" || type === "bubble" || type === "sourSplit") return "Tap an empty tile beside Pipplo";
   if (type === "stretch" || type === "bellyFlop" || type === "bump") return `Tap ${enemyName}`;
   return "Tap a highlighted tile";
+}
+
+function getActionTileComboHint(previousType: BlobActionTileType | null, currentType: BlobActionTileType | undefined): string | null {
+  if (!previousType || !currentType) return null;
+  if ((previousType === "split" || previousType === "bubble" || previousType === "sourSplit") && currentType === "rejoin") {
+    return "Combo: quick Rejoin squeezes out +1 Mass.";
+  }
+  if (previousType === "hop" && currentType === "bellyFlop") {
+    return "Combo: Hop-Flop Slam hits harder.";
+  }
+  if (previousType === "goo" && currentType === "bump") {
+    return "Combo: Goo Bumper cracks harder and slides farther.";
+  }
+  return null;
 }
 
 function ActionTile({
@@ -357,8 +372,10 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
   const validTargetKeys = useMemo(() => getValidTargetKeys(state), [state]);
   const selectedTile = state.hand.find(tile => tile.id === state.selectedActionTileId) || null;
   const enemyIntent = getEnemyIntent(state);
+  const roomObjective = getBlobRoomObjective(state);
   const enemyPreview = useMemo(() => getEnemyPreview(state), [state]);
   const chainStep = state.tilesPlayedThisTurn % 3;
+  const comboHint = getActionTileComboHint(state.lastActionTileType, selectedTile?.type);
   const region = getBlobRegion(state.mapDepth);
 
   const playSound = useCallback((kind: "clack" | "study" | "pop" | "route" | "enemy") => {
@@ -600,6 +617,11 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
           {state.enemyPressure > 0 && <span className="blob-lab-pursuit">Pursuit {state.enemyPressure}</span>}
           {state.enemy.enraged && <span className="blob-lab-enraged">Furious</span>}
         </div>
+        <div className={`blob-lab-objective is-${roomObjective.type}`}>
+          <span>Goal</span>
+          <strong>{roomObjective.title}</strong>
+          <small>{roomObjective.progress}</small>
+        </div>
         <div className={`blob-lab-intent is-${enemyIntent.tone}`}>
           <span>Next</span>
           <strong>{enemyIntent.label}</strong>
@@ -718,6 +740,7 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
                   {state.tilesPlayedThisTurn > 0 && chainStep === 0 ? "Mass popped!" : `${state.mutations.includes("rhythmJelly") ? "+2" : "+1"} Mass`}
                 </b>
               </div>
+              {comboHint && <div className="blob-lab-combo-hint">{comboHint}</div>}
             </div>
             <button type="button" className="blob-lab-end-button" onClick={endTurn}>
               End Turn
@@ -897,10 +920,12 @@ export default function BlobTacticsLab({ onExit }: BlobTacticsLabProps) {
             </button>
             <p className="blob-lab-eyebrow">Tiny tactics primer</p>
             <h2>Split yourself to make options</h2>
-            <p>Study creates temporary tiles. Tiles move Pipplo, crack Shell, or bud off little helpers. Every third tile played restores Mass.</p>
+            <p>Study creates temporary tiles. Tiles move Pipplo, crack Shell, grab snacks, or bud off little helpers. Every third tile played restores Mass.</p>
             <p>Any tile can be burned for a weak 1 Mass Scoot or Bonk, but improvised actions do not advance the bounce chain. Ending a turn without hitting the enemy raises Pursuit and speeds up its next approach.</p>
-            <p>Bloblets protect Pipplo because nearby enemies pop helpers before slamming the main body. Rejoin survivors, or slurp the puddle left by a dissolved helper, to recover Mass.</p>
-            <p>The board previews enemy paths, attacks, and hazards before the turn ends. Between fights, choose routes for mutations, recovery, or Tile Tinker bag upgrades.</p>
+            <p>Bloblets protect Pipplo, bonk nearby enemies at turn end, grab nearby snacks or puddles, wobble back toward Pipplo, and dissolve into Mass puddles.</p>
+            <p>Some tile pairs now pop together: Split then Rejoin restores bonus Mass, Hop then Belly Flop hits harder, and Goo then Bump cracks and slides farther.</p>
+            <p>The goal card shows what makes the room special: crack Shell, reach a snack, survive, rescue a bloblet, or absorb the enemy.</p>
+            <p>The board previews enemy paths, attacks, hazards, and stolen snacks before the turn ends. Between fights, choose routes for mutations, recovery, or Tile Tinker bag upgrades.</p>
             <p>After the meadow, the Rootwild adds peculiar bargains and creatures that rebuild Shell or drain Mass when ignored.</p>
           </section>
         </aside>
