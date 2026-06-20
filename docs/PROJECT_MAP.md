@@ -10,9 +10,9 @@ The main game code lives here. Most future gameplay, UI, study-system, and comba
 
 ### `src/experiments/`
 
-Prototype game modes and experimental screens live here. The Blob Tactics lab is in this area.
+Prototype game modes and experimental screens live here. Pipplo's Goo Keep, the active castle-versus-castle Combat Lab, is in this area.
 
-Use this folder when working on experimental combat, tile tactics, prototype UI, or lab-only features.
+Use this folder when working on lane combat, live study pressure, castle progression, prototype UI, or lab-only features.
 
 ### `src/game/`
 

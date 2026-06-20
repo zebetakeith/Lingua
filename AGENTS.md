@@ -33,7 +33,7 @@ This repo is a browser game project. Work carefully and narrowly so Codex stays 
 ## Important Project Areas
 
 - `src/`: main game code.
-- `src/experiments/`: prototype and lab screens, including the Blob Tactics experiment.
+- `src/experiments/`: prototype and lab screens, including the active Pipplo's Goo Keep castle battler.
 - `src/game/`: shared game rules and study/progression logic.
 - `public/`: shipped browser assets. Inspect only the specific asset paths needed.
 - `docs/`: planning notes and project documentation.

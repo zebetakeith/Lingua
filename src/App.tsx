@@ -91,7 +91,7 @@ import {
   type RuneStatus,
   type TileKind,
 } from "./game/runes";
-import BlobTacticsLab from "./experiments/BlobTacticsLab";
+import CastleBattleLab from "./experiments/CastleBattleLab";
 
 const assetUrl = (path?: string | null) => {
   if (!path) return "";
@@ -2724,7 +2724,8 @@ function createInitialCombat(floor: number, playerMaxHp: number, saveData: SaveD
 
 // ─── Main App ────────────────────────────────────────────
 export default function App() {
-  const blobTacticsLabOpen = new URLSearchParams(window.location.search).get("lab") === "blob-tactics";
+  const labId = new URLSearchParams(window.location.search).get("lab");
+  const castleBattleLabOpen = labId === "goo-keep" || labId === "blob-tactics";
   const [screen, setScreen] = useState<GameScreen>("menu");
   const [save, setSave] = useState<SaveData>(loadSave);
   const [combat, setCombat] = useState<CombatState | null>(null);
@@ -5976,9 +5977,9 @@ export default function App() {
   const currentEnemyPlanName = currentEnemyIntent?.actions.map(action => action.name).join(" + ") || "Waiting";
 
   // ─── RENDER: Main Menu ────────────────────────────────
-  if (blobTacticsLabOpen) {
+  if (castleBattleLabOpen) {
     return (
-      <BlobTacticsLab
+      <CastleBattleLab
         onExit={() => {
           window.location.href = window.location.pathname;
         }}
@@ -6059,12 +6060,12 @@ export default function App() {
           <div className="flex flex-wrap justify-center gap-4 mt-4">
             <button
               onClick={() => {
-                window.location.href = `${window.location.pathname}?lab=blob-tactics`;
+                window.location.href = `${window.location.pathname}?lab=goo-keep`;
               }}
               className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-[#fff6bd]/90 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#fff9d8]"
             >
               <Beaker className="w-5 h-5 text-teal-600" />
-              Combat Lab
+              Goo Keep Lab
             </button>
             <button
               onClick={() => setScreen("howToPlay")}

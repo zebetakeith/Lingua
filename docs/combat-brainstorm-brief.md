@@ -1,5 +1,7 @@
 # Lexicon Labyrinth: Game Design and Combat Brainstorm Brief
 
+> Historical design snapshot: the JRPG and Blob Tactics prototypes described below were replaced by Pipplo's Goo Keep, a flashcard-powered castle lane battler. Keep this brief for design history rather than current implementation guidance.
+
 Updated: June 2, 2026
 
 Live prototype: https://zebetakeith.github.io/Lingua/
@@ -940,4 +942,3 @@ Then compare the 4 concepts in a table and recommend the best first prototype. F
 The strongest version of Lexicon Labyrinth should make the player feel:
 
 > "I came here to play with this funny evolving blob, and somehow I also learned my vocabulary."
-

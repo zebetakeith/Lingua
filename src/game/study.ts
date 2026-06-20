@@ -1,5 +1,12 @@
 export type StudyDirection = "term_to_definition" | "definition_to_term";
 export type StudyQuestionType = "multiple_choice" | "self_grade";
+export type StudyRewardCurve = "current" | "quadratic" | "steep";
+
+export interface StudyPressureProfile {
+  label: "Struggling" | "Learning" | "Familiar" | "Strong" | "Mastered";
+  graceMs: number;
+  combatSpeed: number;
+}
 
 export interface DeckStudySettings {
   askTermToDefinition: boolean;
@@ -168,6 +175,38 @@ export function getCorrectAnswerAp(progress: DirectionStudyProgress, questionTyp
   const questionReward = questionType === "self_grade" ? 1.12 : 0.88;
   const dueReward = normalized.dueAt <= now ? 1 : 0.82;
   return roundAp(Math.max(0.1, masteryReward * repeatReward * questionReward * dueReward));
+}
+
+export function getCorrectAnswerReward(
+  progress: DirectionStudyProgress,
+  questionType: StudyQuestionType,
+  curve: StudyRewardCurve,
+  now = Date.now(),
+): number {
+  if (curve === "current") return getCorrectAnswerAp(progress, questionType, now);
+  const normalized = normalizeForToday(progress, now);
+  const difficulty = 1 - normalized.mastery;
+  const baseReward = curve === "steep"
+    ? 0.35 + (3.15 * Math.pow(difficulty, 3))
+    : 0.35 + (2.45 * Math.pow(difficulty, 2));
+  const repeatReward = normalized.correctToday === 0
+    ? 1
+    : normalized.correctToday === 1
+      ? 0.7
+      : normalized.correctToday === 2
+        ? 0.45
+        : 0.25;
+  const questionReward = questionType === "self_grade" ? 1.12 : 0.88;
+  const dueReward = normalized.dueAt <= now ? 1 : 0.82;
+  return roundAp(Math.max(0.1, Math.min(3.5, baseReward * repeatReward * questionReward * dueReward)));
+}
+
+export function getStudyPressureProfile(progress: DirectionStudyProgress): StudyPressureProfile {
+  if (progress.mastery < 0.22) return { label: "Struggling", graceMs: 4_000, combatSpeed: 0.75 };
+  if (progress.mastery < 0.48) return { label: "Learning", graceMs: 3_500, combatSpeed: 0.9 };
+  if (progress.mastery < 0.72) return { label: "Familiar", graceMs: 3_000, combatSpeed: 1 };
+  if (progress.mastery < 0.88) return { label: "Strong", graceMs: 2_500, combatSpeed: 1 };
+  return { label: "Mastered", graceMs: 2_000, combatSpeed: 1 };
 }
 
 export function updateDirectionStudyProgress(

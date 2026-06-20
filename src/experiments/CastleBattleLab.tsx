@@ -1,0 +1,751 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Castle,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  Download,
+  FlaskConical,
+  Heart,
+  Pause,
+  Play,
+  RefreshCcw,
+  Route,
+  Settings,
+  Shield,
+  Sparkles,
+  Swords,
+  X,
+  Zap,
+} from "lucide-react";
+import {
+  answerStudyQuestion,
+  drawStudyQuestion,
+  getSelectedStudyDeckId,
+  getStudyDecks,
+  getStudyQuestionKey,
+  introduceStudyCards,
+  selectStudyDeck,
+  type StudyAnswerResult,
+  type StudyDeckSummary,
+  type StudyQuestion,
+} from "../game/studyBridge";
+import type { StudyRewardCurve } from "../game/study";
+import {
+  CASTLE_CONTRACTS,
+  CASTLE_RALLY_LIMIT,
+  CASTLE_UNIT_DEFS,
+  CASTLE_UPGRADE_DEFS,
+  applyCastleStudyOutcome,
+  activateCastlePower,
+  chooseCastleRoute,
+  claimCastleUpgrade,
+  continueCastleRun,
+  createInitialCastleRun,
+  formatCastleEnergy,
+  getAvailableCastlePowers,
+  getCastleBattleProgress,
+  getPlayerSummonKinds,
+  pauseCastleBattle,
+  recordCastleIntroductions,
+  resumeCastleBattle,
+  retireCastleRun,
+  summonCastleUnit,
+  tickCastleRun,
+  type CastleContractId,
+  type CastlePowerId,
+  type CastleRouteChoice,
+  type CastleRunState,
+  type CastleUnitKind,
+} from "./castleBattle";
+import {
+  clearCastleRun,
+  exportCastleBalanceData,
+  loadCastleProfile,
+  loadCastleRun,
+  saveCastleRun,
+  type CastleDeckProfile,
+} from "./castleStorage";
+import "./CastleBattleLab.css";
+
+interface CastleBattleLabProps {
+  onExit: () => void;
+}
+
+interface ReviewFeedback {
+  correct: boolean;
+  answer: string;
+  reward: number;
+  wasUnseen: boolean;
+  masteryEvent: string;
+}
+
+const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
+  current: "Classic",
+  quadratic: "Curved",
+  steep: "Steep",
+};
+
+function CastleHealth({ current, max, enemy = false }: { current: number; max: number; enemy?: boolean }) {
+  const percent = Math.max(0, Math.min(100, (current / Math.max(1, max)) * 100));
+  return (
+    <div className={`castle-health ${enemy ? "is-enemy" : ""}`}>
+      <span>{enemy ? "Rival Keep" : "Pipplo's Keep"}</span>
+      <div><i style={{ width: `${percent}%` }} /></div>
+      <b>{Math.ceil(current)}/{max}</b>
+    </div>
+  );
+}
+
+function SlimeFace({ kind, side }: { kind: CastleUnitKind; side: "player" | "enemy" }) {
+  return (
+    <span className={`castle-unit-face kind-${kind} side-${side}`} aria-hidden="true">
+      <i /><i />
+      <b />
+    </span>
+  );
+}
+
+function CastleScene({ run }: { run: CastleRunState }) {
+  const battle = run.battle;
+  return (
+    <section className={`castle-scene ${battle.mode === "study" ? "is-live" : "is-paused"}`} aria-label="Castle battlefield">
+      <div className="castle-sky-orb" />
+      <div className="castle-scene-status">
+        <CastleHealth current={battle.playerCastleHp} max={battle.playerCastleMaxHp} />
+        <div className="castle-region-chip">
+          <span>{getCastleBattleProgress(run)}</span>
+          <b>{battle.guardian ? "Guardian" : "Lane battle"}</b>
+        </div>
+        <CastleHealth current={battle.enemyCastleHp} max={battle.enemyCastleMaxHp} enemy />
+      </div>
+
+      <div className="castle-lane">
+        <div className="castle-home is-player">
+          <div className="pipplo-keeper"><i /><i /><b /><em /></div>
+          <div className="castle-tower"><span /><span /><span /></div>
+          {battle.playerBarrier > 0 && <div className="castle-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
+        </div>
+        <div className="castle-road">
+          <div className="castle-mid-flag"><i /><span /></div>
+          {battle.units.map(unit => (
+            <div
+              key={unit.id}
+              className={`castle-lane-unit side-${unit.side}`}
+              style={{ "--unit-x": `${unit.position}%`, "--unit-accent": CASTLE_UNIT_DEFS[unit.kind].accent } as CSSProperties}
+              title={`${CASTLE_UNIT_DEFS[unit.kind].name}: ${Math.ceil(unit.hp)}/${unit.maxHp} HP`}
+            >
+              {unit.shield > 0 && <span className="castle-unit-shield" />}
+              <SlimeFace kind={unit.kind} side={unit.side} />
+              <span className="castle-unit-hp"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
+            </div>
+          ))}
+        </div>
+        <div className="castle-home is-enemy">
+          <div className="castle-tower"><span /><span /><span /></div>
+          <div className="enemy-keeper"><i /><i /><b /></div>
+        </div>
+      </div>
+
+      <div className="castle-battle-strip">
+        <span className="castle-energy"><Sparkles />{formatCastleEnergy(battle.energy)} energy</span>
+        <span className="castle-rally">
+          Enemy Rally
+          {Array.from({ length: CASTLE_RALLY_LIMIT }, (_, index) => <i key={index} className={index < battle.rally ? "is-filled" : ""} />)}
+        </span>
+        <span className="castle-wave">
+          Next: <SlimeFace kind={battle.nextEnemyKind} side="enemy" /> {CASTLE_UNIT_DEFS[battle.nextEnemyKind].name}
+          {run.upgrades.includes("mothEars") && <> · then {CASTLE_UNIT_DEFS[battle.afterNextEnemyKind].name}</>}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function CommandTray({
+  run,
+  onSummon,
+  onPower,
+}: {
+  run: CastleRunState;
+  onSummon: (kind: CastleUnitKind) => void;
+  onPower: (id: CastlePowerId) => void;
+}) {
+  const powers = getAvailableCastlePowers(run.upgrades);
+  return (
+    <div className="castle-command-tray">
+      <div className="castle-command-heading">
+        <span><Sparkles />Spend or bank {formatCastleEnergy(run.battle.energy)} energy</span>
+        <small>Actions enter now and move when the next seen prompt goes live.</small>
+      </div>
+      <div className="castle-command-scroll">
+        {getPlayerSummonKinds().map(kind => {
+          const unit = CASTLE_UNIT_DEFS[kind];
+          return (
+            <button key={kind} disabled={run.battle.energy < unit.cost} onClick={() => onSummon(kind)}>
+              <SlimeFace kind={kind} side="player" />
+              <strong>{unit.name}</strong>
+              <span>{unit.role}</span>
+              <b>{unit.cost}</b>
+            </button>
+          );
+        })}
+        {powers.map(power => (
+          <button key={power.id} className="is-power" disabled={run.battle.energy < power.cost} onClick={() => onPower(power.id)}>
+            <Zap />
+            <strong>{power.name}</strong>
+            <span>{power.description}</span>
+            <b>{power.cost}</b>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StudyCard({
+  question,
+  reveal,
+  graceLeft,
+  combatArmed,
+  interrupted,
+  onOption,
+  onReveal,
+  onSelfGrade,
+  onResume,
+}: {
+  question: StudyQuestion;
+  reveal: boolean;
+  graceLeft: number;
+  combatArmed: boolean;
+  interrupted: boolean;
+  onOption: (option: string) => void;
+  onReveal: () => void;
+  onSelfGrade: (correct: boolean) => void;
+  onResume: () => void;
+}) {
+  const status = !question.seenBefore
+    ? "First exposure · combat safely paused"
+    : interrupted
+      ? "Interrupted · combat paused"
+      : combatArmed
+        ? `Combat live · ${question.pressure.combatSpeed}×`
+        : `Reading grace · ${(graceLeft / 1_000).toFixed(1)}s`;
+  return (
+    <section className={`castle-study-card ${combatArmed ? "is-live" : ""} ${!question.seenBefore ? "is-new" : ""}`}>
+      <div className="castle-study-meta">
+        <span>{question.direction === "term_to_definition" ? "Term → definition" : "Definition → term"}</span>
+        <span>{question.masteryLabel}</span>
+        <span className="castle-study-pressure"><Clock3 />{status}</span>
+      </div>
+      <div className="castle-study-reward">
+        <Sparkles />Worth {formatCastleEnergy(question.reward)}
+      </div>
+      <h2>{question.prompt}</h2>
+      {interrupted ? (
+        <button className="castle-resume-card" onClick={onResume}><Play />Resume this prompt</button>
+      ) : question.questionType === "multiple_choice" ? (
+        <div className="castle-answer-grid">
+          {question.options.map(option => <button key={option} onClick={() => onOption(option)}>{option}</button>)}
+        </div>
+      ) : reveal ? (
+        <div className="castle-self-grade">
+          <strong>{question.answer}</strong>
+          <span>Did you recall it before revealing?</span>
+          <div>
+            <button onClick={() => onSelfGrade(false)}>Not yet</button>
+            <button className="is-correct" onClick={() => onSelfGrade(true)}>Got it</button>
+          </div>
+        </div>
+      ) : (
+        <button className="castle-flip-card" onClick={onReveal}>Reveal answer</button>
+      )}
+    </section>
+  );
+}
+
+function ReviewResult({ feedback }: { feedback: ReviewFeedback }) {
+  return (
+    <div className={`castle-review-result ${feedback.correct ? "is-correct" : "is-wrong"}`}>
+      <div>
+        <b>{feedback.correct ? `+${formatCastleEnergy(feedback.reward)} energy` : feedback.wasUnseen ? "Safe first exposure" : "Enemy Rally increased"}</b>
+        <span>{feedback.correct ? "Recall recorded." : `Correct answer: ${feedback.answer}`}</span>
+      </div>
+      {feedback.masteryEvent && <small>{feedback.masteryEvent}</small>}
+    </div>
+  );
+}
+
+function DeckSetup({
+  decks,
+  selectedDeckId,
+  contractId,
+  rewardCurve,
+  profile,
+  onDeck,
+  onContract,
+  onCurve,
+  onStart,
+  onExit,
+}: {
+  decks: StudyDeckSummary[];
+  selectedDeckId: string;
+  contractId: CastleContractId;
+  rewardCurve: StudyRewardCurve;
+  profile: CastleDeckProfile;
+  onDeck: (id: string) => void;
+  onContract: (id: CastleContractId) => void;
+  onCurve: (curve: StudyRewardCurve) => void;
+  onStart: () => void;
+  onExit: () => void;
+}) {
+  return (
+    <main className="castle-setup-shell">
+      <button className="castle-setup-exit" onClick={onExit}><ArrowLeft />Main menu</button>
+      <section className="castle-setup-card">
+        <div className="castle-setup-pipplo"><i /><i /><b /><em /></div>
+        <p className="castle-eyebrow">Combat Lab · rebuilt</p>
+        <h1>Pipplo's Goo Keep</h1>
+        <p>Recall words, hatch a wobbling army, and push across the lane before the rival keep overwhelms yours.</p>
+
+        <label className="castle-setup-label">Study world</label>
+        <div className="castle-deck-grid">
+          {decks.map(deck => (
+            <button key={deck.id} className={selectedDeckId === deck.id ? "is-selected" : ""} onClick={() => onDeck(deck.id)}>
+              <BookOpen />
+              <strong>{deck.name}</strong>
+              <span>{deck.introducedCount} active · {deck.reviewCount} reviews</span>
+            </button>
+          ))}
+        </div>
+
+        <label className="castle-setup-label">Expedition contract</label>
+        <div className="castle-contract-grid">
+          {(Object.keys(CASTLE_CONTRACTS) as CastleContractId[]).map(id => {
+            const contract = CASTLE_CONTRACTS[id];
+            return (
+              <button key={id} className={contractId === id ? "is-selected" : ""} onClick={() => onContract(id)}>
+                <strong>{contract.name}</strong>
+                <span>{contract.regions} region{contract.regions === 1 ? "" : "s"} · about {contract.minutes} min</span>
+                <small>Up to {contract.newCards} new cards</small>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="castle-setup-bottom">
+          <label>
+            Balance curve
+            <select value={rewardCurve} onChange={event => onCurve(event.target.value as StudyRewardCurve)}>
+              {(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}
+            </select>
+          </label>
+          <div><Sparkles /><b>{profile.unlockedUpgradeIds.length}</b><span>discoveries unlocked</span></div>
+        </div>
+        <button className="castle-start-run" onClick={onStart}><Castle />Begin castle run<ChevronRight /></button>
+      </section>
+    </main>
+  );
+}
+
+const ROUTE_INFO: Record<CastleRouteChoice, { name: string; description: string; icon: typeof Swords }> = {
+  battle: { name: "Straight Road", description: "Press onward with no bargain.", icon: Swords },
+  rest: { name: "Soft Nest", description: "Repair 28 castle health.", icon: Heart },
+  workshop: { name: "Goo Workshop", description: "Begin with 1.5 extra energy.", icon: FlaskConical },
+  event: { name: "Humming Well", description: "Trade 5 castle health for 3 energy.", icon: Sparkles },
+};
+
+export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
+  const [initial] = useState(() => {
+    const deckId = getSelectedStudyDeckId();
+    const restored = loadCastleRun(deckId);
+    return {
+      deckId,
+      run: restored ? pauseCastleBattle(restored, "Saved run restored. Resume when ready.") : null,
+      profile: loadCastleProfile(deckId),
+    };
+  });
+  const [selectedDeckId, setSelectedDeckId] = useState(initial.deckId);
+  const [decks, setDecks] = useState<StudyDeckSummary[]>(getStudyDecks);
+  const [profile, setProfile] = useState(initial.profile);
+  const [run, setRun] = useState<CastleRunState | null>(initial.run);
+  const [contractId, setContractId] = useState<CastleContractId>("regular");
+  const [rewardCurve, setRewardCurve] = useState<StudyRewardCurve>(initial.run?.rewardCurve || "quadratic");
+  const [question, setQuestion] = useState<StudyQuestion | null>(null);
+  const [feedback, setFeedback] = useState<ReviewFeedback | null>(null);
+  const [reveal, setReveal] = useState(false);
+  const [graceLeft, setGraceLeft] = useState(0);
+  const [combatArmed, setCombatArmed] = useState(false);
+  const [interrupted, setInterrupted] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const questionStartedAt = useRef(0);
+  const lastSaveAt = useRef(0);
+
+  const selectedDeck = useMemo(() => decks.find(deck => deck.id === selectedDeckId), [decks, selectedDeckId]);
+  const simulationReady = Boolean(
+    run
+    && question?.seenBefore
+    && combatArmed
+    && !interrupted
+    && run.phase === "battle"
+    && run.battle.mode === "study",
+  );
+
+  useEffect(() => {
+    if (!run) return;
+    const now = Date.now();
+    const important = run.phase !== "battle" || run.battle.mode === "command";
+    if (!important && now - lastSaveAt.current < 1_000) return;
+    lastSaveAt.current = now;
+    setProfile(saveCastleRun(selectedDeckId, run));
+  }, [run, selectedDeckId]);
+
+  useEffect(() => {
+    if (!question?.seenBefore || interrupted || run?.battle.mode !== "study" || combatArmed) return;
+    const timer = window.setInterval(() => {
+      setGraceLeft(current => {
+        if (current <= 50) {
+          setCombatArmed(true);
+          return 0;
+        }
+        return current - 50;
+      });
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [question, interrupted, run?.battle.mode, combatArmed]);
+
+  useEffect(() => {
+    if (!simulationReady || !question) return;
+    const timer = window.setInterval(() => {
+      setRun(current => current ? tickCastleRun(current, 100, question.pressure.combatSpeed) : current);
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [simulationReady, question]);
+
+  const pauseForInterruption = useCallback(() => {
+    if (!question || feedback) return;
+    setCombatArmed(false);
+    setInterrupted(true);
+    setRun(current => current ? pauseCastleBattle(current, "Combat paused after an interruption.") : current);
+  }, [question, feedback]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) pauseForInterruption();
+    };
+    window.addEventListener("blur", pauseForInterruption);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("blur", pauseForInterruption);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [pauseForInterruption]);
+
+  const chooseDeck = (deckId: string) => {
+    selectStudyDeck(deckId);
+    setSelectedDeckId(deckId);
+    setProfile(loadCastleProfile(deckId));
+    const restored = loadCastleRun(deckId);
+    setRun(restored ? pauseCastleBattle(restored, "Saved run restored. Resume when ready.") : null);
+    setDecks(getStudyDecks());
+  };
+
+  const startRun = () => {
+    selectStudyDeck(selectedDeckId);
+    const contract = CASTLE_CONTRACTS[contractId];
+    const introduced = introduceStudyCards(selectedDeckId, contract.newCards);
+    const next = recordCastleIntroductions(
+      createInitialCastleRun(selectedDeckId, contractId, rewardCurve, profile.unlockedUpgradeIds),
+      introduced.length,
+    );
+    clearCastleRun(selectedDeckId);
+    setRun(next);
+    setDecks(getStudyDecks());
+  };
+
+  const beginQuestion = () => {
+    if (!run || run.phase !== "battle") return;
+    const previousKey = question ? getStudyQuestionKey(question) : undefined;
+    const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey);
+    setQuestion(nextQuestion);
+    setFeedback(null);
+    setReveal(false);
+    setInterrupted(false);
+    setCombatArmed(false);
+    const calmBellBonus = run.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 1_000 : 0;
+    setGraceLeft(nextQuestion.seenBefore ? nextQuestion.pressure.graceMs + calmBellBonus : 0);
+    questionStartedAt.current = Date.now();
+    setRun(current => current
+      ? nextQuestion.seenBefore
+        ? resumeCastleBattle(current)
+        : pauseCastleBattle(current, "First exposure protected: combat remains paused while you learn this direction.")
+      : current);
+  };
+
+  const resumeInterruptedQuestion = () => {
+    if (!question) return;
+    setInterrupted(false);
+    setCombatArmed(false);
+    const calmBellBonus = run?.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 1_000 : 0;
+    setGraceLeft(Math.min(2_500, question.pressure.graceMs + calmBellBonus));
+    questionStartedAt.current = Date.now();
+    setRun(current => current
+      ? question.seenBefore
+        ? resumeCastleBattle(current)
+        : pauseCastleBattle(current, "First exposure protected: combat remains paused.")
+      : current);
+  };
+
+  const finishReview = (correct: boolean) => {
+    if (!question || !run || feedback) return;
+    setCombatArmed(false);
+    const result: StudyAnswerResult = answerStudyQuestion(selectedDeckId, question, correct);
+    const responseMs = Math.max(0, Date.now() - questionStartedAt.current);
+    setRun(current => current ? applyCastleStudyOutcome(
+      pauseCastleBattle(current, "Review resolved. Choose a command."),
+      {
+        isCorrect: correct,
+        wasUnseen: result.wasUnseen,
+        reward: correct ? question.reward : 0,
+        progressKey: result.progressKey,
+        responseMs,
+        selfGraded: question.questionType === "self_grade",
+        due: question.due,
+      },
+    ) : current);
+    setFeedback({
+      correct,
+      answer: result.answer,
+      reward: correct ? question.reward : 0,
+      wasUnseen: result.wasUnseen,
+      masteryEvent: result.masteryEvent,
+    });
+    setDecks(getStudyDecks());
+  };
+
+  const revealAnswer = () => {
+    setCombatArmed(false);
+    setReveal(true);
+    setRun(current => current ? pauseCastleBattle(current, "Answer revealed; combat paused for self-grading.") : current);
+  };
+
+  const resetRun = () => {
+    clearCastleRun(selectedDeckId);
+    setRun(null);
+    setQuestion(null);
+    setFeedback(null);
+    setCombatArmed(false);
+    setProfile(loadCastleProfile(selectedDeckId));
+  };
+
+  const downloadBalance = () => {
+    const blob = new Blob([exportCastleBalanceData(selectedDeckId)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `goo-keep-balance-${selectedDeckId}.json`;
+    anchor.click();
+    URL.revokeObjectURL(href);
+  };
+
+  if (!run) {
+    return (
+      <DeckSetup
+        decks={decks}
+        selectedDeckId={selectedDeckId}
+        contractId={contractId}
+        rewardCurve={rewardCurve}
+        profile={profile}
+        onDeck={chooseDeck}
+        onContract={setContractId}
+        onCurve={setRewardCurve}
+        onStart={startRun}
+        onExit={onExit}
+      />
+    );
+  }
+
+  return (
+    <main className="castle-lab-shell">
+      <header className="castle-lab-header">
+        <button onClick={onExit} aria-label="Exit Combat Lab"><ArrowLeft /></button>
+        <div>
+          <span>{selectedDeck?.name || "Study world"}</span>
+          <b>Pipplo's Goo Keep</b>
+        </div>
+        <span className="castle-header-stats"><BookOpen />{run.reviews} <Swords />{run.battlesWon}</span>
+        <button onClick={() => { pauseForInterruption(); setHelpOpen(true); }} aria-label="How to play"><CircleHelp /></button>
+        <button onClick={() => { pauseForInterruption(); setSettingsOpen(true); }} aria-label="Settings and balance"><Settings /></button>
+      </header>
+
+      <CastleScene run={run} />
+
+      <section className="castle-notice" aria-live="polite">
+        <b>{run.battle.mode === "study" ? "Study pressure" : "Command pause"}</b>
+        <span>{run.battle.notice || run.notice}</span>
+      </section>
+
+      {run.phase === "battle" && question && !feedback && (
+        <StudyCard
+          question={question}
+          reveal={reveal}
+          graceLeft={graceLeft}
+          combatArmed={combatArmed}
+          interrupted={interrupted}
+          onOption={option => finishReview(option === question.answer)}
+          onReveal={revealAnswer}
+          onSelfGrade={finishReview}
+          onResume={resumeInterruptedQuestion}
+        />
+      )}
+
+      {run.phase === "battle" && (!question || feedback) && (
+        <section className="castle-command-panel">
+          {feedback ? <ReviewResult feedback={feedback} /> : (
+            <div className="castle-ready-copy">
+              <BookOpen />
+              <div>
+                <b>{run.reviews === 0 ? "The lane waits for your first card" : "Ready for another review"}</b>
+                <span>New directions pause safely. Seen directions begin moving after their reading grace.</span>
+              </div>
+            </div>
+          )}
+          <CommandTray
+            run={run}
+            onSummon={kind => setRun(current => current ? summonCastleUnit(current, kind) : current)}
+            onPower={id => setRun(current => current ? activateCastlePower(current, id) : current)}
+          />
+          <button className="castle-next-card" onClick={beginQuestion}>
+            <BookOpen />{feedback ? "Next flashcard" : "Begin flashcard"}<ChevronRight />
+          </button>
+        </section>
+      )}
+
+      {run.phase === "reward" && (
+        <aside className="castle-overlay">
+          <section className="castle-reward-sheet">
+            <Sparkles />
+            <p className="castle-eyebrow">Castle absorbed</p>
+            <h2>What should Pipplo digest?</h2>
+            <p>Choose one transformation for the rest of this run.</p>
+            <div className="castle-reward-grid">
+              {run.rewardChoices.map(id => {
+                const reward = CASTLE_UPGRADE_DEFS[id];
+                return (
+                  <button key={id} style={{ "--reward-accent": reward.accent } as CSSProperties} onClick={() => {
+                    setCombatArmed(false);
+                    setQuestion(null);
+                    setFeedback(null);
+                    setReveal(false);
+                    setRun(current => current ? claimCastleUpgrade(current, id) : current);
+                  }}>
+                    <span>{reward.category} · {reward.rarity}</span>
+                    <strong>{reward.name}</strong>
+                    <small>{reward.description}</small>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        </aside>
+      )}
+
+      {run.phase === "route" && (
+        <aside className="castle-overlay">
+          <section className="castle-route-sheet">
+            <Route />
+            <p className="castle-eyebrow">Choose the next stop</p>
+            <h2>The road forks around a humming puddle</h2>
+            <div className="castle-route-grid">
+              {run.routeChoices.map(choice => {
+                const info = ROUTE_INFO[choice];
+                const Icon = info.icon;
+                return <button key={choice} onClick={() => {
+                  setCombatArmed(false);
+                  setQuestion(null);
+                  setFeedback(null);
+                  setReveal(false);
+                  setRun(current => current ? chooseCastleRoute(current, choice) : current);
+                }}><Icon /><strong>{info.name}</strong><span>{info.description}</span></button>;
+              })}
+            </div>
+          </section>
+        </aside>
+      )}
+
+      {run.phase === "retire" && (
+        <aside className="castle-overlay">
+          <section className="castle-result-sheet is-win">
+            <Castle />
+            <p className="castle-eyebrow">Contract complete</p>
+            <h2>Pipplo can head home—or wobble deeper</h2>
+            <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · {run.battlesWon} castles defeated</p>
+            <div>
+              <button onClick={() => setRun(current => current ? retireCastleRun(current) : current)}>Retire successfully</button>
+              <button onClick={() => {
+                setCombatArmed(false);
+                setQuestion(null);
+                setFeedback(null);
+                setReveal(false);
+                setRun(current => current ? continueCastleRun(current) : current);
+              }}>Continue endlessly</button>
+            </div>
+          </section>
+        </aside>
+      )}
+
+      {(run.phase === "complete" || run.phase === "lost") && (
+        <aside className="castle-overlay">
+          <section className={`castle-result-sheet ${run.phase === "complete" ? "is-win" : "is-loss"}`}>
+            {run.phase === "complete" ? <Sparkles /> : <Heart />}
+            <p className="castle-eyebrow">{run.phase === "complete" ? "Expedition complete" : "Pipplo needs a nap"}</p>
+            <h2>{run.phase === "complete" ? "The deck-world grew" : "The castle fell; the learning stayed"}</h2>
+            <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · best region {run.bestRegion}</p>
+            <div className="castle-result-stats">
+              <span><b>{run.introducedThisRun}</b>introduced</span>
+              <span><b>{run.upgrades.length}</b>run traits</span>
+              <span><b>{profile.unlockedUpgradeIds.length}</b>discoveries</span>
+            </div>
+            <button onClick={resetRun}><RefreshCcw />Start another run</button>
+          </section>
+        </aside>
+      )}
+
+      {helpOpen && (
+        <aside className="castle-drawer-backdrop" onClick={() => setHelpOpen(false)}>
+          <section className="castle-drawer" onClick={event => event.stopPropagation()}>
+            <button className="castle-drawer-close" onClick={() => setHelpOpen(false)}><X /></button>
+            <p className="castle-eyebrow">How Goo Keep works</p>
+            <h2>Recall powers the nursery</h2>
+            <p>The first appearance of each card direction pauses combat. Once seen, it receives a mastery-based reading grace and then the lane becomes live.</p>
+            <p>Correct recall earns energy. Misses fill Enemy Rally, but recalling the missed direction later removes a Rally pip before it triggers.</p>
+            <p>After every answer, combat pauses. Summon a unit, use Pipplo's castle powers, or bank energy before starting the next card.</p>
+            <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries remain.</p>
+          </section>
+        </aside>
+      )}
+
+      {settingsOpen && (
+        <aside className="castle-drawer-backdrop" onClick={() => setSettingsOpen(false)}>
+          <section className="castle-drawer" onClick={event => event.stopPropagation()}>
+            <button className="castle-drawer-close" onClick={() => setSettingsOpen(false)}><X /></button>
+            <p className="castle-eyebrow">Balance lab</p>
+            <h2>Pressure and telemetry</h2>
+            <label>Reward curve<select value={run.rewardCurve} onChange={event => setRun(current => current ? { ...current, rewardCurve: event.target.value as StudyRewardCurve } : current)}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select></label>
+            <div className="castle-telemetry-grid">
+              <span><b>{formatCastleEnergy(run.battle.telemetry.energyEarned)}</b>energy earned</span>
+              <span><b>{formatCastleEnergy(run.battle.telemetry.energySpent)}</b>energy spent</span>
+              <span><b>{run.battle.telemetry.rallyTriggered}</b>enemy rallies</span>
+              <span><b>{Math.round(run.battle.telemetry.activeCombatMs / 1_000)}s</b>live combat</span>
+            </div>
+            <button className="castle-download" onClick={downloadBalance}><Download />Export local balance data</button>
+            <button className="castle-pause-button" onClick={() => { pauseForInterruption(); setSettingsOpen(false); }}><Pause />Pause current prompt</button>
+          </section>
+        </aside>
+      )}
+    </main>
+  );
+}
