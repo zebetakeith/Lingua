@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   ALL_CASTLE_UPGRADE_IDS,
+  CASTLE_UNIT_DEFS,
   STARTER_CASTLE_UPGRADE_IDS,
   activateCastlePower,
   applyCastleStudyOutcome,
@@ -81,6 +82,31 @@ assert.equal(
   true,
   "Bubble Bud should shield a nearby ally",
 );
+
+const spitletDef = CASTLE_UNIT_DEFS.spitlet;
+const shellDef = CASTLE_UNIT_DEFS.shellSlime;
+let ranged = freshRun();
+ranged = {
+  ...ranged,
+  battle: {
+    ...ranged.battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [
+      { id: "spitlet-test", side: "player", kind: "spitlet", hp: spitletDef.hp, maxHp: spitletDef.hp, shield: 0, position: 36, attackCooldownMs: 0, slowMs: 0, damageBonus: 0, kills: 0 },
+      { id: "shell-test", side: "enemy", kind: "shellSlime", hp: shellDef.hp, maxHp: shellDef.hp, shield: 0, position: 48, attackCooldownMs: 500, slowMs: 0, damageBonus: 0, kills: 0 },
+    ],
+  },
+};
+ranged = tickCastleRun(ranged, 100, 1);
+const projectile = ranged.battle.fxEvents.find(event => event.kind === "projectile");
+assert.ok(projectile, "ranged units should emit a visible travelling projectile");
+assert.equal(projectile.fromPosition, 36, "a projectile should begin at its attacker");
+assert.equal(projectile.position, 48, "a projectile should end at its target");
+assert.equal(projectile.side, "player", "projectile direction should preserve the attacking side");
 
 let hasted = { ...freshRun(), upgrades: ["cleanStreak"], battle: { ...freshRun().battle, energy: 12 } };
 for (let index = 0; index < 5; index += 1) hasted = applyCastleStudyOutcome(hasted, outcome(index));

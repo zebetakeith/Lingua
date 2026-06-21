@@ -196,6 +196,7 @@
 .castle-unit-face.is-production-art.kind-bigChonk { width: 49px; height: 46px; }
 .castle-unit-face.is-production-art.is-unit-action.kind-dartlet { width: 68px; height: 56px; margin: -13px 0 -9px -7px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-bubbleBud { width: 62px; height: 52px; margin: -7px 0 -6px -8px; animation: none; }
+.castle-unit-face.is-production-art.is-unit-action.kind-spitlet { width: 68px; height: 46px; margin: -6px 0 -6px -6px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action > img { opacity: 0; animation: castle-unit-art-action-frame 45ms steps(1, end) 1 forwards; animation-delay: calc(var(--unit-art-frame) * 45ms); }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art > img { animation: castle-unit-art-walk var(--unit-bob, 700ms) ease-in-out infinite; }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art.is-unit-action > img { animation: castle-unit-art-action-frame 45ms steps(1, end) 1 forwards; animation-delay: calc(var(--unit-art-frame) * 45ms); }
@@ -213,6 +214,15 @@
 .castle-battle-fx b { position: absolute; left: 50%; bottom: 8px; min-width: max-content; transform: translateX(-50%); color: #194f53; font-size: 9px; font-weight: 950; text-shadow: 0 1px 0 white, 0 0 5px white; }
 .castle-battle-fx.fx-hit { animation: castle-fx-hit 480ms ease-out both; }
 .castle-battle-fx.fx-hit i { width: 18px; height: 18px; border: 0; background: #fff078; clip-path: polygon(50% 0, 61% 34%, 95% 18%, 72% 48%, 100% 62%, 66% 65%, 72% 100%, 50% 75%, 30% 100%, 34% 66%, 0 64%, 28% 48%, 5% 20%, 39% 35%); }
+.castle-battle-fx.fx-projectile { left: var(--fx-left); bottom: 51px; width: var(--fx-width); height: 0; }
+.castle-battle-fx.fx-projectile::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: linear-gradient(90deg, transparent, rgba(97, 232, 218, 0.72), transparent); transform-origin: left center; animation: castle-fx-projectile-trail 420ms ease-out both; }
+.castle-battle-fx.fx-projectile::after { content: ""; position: absolute; right: -7px; top: -7px; width: 14px; height: 14px; border: 2px solid #7ff3e4; border-radius: 50%; box-shadow: 0 0 9px rgba(80, 224, 211, 0.78); opacity: 0; animation: castle-fx-projectile-impact 520ms ease-out both; }
+.castle-battle-fx.fx-projectile > i { left: 0; top: 0; width: 12px; height: 8px; border: 0; background: #65e8d7; border-radius: 70% 45% 45% 70%; box-shadow: 0 0 8px rgba(70, 224, 208, 0.88), -6px 0 5px rgba(92, 229, 215, 0.48); animation: castle-fx-projectile-player 420ms cubic-bezier(.45,.05,.65,1) both; }
+.castle-battle-fx.fx-projectile > b { left: auto; right: -5px; bottom: 6px; opacity: 0; animation: castle-fx-projectile-number 520ms ease-out both; }
+.castle-battle-fx.fx-projectile.side-enemy::before { background: linear-gradient(90deg, transparent, rgba(218, 135, 229, 0.72), transparent); transform-origin: right center; }
+.castle-battle-fx.fx-projectile.side-enemy::after { left: -7px; right: auto; border-color: #df8bea; box-shadow: 0 0 9px rgba(207, 108, 218, 0.78); }
+.castle-battle-fx.fx-projectile.side-enemy > i { left: 100%; background: #dc8ee8; border-radius: 45% 70% 70% 45%; box-shadow: 0 0 8px rgba(216, 118, 226, 0.88), 6px 0 5px rgba(216, 130, 226, 0.48); animation-name: castle-fx-projectile-enemy; }
+.castle-battle-fx.fx-projectile.side-enemy > b { left: -5px; right: auto; }
 .castle-battle-fx.fx-pop { animation: castle-fx-pop 480ms ease-out both; }
 .castle-battle-fx.fx-pop i { width: 34px; height: 24px; border-color: #ef86ae; box-shadow: 0 0 10px rgba(239, 134, 174, 0.72); }
 .castle-battle-fx.fx-spawn { animation: castle-fx-spawn 450ms ease-out both; }
@@ -232,6 +242,11 @@
 @keyframes castle-home-hit-player { 0%,100% { transform: translateX(0); } 35% { transform: translateX(-5px) rotate(-2deg); } 70% { transform: translateX(3px) rotate(1deg); } }
 @keyframes castle-home-hit-enemy { 0%,100% { transform: scaleX(-1) translateX(0); } 35% { transform: scaleX(-1) translateX(-5px) rotate(-2deg); } 70% { transform: scaleX(-1) translateX(3px) rotate(1deg); } }
 @keyframes castle-fx-hit { from { opacity: 1; transform: scale(.45) rotate(-18deg); } to { opacity: 0; transform: scale(1.45) rotate(22deg); } }
+@keyframes castle-fx-projectile-player { 0% { left: 0; opacity: 0; transform: translate(-50%, -50%) scale(.65); } 16% { opacity: 1; } 82%, 100% { left: 100%; opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes castle-fx-projectile-enemy { 0% { left: 100%; opacity: 0; transform: translate(-50%, -50%) scale(.65); } 16% { opacity: 1; } 82%, 100% { left: 0; opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes castle-fx-projectile-trail { 0% { opacity: 0; transform: scaleX(.08); } 30% { opacity: .78; } 100% { opacity: 0; transform: scaleX(1); } }
+@keyframes castle-fx-projectile-impact { 0%, 70% { opacity: 0; transform: scale(.35); } 73% { opacity: 1; } 100% { opacity: 0; transform: scale(1.8); } }
+@keyframes castle-fx-projectile-number { 0%, 68% { opacity: 0; transform: translateX(0) translateY(0); } 72% { opacity: 1; } 100% { opacity: 0; transform: translateX(0) translateY(-13px); } }
 @keyframes castle-fx-pop { from { opacity: 1; transform: translateY(0) scale(.4); } to { opacity: 0; transform: translateY(-17px) scale(1.55); } }
 @keyframes castle-fx-spawn { from { opacity: 0; transform: scale(.3); } 45% { opacity: 1; } to { opacity: 0; transform: scale(1.6); } }
 @keyframes castle-fx-rise { from { opacity: 1; transform: translateY(4px) scale(.55); } to { opacity: 0; transform: translateY(-19px) scale(1.2); } }
@@ -547,4 +562,8 @@
   .goo-pipplo-sprite img:not(:first-child) { display: none; }
   .castle-unit-face.is-unit-action > img { opacity: 0; }
   .castle-unit-face.is-unit-action > img:first-child { opacity: 1; }
+  .castle-battle-fx.fx-projectile::before,
+  .castle-battle-fx.fx-projectile > i { display: none; }
+  .castle-battle-fx.fx-projectile::after,
+  .castle-battle-fx.fx-projectile > b { opacity: 1; animation: none !important; }
 }

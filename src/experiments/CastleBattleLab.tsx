@@ -138,6 +138,10 @@ const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bubbleBud/attack/0${index + 1}.png`,
   ),
+  spitlet: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/attack/0${index + 1}.png`,
+  ),
 };
 
 function PipploSprite({
@@ -212,9 +216,9 @@ function SlimeFace({
 function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnimation: PipploAnimationState }) {
   const battle = run.battle;
   const region = getCastleRegionDef(run.region);
-  const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => event.kind === "hit" && event.position <= 3);
+  const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => (event.kind === "hit" || event.kind === "projectile") && event.position <= 3);
   const playerCastleHit = Boolean(playerCastleHitEvent);
-  const enemyCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position >= 97);
+  const enemyCastleHit = battle.fxEvents.some(event => (event.kind === "hit" || event.kind === "projectile") && event.position >= 97);
   const celebrating = run.phase === "reward" || run.phase === "retire" || run.phase === "complete";
   const activePipploAnimation: PipploAnimationName = playerCastleHitEvent ? "hurt" : celebrating ? "cheer" : pipploAnimation.name;
   const activePipploSerial = playerCastleHitEvent
@@ -278,17 +282,24 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
             </div>
             );
           })}
-          {battle.fxEvents.map(event => (
-            <span
-              key={event.id}
-              className={`castle-battle-fx fx-${event.kind} side-${event.side}`}
-              style={{ "--fx-x": `${event.position}%` } as CSSProperties}
-              aria-hidden="true"
-            >
-              <i />
-              {event.label && <b>{event.label}</b>}
-            </span>
-          ))}
+          {battle.fxEvents.map(event => {
+            const fromPosition = event.fromPosition ?? event.position;
+            return (
+              <span
+                key={event.id}
+                className={`castle-battle-fx fx-${event.kind} side-${event.side}`}
+                style={{
+                  "--fx-x": `${event.position}%`,
+                  "--fx-left": `${Math.min(fromPosition, event.position)}%`,
+                  "--fx-width": `${Math.max(1, Math.abs(event.position - fromPosition))}%`,
+                } as CSSProperties}
+                aria-hidden="true"
+              >
+                <i />
+                {event.label && <b>{event.label}</b>}
+              </span>
+            );
+          })}
         </div>
         <div className={`castle-home is-enemy ${enemyCastleHit ? "is-hit" : ""}`}>
           <div className="castle-tower"><span /><span /><span /></div>

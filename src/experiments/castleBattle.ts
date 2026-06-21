@@ -20,7 +20,7 @@ export type CastleEventChoiceId =
 export type CastleUnitKind = "piplet" | "dartlet" | "bubbleBud" | "spitlet" | "bigChonk" | "shellSlime" | "nibbleImp" | "sporeBud" | "echoMoth" | "rootLump";
 export type CastlePowerId = "slingshot" | "bubbleGate" | "snackCannon" | "gooMoat" | "timewobble" | "tongueSnatch" | "sporeMortar";
 export type CastleUpgradeCategory = "minion" | "castle" | "trait" | "study";
-export type CastleFxKind = "spawn" | "hit" | "pop" | "heal" | "power" | "shield";
+export type CastleFxKind = "spawn" | "hit" | "projectile" | "pop" | "heal" | "power" | "shield";
 export type CastleUpgradeId =
   | "splitNursery" | "bubbleBrood" | "stretchyLegs" | "gooSoles" | "snackPockets" | "popcornBodies"
   | "relayJelly" | "bigSibling" | "copycatJelly" | "swarmSchool" | "shellPolish" | "overripeSplit"
@@ -81,6 +81,7 @@ export interface CastleFxEvent {
   kind: CastleFxKind;
   side: CastleSide;
   position: number;
+  fromPosition?: number;
   ttlMs: number;
   label?: string;
 }
@@ -632,6 +633,7 @@ function addBattleFx(
   side: CastleSide,
   position: number,
   label?: string,
+  fromPosition?: number,
 ): CastleBattleState {
   return {
     ...battle,
@@ -640,7 +642,8 @@ function addBattleFx(
       kind,
       side,
       position,
-      ttlMs: kind === "power" ? 700 : kind === "hit" ? 650 : 480,
+      fromPosition,
+      ttlMs: kind === "power" ? 700 : kind === "hit" ? 650 : kind === "projectile" ? 520 : 480,
       label,
     }].slice(-14),
     nextFxId: battle.nextFxId + 1,
@@ -767,7 +770,7 @@ function resolveBattleStep(
   const slowById = new Map<string, number>();
   const shieldById = new Map<string, number>();
   const popSplashById = new Map<string, number>();
-  const generatedFx: Array<{ kind: CastleFxKind; side: CastleSide; position: number; label?: string }> = [];
+  const generatedFx: Array<{ kind: CastleFxKind; side: CastleSide; position: number; fromPosition?: number; label?: string }> = [];
   let playerCastleDamage = 0;
   let enemyCastleDamage = 0;
   let energyDrain = 0;
@@ -795,7 +798,9 @@ function resolveBattleStep(
       if (canAttackTarget && target) {
         if (unit.kind === "spitlet" && target.shield > 0) damage += 3;
         damageById.set(target.id, (damageById.get(target.id) || 0) + damage);
-        generatedFx.push({ kind: "hit", side: unit.side, position: target.position, label: `${damage}` });
+        generatedFx.push(stats.range >= 10
+          ? { kind: "projectile", side: unit.side, position: target.position, fromPosition: unit.position, label: `${damage}` }
+          : { kind: "hit", side: unit.side, position: target.position, label: `${damage}` });
         if (unit.side === "player" && hasUpgrade(upgrades, "gooSoles")) {
           slowById.set(target.id, hasUpgrade(upgrades, "puddlePaws") ? 2_600 : 1_500);
         }
@@ -803,11 +808,15 @@ function resolveBattleStep(
       } else if (canAttackCastle) {
         if (unit.side === "player") {
           enemyCastleDamage += damage;
-          generatedFx.push({ kind: "hit", side: "player", position: 98, label: `${damage}` });
+          generatedFx.push(stats.range >= 10
+            ? { kind: "projectile", side: "player", position: 98, fromPosition: unit.position, label: `${damage}` }
+            : { kind: "hit", side: "player", position: 98, label: `${damage}` });
         } else {
           playerCastleDamage += damage;
           if (unit.kind === "echoMoth") energyDrain += 0.15;
-          generatedFx.push({ kind: "hit", side: "enemy", position: 2, label: `${damage}` });
+          generatedFx.push(stats.range >= 10
+            ? { kind: "projectile", side: "enemy", position: 2, fromPosition: unit.position, label: `${damage}` }
+            : { kind: "hit", side: "enemy", position: 2, label: `${damage}` });
         }
       }
       return { ...unit, attackCooldownMs: stats.attackMs };
@@ -905,7 +914,7 @@ function resolveBattleStep(
     damageTaken: next.telemetry.damageTaken + hpDamage,
     damageDealt: next.telemetry.damageDealt + enemyCastleDamage,
   };
-  for (const effect of generatedFx) next = addBattleFx(next, effect.kind, effect.side, effect.position, effect.label);
+  for (const effect of generatedFx) next = addBattleFx(next, effect.kind, effect.side, effect.position, effect.label, effect.fromPosition);
   return advanceGuardianPhase(next, upgrades);
 }
 
