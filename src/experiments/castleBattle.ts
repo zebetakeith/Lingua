@@ -493,7 +493,14 @@ function addBattleFx(
 ): CastleBattleState {
   return {
     ...battle,
-    fxEvents: [...battle.fxEvents, { id: battle.nextFxId, kind, side, position, ttlMs: kind === "power" ? 700 : 480, label }].slice(-14),
+    fxEvents: [...battle.fxEvents, {
+      id: battle.nextFxId,
+      kind,
+      side,
+      position,
+      ttlMs: kind === "power" ? 700 : kind === "hit" ? 650 : 480,
+      label,
+    }].slice(-14),
     nextFxId: battle.nextFxId + 1,
   };
 }

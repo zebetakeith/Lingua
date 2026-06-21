@@ -89,7 +89,7 @@ interface ReviewFeedback {
 }
 
 type CastlePanelMode = "study" | "army";
-type PipploAnimationName = "idle" | "cast";
+type PipploAnimationName = "idle" | "cast" | "hurt";
 
 interface PipploAnimationState {
   name: PipploAnimationName;
@@ -103,7 +103,7 @@ const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
 const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
-  (["idle", "cast"] as const).map(animation => [
+  (["idle", "cast", "hurt"] as const).map(animation => [
     animation,
     Array.from(
       { length: 4 },
@@ -153,8 +153,11 @@ function SlimeFace({ kind, side }: { kind: CastleUnitKind; side: "player" | "ene
 
 function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnimation: PipploAnimationState }) {
   const battle = run.battle;
-  const playerCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position <= 3);
+  const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => event.kind === "hit" && event.position <= 3);
+  const playerCastleHit = Boolean(playerCastleHitEvent);
   const enemyCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position >= 97);
+  const activePipploAnimation: PipploAnimationName = playerCastleHitEvent ? "hurt" : pipploAnimation.name;
+  const activePipploSerial = playerCastleHitEvent ? `hit-${playerCastleHitEvent.id}` : pipploAnimation.serial;
   const friendlyUnits = battle.units.filter(unit => unit.side === "player").length;
   const enemyUnits = battle.units.length - friendlyUnits;
   return (
@@ -174,7 +177,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
 
       <div className="castle-lane">
         <div className={`castle-home is-player ${playerCastleHit ? "is-hit" : ""}`}>
-          <PipploSprite key={`${pipploAnimation.name}-${pipploAnimation.serial}`} className="pipplo-keeper" animation={pipploAnimation.name} />
+          <PipploSprite key={`${activePipploAnimation}-${activePipploSerial}`} className="pipplo-keeper" animation={activePipploAnimation} />
           <div className="castle-tower"><span /><span /><span /></div>
           {battle.playerBarrier > 0 && <div className="castle-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
         </div>
