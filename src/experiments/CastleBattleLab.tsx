@@ -134,6 +134,10 @@ const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/attack/0${index + 1}.png`,
   ),
+  bubbleBud: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bubbleBud/attack/0${index + 1}.png`,
+  ),
 };
 
 function PipploSprite({
