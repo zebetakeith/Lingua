@@ -251,6 +251,14 @@
 .castle-resume-card { min-height: 58px; padding: 10px; color: #174e52; background: white; border: 2px solid rgba(28, 105, 105, 0.16); border-radius: 16px; font-size: 13px; font-weight: 900; box-shadow: 0 5px 0 rgba(33, 98, 98, 0.09); }
 .castle-answer-grid button:hover,
 .castle-flip-card:hover { transform: translateY(-1px); border-color: #65bdb9; }
+.castle-typed-answer { display: grid; gap: 9px; width: min(520px, 100%); margin: 6px auto 0; padding: 14px; background: #e9f6e2; border: 2px solid #b9dda9; border-radius: 19px; }
+.castle-typed-answer label { color: #28696b; font-size: 10px; font-weight: 1000; letter-spacing: 0.05em; text-transform: uppercase; }
+.castle-typed-answer input { width: 100%; min-height: 52px; box-sizing: border-box; padding: 10px 13px; color: #153f45; background: white; border: 2px solid rgba(39, 116, 114, 0.2); border-radius: 13px; font: inherit; font-size: 18px; font-weight: 850; }
+.castle-typed-answer input:focus { border-color: #3d9995; outline: 3px solid rgba(61, 153, 149, 0.18); }
+.castle-typed-answer small { color: #527477; font-size: 8px; line-height: 1.35; }
+.castle-typed-answer button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 46px; color: white; background: linear-gradient(135deg, #398f8d, #236f75); border: 0; border-radius: 13px; font-weight: 950; }
+.castle-typed-answer button:disabled { opacity: 0.42; }
+.castle-typed-answer button svg { width: 16px; }
 .castle-flip-card,
 .castle-resume-card { width: 100%; color: white; background: linear-gradient(135deg, #3e9f9c, #24777d); border-color: transparent; }
 .castle-resume-card { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -459,9 +467,10 @@
 .castle-contract-grid strong { font-size: 13px; }
 .castle-contract-grid span { font-size: 9px; }
 .castle-contract-grid small { font-size: 8px; opacity: 0.7; }
-.castle-setup-bottom { display: flex; align-items: end; justify-content: space-between; gap: 10px; margin: 13px 0; }
+.castle-setup-bottom { display: grid; grid-template-columns: auto auto 1fr; align-items: end; gap: 10px; margin: 13px 0; }
 .castle-setup-bottom label { display: grid; gap: 4px; font-size: 9px; font-weight: 900; }
 .castle-setup-bottom > div { display: grid; grid-template-columns: 25px auto; column-gap: 5px; align-items: center; }
+.castle-setup-bottom > div { justify-self: end; }
 .castle-setup-bottom > div svg { grid-row: 1 / 3; width: 23px; color: #ddb62d; }
 .castle-setup-bottom > div b { font-size: 18px; }
 .castle-setup-bottom > div span { font-size: 8px; }
@@ -480,6 +489,8 @@
   .castle-event-choice-grid button { min-height: 112px; }
   .castle-contract-grid { grid-template-columns: 1fr; }
   .castle-contract-grid button { min-height: 62px; }
+  .castle-setup-bottom { grid-template-columns: 1fr 1fr; }
+  .castle-setup-bottom > div { grid-column: 1 / -1; }
   .castle-setup-pipplo { right: 19px; top: 21px; transform: scale(0.75) rotate(4deg); transform-origin: top right; }
   .castle-setup-card { padding: 22px 16px; }
   .castle-setup-card > p:not(.castle-eyebrow) { padding-right: 58px; }

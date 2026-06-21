@@ -1,4 +1,4 @@
-import type { StudyRewardCurve } from "../game/study";
+import type { StudyRecallMode, StudyRewardCurve } from "../game/study";
 
 export const CASTLE_RUN_VERSION = 1;
 export const CASTLE_LANE_LENGTH = 100;
@@ -148,6 +148,7 @@ export interface CastleRunState {
   battlesWon: number;
   phase: CastleRunPhase;
   rewardCurve: StudyRewardCurve;
+  recallMode: StudyRecallMode;
   upgrades: CastleUpgradeId[];
   draftPoolIds: CastleUpgradeId[];
   rewardChoices: CastleUpgradeId[];
@@ -458,6 +459,7 @@ export function createInitialCastleRun(
   rewardCurve: StudyRewardCurve = "quadratic",
   draftPoolIds: CastleUpgradeId[] = STARTER_CASTLE_UPGRADE_IDS,
   seedOverride?: number,
+  recallMode: StudyRecallMode = "balanced",
 ): CastleRunState {
   const contract = CASTLE_CONTRACTS[contractId];
   const seed = seedOverride ?? seedFromString(`${deckId}:${contractId}:${Date.now()}`);
@@ -473,6 +475,7 @@ export function createInitialCastleRun(
     battlesWon: 0,
     phase: "battle",
     rewardCurve,
+    recallMode,
     upgrades: [],
     draftPoolIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...draftPoolIds])),
     rewardChoices: [],

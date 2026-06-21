@@ -19,6 +19,7 @@ import {
   type StudyDirection,
   type StudyPressureProfile,
   type StudyQuestionType,
+  type StudyRecallMode,
   type StudyRewardCurve,
 } from "./study.ts";
 
@@ -293,6 +294,7 @@ export function drawStudyQuestion(
   deckId: string,
   rewardCurve: StudyRewardCurve,
   previousKey?: string,
+  recallMode: StudyRecallMode = "deck",
 ): StudyQuestion {
   const deck = ensureStudyCards(deckId);
   const settings = normalizeStudySettings(deck.studySettings);
@@ -327,7 +329,7 @@ export function drawStudyQuestion(
       break;
     }
   }
-  const questionType = chooseQuestionType(settings, selected.progress);
+  const questionType = chooseQuestionType(settings, selected.progress, selected.direction, recallMode);
   const seenBefore = selected.progress.seen > 0;
   return {
     cardId: selected.card.id,
@@ -347,6 +349,38 @@ export function drawStudyQuestion(
     pressure: getStudyPressureProfile(selected.progress),
     rewardCurve,
   };
+}
+
+function normalizeTypedAnswer(value: string, direction: StudyDirection): string {
+  let normalized = value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (direction === "term_to_definition") {
+    normalized = normalized.replace(/^(?:a|an|the|to)\s+/, "");
+  }
+  return normalized;
+}
+
+function getTypedAnswerVariants(answer: string, direction: StudyDirection): string[] {
+  const pieces = answer.split(/\s*(?:\/|;|\||\bor\b)\s*/iu).filter(Boolean);
+  return Array.from(new Set(pieces.flatMap(piece => {
+    const withoutParenthetical = piece.replace(/\s*\([^)]*\)\s*/g, " ");
+    return [piece, withoutParenthetical].map(value => normalizeTypedAnswer(value, direction)).filter(Boolean);
+  })));
+}
+
+export function isTypedStudyAnswerCorrect(
+  input: string,
+  answer: string,
+  direction: StudyDirection,
+): boolean {
+  const normalizedInput = normalizeTypedAnswer(input, direction);
+  if (!normalizedInput) return false;
+  return getTypedAnswerVariants(answer, direction).includes(normalizedInput);
 }
 
 export function answerStudyQuestion(

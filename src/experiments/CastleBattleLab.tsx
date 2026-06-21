@@ -28,12 +28,13 @@ import {
   getStudyDecks,
   getStudyQuestionKey,
   introduceStudyCards,
+  isTypedStudyAnswerCorrect,
   selectStudyDeck,
   type StudyAnswerResult,
   type StudyDeckSummary,
   type StudyQuestion,
 } from "../game/studyBridge";
-import type { StudyRewardCurve } from "../game/study";
+import type { StudyRecallMode, StudyRewardCurve } from "../game/study";
 import {
   CASTLE_CONTRACTS,
   CASTLE_EVENT_DEFS,
@@ -104,6 +105,11 @@ const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
   current: "Classic",
   quadratic: "Curved",
   steep: "Steep",
+};
+const RECALL_MODE_LABELS: Record<StudyRecallMode, string> = {
+  balanced: "Balanced recall",
+  deck: "Deck default",
+  typed: "Type every answer",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
 const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
@@ -192,7 +198,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
             key={`${activePipploAnimation}-${activePipploSerial}`}
             className="pipplo-keeper"
             animation={activePipploAnimation}
-            loop={activePipploAnimation === "cheer"}
+            loop={activePipploAnimation === "idle" || activePipploAnimation === "cheer"}
           />
           <div className="castle-tower"><span /><span /><span /></div>
           {battle.playerBarrier > 0 && <div className="castle-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
@@ -295,6 +301,7 @@ function StudyCard({
   combatLive,
   interrupted,
   onOption,
+  onTyped,
   onReveal,
   onSelfGrade,
   onExpose,
@@ -305,11 +312,13 @@ function StudyCard({
   combatLive: boolean;
   interrupted: boolean;
   onOption: (option: string) => void;
+  onTyped: (answer: string) => void;
   onReveal: () => void;
   onSelfGrade: (correct: boolean) => void;
   onExpose: () => void;
   onResume: () => void;
 }) {
+  const [typedAnswer, setTypedAnswer] = useState("");
   const status = !question.seenBefore
     ? "First exposure · combat safely paused"
     : interrupted
@@ -340,6 +349,27 @@ function StudyCard({
         <>
           <h2>{question.prompt}</h2>
           <button className="castle-resume-card" onClick={onResume}><Play />Resume this prompt</button>
+        </>
+      ) : question.questionType === "typed" ? (
+        <>
+          <h2>{question.prompt}</h2>
+          <form className="castle-typed-answer" onSubmit={event => {
+            event.preventDefault();
+            if (typedAnswer.trim()) onTyped(typedAnswer);
+          }}>
+            <label htmlFor={`castle-typed-${question.cardId}`}>Type the {question.direction === "definition_to_term" ? "term" : "meaning"}</label>
+            <input
+              id={`castle-typed-${question.cardId}`}
+              value={typedAnswer}
+              onChange={event => setTypedAnswer(event.target.value)}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              enterKeyHint="done"
+            />
+            <small>Case and punctuation are ignored. Answers separated by / or ; are accepted.</small>
+            <button type="submit" disabled={!typedAnswer.trim()}><ChevronRight />Check recall</button>
+          </form>
         </>
       ) : question.questionType === "multiple_choice" ? (
         <>
@@ -389,10 +419,12 @@ function DeckSetup({
   selectedDeckId,
   contractId,
   rewardCurve,
+  recallMode,
   profile,
   onDeck,
   onContract,
   onCurve,
+  onRecallMode,
   onStart,
   onExit,
 }: {
@@ -400,10 +432,12 @@ function DeckSetup({
   selectedDeckId: string;
   contractId: CastleContractId;
   rewardCurve: StudyRewardCurve;
+  recallMode: StudyRecallMode;
   profile: CastleDeckProfile;
   onDeck: (id: string) => void;
   onContract: (id: CastleContractId) => void;
   onCurve: (curve: StudyRewardCurve) => void;
+  onRecallMode: (mode: StudyRecallMode) => void;
   onStart: () => void;
   onExit: () => void;
 }) {
@@ -454,6 +488,12 @@ function DeckSetup({
               {(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}
             </select>
           </label>
+          <label>
+            Recall style
+            <select value={recallMode} onChange={event => onRecallMode(event.target.value as StudyRecallMode)}>
+              {(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}
+            </select>
+          </label>
           <div><Sparkles /><b>{profile.unlockedUpgradeIds.length}</b><span>discoveries unlocked</span></div>
         </div>
         <button className="castle-start-run" onClick={onStart}><Castle />Begin castle run<ChevronRight /></button>
@@ -501,7 +541,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Clock3,
     eyebrow: "Live recall",
     title: "Seen cards keep the battle moving",
-    copy: "Once a direction has been taught, combat continues while you answer. Difficult cards pay more energy; misses advance Enemy Rally.",
+    copy: "Once taught, combat continues while you answer. Balanced recall asks familiar foreign terms by typing; harder cards pay more energy and misses advance Enemy Rally.",
   },
   {
     icon: Swords,
@@ -556,6 +596,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [run, setRun] = useState<CastleRunState | null>(initial.run);
   const [contractId, setContractId] = useState<CastleContractId>("regular");
   const [rewardCurve, setRewardCurve] = useState<StudyRewardCurve>(initial.run?.rewardCurve || "quadratic");
+  const [recallMode, setRecallMode] = useState<StudyRecallMode>(initial.run?.recallMode || "balanced");
   const [question, setQuestion] = useState<StudyQuestion | null>(null);
   const [feedback, setFeedback] = useState<ReviewFeedback | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -677,6 +718,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setProfile(loadCastleProfile(deckId));
     const restored = loadCastleRun(deckId);
     setRun(restored ? pauseCastleBattle(restored, "Saved run restored. Resume when ready.") : null);
+    setRecallMode(restored?.recallMode || "balanced");
     setDecks(getStudyDecks());
   };
 
@@ -691,8 +733,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
   const startRun = () => {
     selectStudyDeck(selectedDeckId);
-    const next = introduceForBattle(createInitialCastleRun(selectedDeckId, contractId, rewardCurve, profile.unlockedUpgradeIds));
-    const nextQuestion = drawStudyQuestion(selectedDeckId, next.rewardCurve);
+    const next = introduceForBattle(createInitialCastleRun(selectedDeckId, contractId, rewardCurve, profile.unlockedUpgradeIds, undefined, recallMode));
+    const nextQuestion = drawStudyQuestion(selectedDeckId, next.rewardCurve, undefined, next.recallMode);
     clearCastleRun(selectedDeckId);
     setQuestion(nextQuestion);
     setFeedback(null);
@@ -716,7 +758,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const previousKey = previousKeyOverride === null
       ? undefined
       : previousKeyOverride ?? (question ? getStudyQuestionKey(question) : undefined);
-    const nextQuestion = drawStudyQuestion(selectedDeckId, baseRun.rewardCurve, previousKey);
+    const nextQuestion = drawStudyQuestion(selectedDeckId, baseRun.rewardCurve, previousKey, baseRun.recallMode);
     setQuestion(nextQuestion);
     setFeedback(null);
     setReveal(false);
@@ -774,7 +816,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       setRun(current => current ? resumeCastleBattle(applyCastleStudyOutcome(current, outcome)) : current);
     } else {
       const previousKey = getStudyQuestionKey(question);
-      const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey);
+      const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
       setQuestion(nextQuestion);
       setFeedback(nextFeedback);
       setReveal(false);
@@ -807,7 +849,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       selfGraded: false,
       due: true,
     };
-    const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey);
+    const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
     setQuestion(nextQuestion);
     setFeedback(null);
     setReveal(false);
@@ -880,10 +922,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         selectedDeckId={selectedDeckId}
         contractId={contractId}
         rewardCurve={rewardCurve}
+        recallMode={recallMode}
         profile={profile}
         onDeck={chooseDeck}
         onContract={setContractId}
         onCurve={setRewardCurve}
+        onRecallMode={setRecallMode}
         onStart={startRun}
         onExit={onExit}
       />
@@ -938,11 +982,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "battle" && panelMode === "study" && question && !feedback?.wasUnseen && !feedback?.requiresCorrection && (
         <StudyCard
+          key={getStudyQuestionKey(question)}
           question={question}
           reveal={reveal}
           combatLive={simulationReady}
           interrupted={interrupted}
           onOption={option => finishReview(option === question.answer)}
+          onTyped={answer => finishReview(isTypedStudyAnswerCorrect(answer, question.answer, question.direction))}
           onReveal={revealAnswer}
           onSelfGrade={finishReview}
           onExpose={finishExposure}
@@ -1185,6 +1231,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live but requires a correction step and fills Enemy Rally.</p>
+            <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; Deck Default and Type Every Answer remain available in settings.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; the battle keeps moving while that panel is open.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
@@ -1201,6 +1248,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p className="castle-eyebrow">Balance lab</p>
             <h2 id="castle-settings-title">Pressure and telemetry</h2>
             <label>Reward curve<select value={run.rewardCurve} onChange={event => setRun(current => current ? { ...current, rewardCurve: event.target.value as StudyRewardCurve } : current)}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select></label>
+            <label>Recall style<select value={run.recallMode} onChange={event => {
+              const mode = event.target.value as StudyRecallMode;
+              setRecallMode(mode);
+              setRun(current => current ? { ...current, recallMode: mode } : current);
+            }}>{(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}</select></label>
             <label className="castle-sound-toggle"><input type="checkbox" checked={soundEnabled} onChange={event => setSoundEnabled(event.target.checked)} />Sound cues</label>
             <div className="castle-telemetry-grid">
               <span><b>{formatCastleEnergy(run.battle.telemetry.energyEarned)}</b>energy earned</span>

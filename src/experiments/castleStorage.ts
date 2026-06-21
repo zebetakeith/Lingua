@@ -73,6 +73,7 @@ export function loadCastleRun(deckId: string): CastleRunState | null {
     return run?.version === CASTLE_RUN_VERSION
       ? {
           ...run,
+          recallMode: run.recallMode || "balanced",
           pendingEventId: run.pendingEventId || null,
           eventHistory: run.eventHistory || [],
           battle: {

@@ -8,7 +8,7 @@ globalThis.localStorage = {
   clear: () => values.clear(),
 };
 
-const { drawStudyQuestion, introduceStudyCards, selectStudyDeck } = await import("../src/game/studyBridge.ts");
+const { drawStudyQuestion, introduceStudyCards, isTypedStudyAnswerCorrect, selectStudyDeck } = await import("../src/game/studyBridge.ts");
 
 const cards = [
   { id: "new-1", word: "mizu", definition: "water", difficulty: 2, options: [] },
@@ -96,4 +96,23 @@ Math.random = originalRandom;
 assert.equal(fingerprintQuestion.cardId, "new-1", "the fingerprint regression case should select the changed card");
 assert.equal(fingerprintQuestion.seenBefore, false, "changed card content must invalidate stale direction history");
 
-process.stdout.write("Study safety: 7 assertions passed.\n");
+assert.equal(isTypedStudyAnswerCorrect("The water!", "water", "term_to_definition"), true, "typed meanings should ignore leading articles, case, and punctuation");
+assert.equal(isTypedStudyAnswerCorrect("liquid", "water; liquid", "term_to_definition"), true, "typed recall should accept explicit answer variants");
+assert.equal(isTypedStudyAnswerCorrect("dont", "don't", "term_to_definition"), true, "apostrophe differences should not create false misses");
+assert.equal(isTypedStudyAnswerCorrect("cafe", "café", "definition_to_term"), false, "meaningful spelling marks should remain part of foreign-term recall");
+
+putDeck("balanced-typing", {
+  studySettings: {
+    ...settings,
+    askTermToDefinition: false,
+    askDefinitionToTerm: true,
+  },
+  directionProgress: { "new-1::definition_to_term": progress(3) },
+});
+selectStudyDeck("balanced-typing");
+Math.random = () => 0;
+const typedQuestion = drawStudyQuestion("balanced-typing", "quadratic", undefined, "balanced");
+Math.random = originalRandom;
+assert.equal(typedQuestion.questionType, "typed", "balanced recall should type familiar definition-to-term directions");
+
+process.stdout.write("Study safety assertions passed.\n");
