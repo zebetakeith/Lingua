@@ -138,28 +138,19 @@
 .castle-tower span:nth-child(3) { right: 7px; }
 .is-enemy .castle-tower span { background: #844f69; }
 
-.pipplo-keeper,
-.castle-setup-pipplo {
+.pipplo-sprite {
   position: absolute;
   z-index: 7;
-  width: 54px;
-  height: 44px;
-  background: #d8e84f;
-  border: 4px solid #286e70;
-  border-radius: 55% 55% 38% 38%;
-  box-shadow: inset -7px -5px 0 rgba(91, 145, 55, 0.2);
+  width: 76px;
+  height: 76px;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 1px rgba(22, 77, 72, 0.18));
 }
-.pipplo-keeper { left: 16px; top: 1px; }
-.pipplo-keeper i,
-.castle-setup-pipplo i { position: absolute; top: 14px; width: 5px; height: 8px; background: #17464d; border-radius: 50%; }
-.pipplo-keeper i:nth-child(1), .castle-setup-pipplo i:nth-child(1) { left: 14px; }
-.pipplo-keeper i:nth-child(2), .castle-setup-pipplo i:nth-child(2) { right: 14px; }
-.pipplo-keeper b,
-.castle-setup-pipplo b { position: absolute; left: 50%; top: 25px; width: 13px; height: 6px; transform: translateX(-50%); border-bottom: 3px solid #17464d; border-radius: 50%; }
-.pipplo-keeper em,
-.castle-setup-pipplo em { position: absolute; left: 50%; top: -18px; width: 4px; height: 19px; background: #ef7194; border-radius: 99px; transform: rotate(7deg); }
-.pipplo-keeper em::after,
-.castle-setup-pipplo em::after { content: ""; position: absolute; left: -4px; top: -5px; width: 11px; height: 11px; background: #f29bb1; border: 2px solid #286e70; border-radius: 50%; }
+.pipplo-sprite img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; }
+.pipplo-sprite img:first-child { opacity: 1; }
+.pipplo-sprite.is-animated img { animation: pipplo-idle-frame 1.4s steps(1, end) infinite; animation-delay: calc(var(--pipplo-frame) * 350ms); }
+.pipplo-keeper { left: 2px; top: -28px; }
+@keyframes pipplo-idle-frame { 0%, 24.9% { opacity: 1; } 25%, 100% { opacity: 0; } }
 .enemy-keeper { position: absolute; z-index: 7; left: 17px; top: 3px; width: 50px; height: 40px; background: #c76b88; border: 4px solid #6f455f; border-radius: 50% 50% 34% 34%; }
 .enemy-keeper i { position: absolute; top: 13px; width: 5px; height: 8px; background: white; border-radius: 50%; }
 .enemy-keeper i:first-child { left: 12px; }
@@ -230,9 +221,8 @@
 .castle-wave .castle-unit-face i:first-child { left: 4px; }
 .castle-wave .castle-unit-face i:nth-child(2) { right: 4px; }
 .castle-wave .castle-unit-face b { display: none; }
-.castle-scene.is-paused .castle-lane-unit { animation-play-state: paused; }
-.castle-scene.is-live .pipplo-keeper { animation: castle-keeper-bob 1.2s ease-in-out infinite; }
-@keyframes castle-keeper-bob { 0%,100% { transform: translateY(0) scaleY(1); } 50% { transform: translateY(-3px) scaleY(0.94); } }
+.castle-scene.is-paused .castle-lane-unit,
+.castle-scene.is-paused .pipplo-sprite img { animation-play-state: paused; }
 
 .castle-notice { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 12px; background: rgba(255, 249, 215, 0.95); border-bottom: 1px solid rgba(20, 91, 94, 0.12); }
 .castle-notice b { flex: 0 0 auto; padding: 3px 7px; color: white; background: #3f9897; border-radius: 8px; font-size: 9px; text-transform: uppercase; }
@@ -374,12 +364,7 @@
 .castle-tutorial-sheet { width: min(520px, 100%); padding: 24px; text-align: center; background: linear-gradient(180deg, #fffdf0, #eef7d9); border: 3px solid rgba(37, 104, 105, 0.22); border-radius: 28px; box-shadow: 0 24px 70px rgba(13, 65, 68, 0.3); }
 .castle-tutorial-art { position: relative; display: grid; place-items: center; width: 104px; height: 82px; margin: 0 auto 10px; color: #318e92; background: radial-gradient(circle, #fff1a7, #d8efc6 68%); border-radius: 50%; }
 .castle-tutorial-art > svg { width: 35px; height: 35px; transform: translateX(-22px); }
-.castle-tutorial-pipplo { position: absolute; right: 3px; bottom: 4px; width: 48px; height: 38px; background: #d8e84f; border: 3px solid #286e70; border-radius: 55% 55% 38% 38%; }
-.castle-tutorial-pipplo i { position: absolute; top: 12px; width: 4px; height: 7px; background: #17464d; border-radius: 50%; }
-.castle-tutorial-pipplo i:first-child { left: 12px; }
-.castle-tutorial-pipplo i:nth-child(2) { right: 12px; }
-.castle-tutorial-pipplo b { position: absolute; left: 50%; top: 23px; width: 12px; height: 5px; transform: translateX(-50%); border-bottom: 3px solid #17464d; border-radius: 50%; }
-.castle-tutorial-pipplo em { position: absolute; left: 50%; top: -16px; width: 4px; height: 17px; background: #ef7194; border-radius: 99px; transform: rotate(7deg); }
+.castle-tutorial-pipplo { right: -8px; bottom: -12px; width: 76px; height: 76px; }
 .castle-tutorial-sheet h2 { margin: 4px 0 8px; color: #164f54; font-size: 25px; }
 .castle-tutorial-sheet > p:not(.castle-eyebrow) { margin: 0 auto; max-width: 420px; color: #315d63; font-size: 12px; line-height: 1.55; }
 .castle-tutorial-dots { display: flex; justify-content: center; gap: 6px; margin: 18px 0; }
@@ -441,11 +426,7 @@
 .castle-setup-loop svg { flex: 0 0 auto; width: 20px; color: #3b9793; }
 .castle-setup-loop span { display: grid; gap: 1px; font-size: 8px; line-height: 1.3; }
 .castle-setup-loop b { font-size: 10px; }
-.castle-setup-pipplo { right: 34px; top: 24px; width: 76px; height: 62px; transform: rotate(4deg); }
-.castle-setup-pipplo i { top: 22px; width: 7px; height: 11px; }
-.castle-setup-pipplo i:nth-child(1) { left: 20px; }
-.castle-setup-pipplo i:nth-child(2) { right: 20px; }
-.castle-setup-pipplo b { top: 38px; }
+.castle-setup-pipplo { right: 22px; top: 8px; width: 100px; height: 100px; transform: rotate(3deg); }
 .castle-setup-label { display: block; margin: 13px 0 6px; font-size: 10px; font-weight: 1000; letter-spacing: 0.08em; text-transform: uppercase; }
 .castle-deck-grid { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
 .castle-deck-grid button { display: grid; grid-template-columns: 25px minmax(120px, 1fr); gap: 2px 6px; min-width: 200px; padding: 10px; color: #174f54; background: white; border: 2px solid rgba(24, 99, 99, 0.12); border-radius: 15px; text-align: left; }
@@ -501,5 +482,6 @@
 @media (prefers-reduced-motion: reduce) {
   .castle-scene *,
   .castle-lane-unit,
-  .pipplo-keeper { animation: none !important; transition-duration: 0.01ms !important; }
+  .pipplo-sprite img { animation: none !important; transition-duration: 0.01ms !important; }
+  .pipplo-sprite img:not(:first-child) { display: none; }
 }

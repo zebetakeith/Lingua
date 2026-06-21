@@ -96,6 +96,20 @@ const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
   steep: "Steep",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
+const PIPPLO_IDLE_FRAMES = Array.from(
+  { length: 4 },
+  (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/idle/0${index + 1}.png`,
+);
+
+function PipploSprite({ className = "", animated = true }: { className?: string; animated?: boolean }) {
+  return (
+    <div className={`pipplo-sprite ${animated ? "is-animated" : ""} ${className}`.trim()} aria-hidden="true">
+      {PIPPLO_IDLE_FRAMES.map((src, index) => (
+        <img key={src} src={src} alt="" style={{ "--pipplo-frame": index } as CSSProperties} />
+      ))}
+    </div>
+  );
+}
 
 function CastleHealth({ current, max, enemy = false }: { current: number; max: number; enemy?: boolean }) {
   const percent = Math.max(0, Math.min(100, (current / Math.max(1, max)) * 100));
@@ -140,7 +154,7 @@ function CastleScene({ run }: { run: CastleRunState }) {
 
       <div className="castle-lane">
         <div className={`castle-home is-player ${playerCastleHit ? "is-hit" : ""}`}>
-          <div className="pipplo-keeper"><i /><i /><b /><em /></div>
+          <PipploSprite className="pipplo-keeper" />
           <div className="castle-tower"><span /><span /><span /></div>
           {battle.playerBarrier > 0 && <div className="castle-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
         </div>
@@ -358,7 +372,7 @@ function DeckSetup({
     <main className="castle-setup-shell">
       <button className="castle-setup-exit" onClick={onExit}><ArrowLeft />Main menu</button>
       <section className="castle-setup-card">
-        <div className="castle-setup-pipplo"><i /><i /><b /><em /></div>
+        <PipploSprite className="castle-setup-pipplo" />
         <p className="castle-eyebrow">Combat Lab · rebuilt</p>
         <h1>Pipplo's Goo Keep</h1>
         <p>Recall words, hatch a wobbling army, and push across the lane before the rival keep overwhelms yours.</p>
@@ -464,7 +478,7 @@ function CastleTutorial({ step, onStep, onComplete }: { step: number; onStep: (s
   return (
     <aside className="castle-overlay castle-tutorial-overlay">
       <section className="castle-tutorial-sheet" role="dialog" aria-modal="true" aria-labelledby="castle-tutorial-title">
-        <div className="castle-tutorial-art"><Icon /><div className="castle-tutorial-pipplo"><i /><i /><b /><em /></div></div>
+        <div className="castle-tutorial-art"><Icon /><PipploSprite className="castle-tutorial-pipplo" /></div>
         <p className="castle-eyebrow">{current.eyebrow}</p>
         <h2 id="castle-tutorial-title">{current.title}</h2>
         <p>{current.copy}</p>
