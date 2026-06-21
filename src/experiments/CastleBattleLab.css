@@ -76,9 +76,9 @@
   min-height: 270px;
   overflow: hidden;
   background:
-    linear-gradient(180deg, transparent 0 66%, rgba(83, 151, 83, 0.2) 66% 70%, transparent 70%),
-    radial-gradient(ellipse at 50% 100%, #89c66f 0 38%, #acd987 39% 59%, transparent 60%),
-    linear-gradient(180deg, #82cfd9 0%, #d9f0cb 68%, #f7de8c 69%);
+    linear-gradient(180deg, transparent 0 66%, color-mix(in srgb, var(--region-hill-near, #89c66f), transparent 72%) 66% 70%, transparent 70%),
+    radial-gradient(ellipse at 50% 100%, var(--region-hill-near, #89c66f) 0 38%, var(--region-hill-far, #acd987) 39% 59%, transparent 60%),
+    linear-gradient(180deg, var(--region-sky-top, #82cfd9) 0%, var(--region-sky-bottom, #d9f0cb) 68%, var(--region-ground, #f7de8c) 69%);
   border-bottom: 3px solid rgba(32, 103, 97, 0.16);
 }
 
@@ -96,7 +96,7 @@
 
 .castle-scene::before { left: -90px; transform: rotate(10deg); }
 .castle-scene::after { right: -100px; transform: rotate(-8deg); }
-.castle-sky-orb { position: absolute; top: 42px; left: 50%; width: 62px; height: 62px; transform: translateX(-50%); background: rgba(255, 248, 168, 0.85); border-radius: 50%; box-shadow: 0 0 40px #fff6a7; }
+.castle-sky-orb { position: absolute; top: 42px; left: 50%; width: 62px; height: 62px; transform: translateX(-50%); background: var(--region-sun, #fff59a); border-radius: 50%; box-shadow: 0 0 40px color-mix(in srgb, var(--region-sun, #fff59a), transparent 15%); }
 
 .castle-scene-status {
   position: absolute;
@@ -114,12 +114,15 @@
 .castle-health > div i { display: block; height: 100%; background: linear-gradient(90deg, #73bf63, #b2d85a); border-radius: inherit; transition: width 180ms linear; }
 .castle-health.is-enemy > div i { margin-left: auto; background: linear-gradient(90deg, #ef7895, #eea15e); }
 .castle-health b { font-size: 9px; }
-.castle-region-chip { display: grid; gap: 1px; padding: 5px 8px; text-align: center; background: rgba(23, 83, 87, 0.78); color: white; border-radius: 12px; box-shadow: 0 6px 14px rgba(21, 73, 78, 0.18); }
+.castle-region-chip { display: grid; gap: 0; padding: 4px 8px; text-align: center; background: rgba(23, 83, 87, 0.82); color: white; border-radius: 12px; box-shadow: 0 6px 14px rgba(21, 73, 78, 0.18); }
 .castle-region-chip span { font-size: 8px; text-transform: uppercase; opacity: 0.78; }
 .castle-region-chip b { font-size: 10px; }
+.castle-region-chip small { font-size: 7px; font-weight: 900; opacity: 0.8; }
+.castle-scene.is-guardian.phase-2 .castle-region-chip { background: rgba(123, 78, 123, 0.88); }
+.castle-scene.is-guardian.phase-3 .castle-region-chip { background: rgba(150, 61, 78, 0.92); box-shadow: 0 0 0 2px rgba(255, 225, 121, 0.45), 0 6px 14px rgba(96, 32, 48, 0.25); }
 
 .castle-lane { position: absolute; inset: 70px 0 35px; }
-.castle-road { position: absolute; z-index: 3; left: 10%; right: 10%; bottom: 24px; height: 70px; border-radius: 50%; background: linear-gradient(180deg, #f6dca2, #eac581); box-shadow: inset 0 8px 14px rgba(159, 105, 52, 0.12); }
+.castle-road { position: absolute; z-index: 3; left: 10%; right: 10%; bottom: 24px; height: 70px; border-radius: 50%; background: linear-gradient(180deg, var(--region-road-top, #f6dca2), var(--region-road-bottom, #eac581)); box-shadow: inset 0 8px 14px rgba(100, 75, 50, 0.14); }
 .castle-road::after { content: ""; position: absolute; left: 8%; right: 8%; top: 50%; border-top: 2px dashed rgba(129, 90, 47, 0.2); }
 .castle-mid-flag { position: absolute; z-index: 1; left: 50%; bottom: 32px; width: 3px; height: 34px; background: #7c6b57; }
 .castle-mid-flag i { position: absolute; left: 3px; top: 2px; width: 24px; height: 15px; background: #fff0a7; border-radius: 2px 8px 8px 2px; }

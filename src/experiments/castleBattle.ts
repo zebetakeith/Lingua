@@ -104,6 +104,7 @@ export interface CastleBattleTelemetry {
 export interface CastleBattleState {
   battleNumber: number;
   guardian: boolean;
+  guardianPhase: number;
   mode: CastleBattleMode;
   activeTimeMs: number;
   playerCastleHp: number;
@@ -203,6 +204,21 @@ export interface CastleEventDef {
   choices: CastleEventChoiceDef[];
 }
 
+export interface CastleRegionDef {
+  id: number;
+  name: string;
+  shortName: string;
+  enemyTheme: string;
+  skyTop: string;
+  skyBottom: string;
+  hillFar: string;
+  hillNear: string;
+  ground: string;
+  roadTop: string;
+  roadBottom: string;
+  sun: string;
+}
+
 export const CASTLE_CONTRACTS: Record<CastleContractId, CastleContractDef> = {
   quick: { id: "quick", name: "Quick", regions: 1, minutes: 10, newCards: 5, description: "One region and one guardian castle." },
   regular: { id: "regular", name: "Regular", regions: 2, minutes: 25, newCards: 15, description: "Two regions with a deeper build." },
@@ -255,6 +271,55 @@ export const CASTLE_EVENT_DEFS: Record<CastleEventId, CastleEventDef> = {
     ],
   },
 };
+
+export const CASTLE_REGION_DEFS: CastleRegionDef[] = [
+  {
+    id: 1,
+    name: "Dewdrop Meadow",
+    shortName: "Dewdrop",
+    enemyTheme: "Shell ranks and rushing Nibble Imps",
+    skyTop: "#82cfd9",
+    skyBottom: "#d9f0cb",
+    hillFar: "#acd987",
+    hillNear: "#89c66f",
+    ground: "#f7de8c",
+    roadTop: "#f6dca2",
+    roadBottom: "#eac581",
+    sun: "#fff59a",
+  },
+  {
+    id: 2,
+    name: "Echo Mire",
+    shortName: "Echo Mire",
+    enemyTheme: "Spore slows and energy-siphoning Echo Moths",
+    skyTop: "#8bb9d5",
+    skyBottom: "#c9e3d2",
+    hillFar: "#78bfa5",
+    hillNear: "#5fa58e",
+    ground: "#c9d69a",
+    roadTop: "#dacfa7",
+    roadBottom: "#bda77c",
+    sun: "#d9f2ca",
+  },
+  {
+    id: 3,
+    name: "Rootwild Sunset",
+    shortName: "Rootwild",
+    enemyTheme: "Armored roots, moth volleys, and mixed siege waves",
+    skyTop: "#d79bb2",
+    skyBottom: "#f3c79d",
+    hillFar: "#9fbb72",
+    hillNear: "#728f58",
+    ground: "#dfb66d",
+    roadTop: "#e8c38b",
+    roadBottom: "#c8925f",
+    sun: "#ffd47d",
+  },
+];
+
+export function getCastleRegionDef(region: number): CastleRegionDef {
+  return CASTLE_REGION_DEFS[(Math.max(1, region) - 1) % CASTLE_REGION_DEFS.length] || CASTLE_REGION_DEFS[0];
+}
 
 export const CASTLE_UNIT_DEFS: Record<CastleUnitKind, CastleUnitDef> = {
   piplet: { kind: "piplet", name: "Piplet", cost: 0, hp: 12, damage: 2, speed: 4.5, range: 2.4, attackMs: 1_000, accent: "#f4d84a", role: "Free frontline wobble" },
@@ -419,6 +484,7 @@ function createBattle(
   return {
     battleNumber: ((region - 1) * 3) + battleInRegion,
     guardian,
+    guardianPhase: guardian ? 1 : 0,
     mode: "command",
     activeTimeMs: 0,
     playerCastleHp: clamp(carriedCastleHp || playerCastleMaxHp, 1, playerCastleMaxHp),
@@ -581,6 +647,33 @@ function addBattleFx(
   };
 }
 
+function advanceGuardianPhase(battle: CastleBattleState, upgrades: CastleUpgradeId[]): CastleBattleState {
+  if (!battle.guardian || battle.enemyCastleHp <= 0) return battle;
+  const hpRatio = battle.enemyCastleHp / Math.max(1, battle.enemyCastleMaxHp);
+  const targetPhase = hpRatio <= 0.33 ? 3 : hpRatio <= 0.66 ? 2 : 1;
+  if (targetPhase <= battle.guardianPhase) return battle;
+
+  let next = battle;
+  for (let phase = battle.guardianPhase + 1; phase <= targetPhase; phase += 1) {
+    if (phase === 2) {
+      next = addUnit(next, "enemy", "shellSlime", upgrades);
+      next = addBattleFx(next, "power", "enemy", 88, "Phase 2: Rootwall!");
+      next.notice = "Guardian phase 2: a Rootwall defender arrived and enemy pressure is rising.";
+    } else if (phase === 3) {
+      next = addUnit(next, "enemy", "rootLump", upgrades);
+      const rootId = next.units[next.units.length - 1]?.id;
+      next.units = next.units.map(unit => unit.id === rootId
+        ? { ...unit, hp: 30, maxHp: 30, damageBonus: -2 }
+        : unit);
+      next.enemySpawnTimerMs = Math.min(next.enemySpawnTimerMs, 2_800);
+      next = addBattleFx(next, "power", "enemy", 90, "Phase 3: Last roots!");
+      next.notice = "Guardian phase 3: the last roots attack faster behind a siege beast.";
+    }
+    next.guardianPhase = phase;
+  }
+  return next;
+}
+
 function getUnitStats(unit: CastleUnitState, upgrades: CastleUpgradeId[], units: CastleUnitState[]) {
   const def = CASTLE_UNIT_DEFS[unit.kind];
   const friendly = unit.side === "player";
@@ -629,13 +722,14 @@ function resolveBattleStep(
   battleInRegion: number,
   enemyPressureSpeed: number,
 ): CastleBattleState {
+  const guardianPressure = current.guardian ? 1 + (Math.max(1, current.guardianPhase) - 1) * 0.03 : 1;
   let battle: CastleBattleState = {
     ...current,
     activeTimeMs: current.activeTimeMs + deltaMs,
     autoSpawnTimerMs: current.autoSpawnTimerMs - deltaMs,
-    enemySpawnTimerMs: current.enemySpawnTimerMs - (deltaMs * enemyPressureSpeed),
+    enemySpawnTimerMs: current.enemySpawnTimerMs - (deltaMs * enemyPressureSpeed * guardianPressure),
     playerTurretTimerMs: current.playerTurretTimerMs - deltaMs,
-    enemyTurretTimerMs: current.enemyTurretTimerMs - (deltaMs * enemyPressureSpeed),
+    enemyTurretTimerMs: current.enemyTurretTimerMs - (deltaMs * enemyPressureSpeed * guardianPressure),
     enemySlowMs: Math.max(0, current.enemySlowMs - deltaMs),
     hasteMs: Math.max(0, current.hasteMs - deltaMs),
     telemetry: {
@@ -645,7 +739,7 @@ function resolveBattleStep(
     units: current.units.map(unit => ({
       ...unit,
       attackCooldownMs: Math.max(0, unit.attackCooldownMs - (unit.side === "enemy"
-        ? deltaMs * enemyPressureSpeed
+        ? deltaMs * enemyPressureSpeed * guardianPressure
         : deltaMs * (current.hasteMs > 0 ? 1.3 : 1))),
       slowMs: Math.max(0, unit.slowMs - deltaMs),
     })),
@@ -723,7 +817,7 @@ function resolveBattleStep(
       const globalEnemyMultiplier = unit.side === "enemy" && battle.enemySlowMs > 0 ? 0 : 1;
       const hasteMultiplier = unit.side === "player" && battle.hasteMs > 0 ? 1.3 : 1;
       const direction = unit.side === "player" ? 1 : -1;
-      const sidePressureMultiplier = unit.side === "enemy" ? enemyPressureSpeed : 1;
+      const sidePressureMultiplier = unit.side === "enemy" ? enemyPressureSpeed * guardianPressure : 1;
       const movement = stats.speed * (deltaMs / 1_000) * slowMultiplier * globalEnemyMultiplier * hasteMultiplier * sidePressureMultiplier;
       const nextPosition = clamp(unit.position + (direction * movement), 2, CASTLE_LANE_LENGTH - 2);
       return { ...unit, position: nextPosition };
@@ -772,10 +866,11 @@ function resolveBattleStep(
   if (battle.enemyTurretTimerMs <= 0) {
     const target = battle.units.filter(unit => unit.side === "player" && unit.position >= 68 && unit.hp > 0).sort((a, b) => b.position - a.position)[0];
     if (target) {
-      battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, battle.guardian ? 4 : 3).unit : unit);
-      generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${battle.guardian ? 4 : 3}` });
+      const turretDamage = battle.guardian ? battle.guardianPhase >= 3 ? 5 : 4 : 3;
+      battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, turretDamage).unit : unit);
+      generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${turretDamage}` });
     }
-    battle.enemyTurretTimerMs += battle.guardian ? 2_700 : 3_500;
+    battle.enemyTurretTimerMs += battle.guardian ? 2_700 - ((battle.guardianPhase - 1) * 250) : 3_500;
   }
 
   const defeated = battle.units.filter(unit => unit.hp <= 0);
@@ -811,7 +906,7 @@ function resolveBattleStep(
     damageDealt: next.telemetry.damageDealt + enemyCastleDamage,
   };
   for (const effect of generatedFx) next = addBattleFx(next, effect.kind, effect.side, effect.position, effect.label);
-  return next;
+  return advanceGuardianPhase(next, upgrades);
 }
 
 function drawUpgradeChoices(run: CastleRunState): { choices: CastleUpgradeId[]; rngState: number } {

@@ -155,4 +155,30 @@ const mutated = resolveCastleEvent(mutationEvent, "starwellDive");
 assert.equal(mutated.upgrades.length, 1, "a risky mutation event should add one available run mutation");
 assert.equal(mutated.battle.playerCastleHp, 66, "the Starwell dive should visibly charge its fourteen-HP cost");
 
+let guardian = freshRun();
+guardian = {
+  ...guardian,
+  battleInRegion: 3,
+  battle: {
+    ...guardian.battle,
+    guardian: true,
+    guardianPhase: 1,
+    mode: "study",
+    enemyCastleMaxHp: 100,
+    enemyCastleHp: 60,
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [],
+  },
+};
+guardian = tickCastleRun(guardian, 100, 1);
+assert.equal(guardian.battle.guardianPhase, 2, "a guardian should telegraph phase two below 66% HP");
+assert.equal(guardian.battle.units.some(unit => unit.kind === "shellSlime"), true, "guardian phase two should add an armored reinforcement");
+guardian = tickCastleRun({ ...guardian, battle: { ...guardian.battle, enemyCastleHp: 30 } }, 100, 1);
+assert.equal(guardian.battle.guardianPhase, 3, "a guardian should telegraph its final phase below 33% HP");
+assert.equal(guardian.battle.units.some(unit => unit.kind === "rootLump"), true, "guardian phase three should add a siege beast");
+assert.ok(guardian.battle.enemySpawnTimerMs <= 2_800, "guardian phase three should accelerate the next wave");
+
 process.stdout.write("Castle mechanics assertions passed.\n");

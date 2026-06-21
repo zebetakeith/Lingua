@@ -53,6 +53,7 @@ import {
   formatCastleEnergy,
   getAvailableCastlePowers,
   getCastleBattleProgress,
+  getCastleRegionDef,
   getPlayerSummonKinds,
   pauseCastleBattle,
   recordCastleIntroductions,
@@ -165,6 +166,7 @@ function SlimeFace({ kind, side }: { kind: CastleUnitKind; side: "player" | "ene
 
 function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnimation: PipploAnimationState }) {
   const battle = run.battle;
+  const region = getCastleRegionDef(run.region);
   const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => event.kind === "hit" && event.position <= 3);
   const playerCastleHit = Boolean(playerCastleHitEvent);
   const enemyCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position >= 97);
@@ -179,15 +181,26 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
   const enemyUnits = battle.units.length - friendlyUnits;
   return (
     <section
-      className={`castle-scene ${battle.mode === "study" ? "is-live" : "is-paused"}`}
-      aria-label={`Castle battlefield. Pipplo's Keep ${Math.ceil(battle.playerCastleHp)} health, Rival Keep ${Math.ceil(battle.enemyCastleHp)} health. ${friendlyUnits} friendly and ${enemyUnits} enemy units in the lane.`}
+      className={`castle-scene ${battle.mode === "study" ? "is-live" : "is-paused"} ${battle.guardian ? `is-guardian phase-${battle.guardianPhase}` : ""}`}
+      style={{
+        "--region-sky-top": region.skyTop,
+        "--region-sky-bottom": region.skyBottom,
+        "--region-hill-far": region.hillFar,
+        "--region-hill-near": region.hillNear,
+        "--region-ground": region.ground,
+        "--region-road-top": region.roadTop,
+        "--region-road-bottom": region.roadBottom,
+        "--region-sun": region.sun,
+      } as CSSProperties}
+      aria-label={`${region.name} castle battlefield. Pipplo's Keep ${Math.ceil(battle.playerCastleHp)} health, Rival Keep ${Math.ceil(battle.enemyCastleHp)} health. ${friendlyUnits} friendly and ${enemyUnits} enemy units in the lane.`}
     >
       <div className="castle-sky-orb" />
       <div className="castle-scene-status">
         <CastleHealth current={battle.playerCastleHp} max={battle.playerCastleMaxHp} />
-        <div className="castle-region-chip">
+        <div className="castle-region-chip" title={region.enemyTheme}>
           <span>{getCastleBattleProgress(run)}</span>
-          <b>{battle.guardian ? "Guardian" : "Lane battle"}</b>
+          <b>{region.shortName}</b>
+          <small>{battle.guardian ? `Guardian phase ${battle.guardianPhase}/3` : "Lane battle"}</small>
         </div>
         <CastleHealth current={battle.enemyCastleHp} max={battle.enemyCastleMaxHp} enemy />
       </div>
@@ -1180,6 +1193,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Zap /><b>Recall Bolt</b><small>Five correct seen recalls deal 8 damage directly to the rival keep.</small></span>
               <span><Swords /><b>Enemy Rally</b><small>A miss adds a pip. Three pips summon a bonus enemy squad.</small></span>
               <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy so you can choose what to buy.</small></span>
+              <span><Castle /><b>Guardian phases</b><small>At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
             </div>
 
             <h3>Your summons</h3>
@@ -1235,6 +1249,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; the battle keeps moving while that panel is open.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
+            <p>Each region has its own enemy mix and colors. Guardian keeps change at 66% and 33% HP; the center banner names the phase before the new squad arrives.</p>
             <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries remain.</p>
             <button className="castle-tutorial-replay" onClick={() => { setHelpOpen(false); setTutorialStep(0); setTutorialOpen(true); }}><Play />Replay tutorial</button>
           </section>

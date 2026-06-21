@@ -78,6 +78,7 @@ export function loadCastleRun(deckId: string): CastleRunState | null {
           eventHistory: run.eventHistory || [],
           battle: {
             ...run.battle,
+            guardianPhase: run.battle.guardianPhase || (run.battle.guardian ? 1 : 0),
             afterNextEnemyKind: run.battle.afterNextEnemyKind || run.battle.nextEnemyKind,
             recallBoltCharge: run.battle.recallBoltCharge || 0,
             fxEvents: run.battle.fxEvents || [],
