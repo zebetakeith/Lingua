@@ -559,6 +559,16 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   );
 
   useEffect(() => {
+    const preloadedImages = Object.values(PIPPLO_ANIMATION_FRAMES).flat().map(src => {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = src;
+      return image;
+    });
+    return () => preloadedImages.forEach(image => { image.src = ""; });
+  }, []);
+
+  useEffect(() => {
     if (!run) return;
     const now = Date.now();
     const important = run.phase !== "battle" || run.battle.mode === "command";
