@@ -148,9 +148,11 @@
 }
 .pipplo-sprite img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; }
 .pipplo-sprite img:first-child { opacity: 1; }
-.pipplo-sprite.is-animated img { animation: pipplo-idle-frame 1.4s steps(1, end) infinite; animation-delay: calc(var(--pipplo-frame) * 350ms); }
+.pipplo-sprite.is-looping img { animation: pipplo-idle-frame 1.4s steps(1, end) infinite; animation-delay: calc(var(--pipplo-frame) * 350ms); }
+.pipplo-sprite.is-action img { animation: pipplo-action-frame 170ms steps(1, end) 1 forwards; animation-delay: calc(var(--pipplo-frame) * 160ms); }
 .pipplo-keeper { left: 2px; top: -28px; }
 @keyframes pipplo-idle-frame { 0%, 24.9% { opacity: 1; } 25%, 100% { opacity: 0; } }
+@keyframes pipplo-action-frame { 0%, 94% { opacity: 1; } 95%, 100% { opacity: 0; } }
 .enemy-keeper { position: absolute; z-index: 7; left: 17px; top: 3px; width: 50px; height: 40px; background: #c76b88; border: 4px solid #6f455f; border-radius: 50% 50% 34% 34%; }
 .enemy-keeper i { position: absolute; top: 13px; width: 5px; height: 8px; background: white; border-radius: 50%; }
 .enemy-keeper i:first-child { left: 12px; }

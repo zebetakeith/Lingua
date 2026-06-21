@@ -89,6 +89,12 @@ interface ReviewFeedback {
 }
 
 type CastlePanelMode = "study" | "army";
+type PipploAnimationName = "idle" | "cast";
+
+interface PipploAnimationState {
+  name: PipploAnimationName;
+  serial: number;
+}
 
 const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
   current: "Classic",
@@ -96,15 +102,29 @@ const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
   steep: "Steep",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
-const PIPPLO_IDLE_FRAMES = Array.from(
-  { length: 4 },
-  (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/idle/0${index + 1}.png`,
-);
+const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
+  (["idle", "cast"] as const).map(animation => [
+    animation,
+    Array.from(
+      { length: 4 },
+      (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/${animation}/0${index + 1}.png`,
+    ),
+  ]),
+) as Record<PipploAnimationName, string[]>;
 
-function PipploSprite({ className = "", animated = true }: { className?: string; animated?: boolean }) {
+function PipploSprite({
+  className = "",
+  animation = "idle",
+  animated = true,
+}: {
+  className?: string;
+  animation?: PipploAnimationName;
+  animated?: boolean;
+}) {
+  const animationClass = animated ? animation === "idle" ? "is-looping" : "is-action" : "";
   return (
-    <div className={`pipplo-sprite ${animated ? "is-animated" : ""} ${className}`.trim()} aria-hidden="true">
-      {PIPPLO_IDLE_FRAMES.map((src, index) => (
+    <div className={`pipplo-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
+      {PIPPLO_ANIMATION_FRAMES[animation].map((src, index) => (
         <img key={src} src={src} alt="" style={{ "--pipplo-frame": index } as CSSProperties} />
       ))}
     </div>
@@ -131,7 +151,7 @@ function SlimeFace({ kind, side }: { kind: CastleUnitKind; side: "player" | "ene
   );
 }
 
-function CastleScene({ run }: { run: CastleRunState }) {
+function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnimation: PipploAnimationState }) {
   const battle = run.battle;
   const playerCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position <= 3);
   const enemyCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position >= 97);
@@ -154,7 +174,7 @@ function CastleScene({ run }: { run: CastleRunState }) {
 
       <div className="castle-lane">
         <div className={`castle-home is-player ${playerCastleHit ? "is-hit" : ""}`}>
-          <PipploSprite className="pipplo-keeper" />
+          <PipploSprite key={`${pipploAnimation.name}-${pipploAnimation.serial}`} className="pipplo-keeper" animation={pipploAnimation.name} />
           <div className="castle-tower"><span /><span /><span /></div>
           {battle.playerBarrier > 0 && <div className="castle-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
         </div>
@@ -520,10 +540,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [pipploAnimation, setPipploAnimation] = useState<PipploAnimationState>({ name: "idle", serial: 0 });
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(CASTLE_SOUND_KEY) !== "off");
   const questionStartedAt = useRef(0);
   const lastSaveAt = useRef(0);
   const previousPhase = useRef<CastleRunState["phase"] | null>(initial.run?.phase || null);
+  const pipploAnimationTimer = useRef<number | null>(null);
 
   const selectedDeck = useMemo(() => decks.find(deck => deck.id === selectedDeckId), [decks, selectedDeckId]);
   const simulationReady = Boolean(
@@ -557,6 +579,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     return () => window.clearTimeout(timer);
   }, [feedback]);
 
+  useEffect(() => () => {
+    if (pipploAnimationTimer.current !== null) window.clearTimeout(pipploAnimationTimer.current);
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(CASTLE_SOUND_KEY, soundEnabled ? "on" : "off");
   }, [soundEnabled]);
@@ -587,6 +613,15 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setInterrupted(true);
     setRun(current => current ? pauseCastleBattle(current, "Combat paused after an interruption.") : current);
   }, [question]);
+
+  const triggerPipploAnimation = useCallback((name: Exclude<PipploAnimationName, "idle">) => {
+    if (pipploAnimationTimer.current !== null) window.clearTimeout(pipploAnimationTimer.current);
+    setPipploAnimation(current => ({ name, serial: current.serial + 1 }));
+    pipploAnimationTimer.current = window.setTimeout(() => {
+      setPipploAnimation(current => ({ name: "idle", serial: current.serial + 1 }));
+      pipploAnimationTimer.current = null;
+    }, 650);
+  }, []);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -672,6 +707,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     if (!question || !run || feedback?.wasUnseen || feedback?.requiresCorrection) return;
     const firesRecallBolt = correct && question.seenBefore && run.battle.recallBoltCharge === CASTLE_RECALL_BOLT_LIMIT - 1;
     playCastleSound(firesRecallBolt ? "bolt" : correct ? "correct" : "wrong", soundEnabled);
+    if (correct && question.seenBefore) triggerPipploAnimation("cast");
     const result: StudyAnswerResult = answerStudyQuestion(selectedDeckId, question, correct);
     const responseMs = Math.max(0, Date.now() - questionStartedAt.current);
     const outcome = {
@@ -787,6 +823,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const power = CASTLE_POWER_DEFS[id];
     if (!run || run.phase !== "battle" || run.battle.energy < power.cost) return;
     playCastleSound("power", soundEnabled);
+    triggerPipploAnimation("cast");
     setRun(current => current ? activateCastlePower(current, id) : current);
   };
 
@@ -830,7 +867,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         <button onClick={() => { pauseForInterruption(); setSettingsOpen(true); }} aria-label="Settings and balance"><Settings /></button>
       </header>
 
-      <CastleScene run={run} />
+      <CastleScene run={run} pipploAnimation={pipploAnimation} />
 
       <section className="castle-notice" aria-live="polite">
         <b>{tutorialOpen ? "Tutorial pause" : run.battle.mode === "study" ? "Combat live" : question && !question.seenBefore ? "New card pause" : "Paused"}</b>
