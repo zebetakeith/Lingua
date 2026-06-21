@@ -416,6 +416,20 @@ const ROUTE_INFO: Record<CastleRouteChoice, { name: string; description: string;
   event: { name: "Humming Well", description: "Trade 5 castle health for 3 energy.", icon: Sparkles },
 };
 
+const CASTLE_UNIT_GUIDE: Partial<Record<CastleUnitKind, string>> = {
+  dartlet: "Cheap and very fast. Best for quick pressure, but fragile in a long fight.",
+  bubbleBud: "Periodically gives a nearby ally 3 shield, up to 18. It supports instead of attacking when an ally is close.",
+  spitlet: "Attacks from long range and deals 3 bonus damage when cracking a shield.",
+  bigChonk: "A slow, durable siege unit. Bank energy for one when the lane needs a lasting frontline.",
+  shellSlime: "Arrives with 6 shield and stalls light attackers.",
+  nibbleImp: "A fragile but dangerous sprinter that punishes an undefended lane.",
+  sporeBud: "Lobs ranged spores that slow the friendly unit it hits.",
+  echoMoth: "Attacks from range and siphons 0.15 energy whenever it reaches Pipplo’s keep.",
+  rootLump: "A guardian siege beast with armor, heavy attacks, and enough health to anchor an enemy wave.",
+};
+
+const ENEMY_GUIDE_KINDS: CastleUnitKind[] = ["shellSlime", "nibbleImp", "sporeBud", "echoMoth", "rootLump"];
+
 const CASTLE_TUTORIAL_STEPS = [
   {
     icon: BookOpen,
@@ -489,6 +503,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [panelMode, setPanelMode] = useState<CastlePanelMode>("study");
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(CASTLE_SOUND_KEY) !== "off");
@@ -542,15 +557,16 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   }, [run, soundEnabled]);
 
   useEffect(() => {
-    if (!helpOpen && !settingsOpen) return;
+    if (!helpOpen && !settingsOpen && !guideOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setHelpOpen(false);
       setSettingsOpen(false);
+      setGuideOpen(false);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [helpOpen, settingsOpen]);
+  }, [helpOpen, settingsOpen, guideOpen]);
 
   const pauseForInterruption = useCallback(() => {
     if (!question) return;
@@ -866,6 +882,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <b>{simulationReady ? "The lane is still fighting" : question && !question.seenBefore ? "An unseen direction is protecting the lane" : "Combat is manually paused"}</b>
               <span>{question ? `Waiting flashcard: ${question.prompt}` : "Start flashcards when your army is ready."}</span>
             </div>
+            <button className="castle-guide-button" onClick={() => { pauseForInterruption(); setGuideOpen(true); }}><CircleHelp />Field guide<small>safe pause</small></button>
           </div>
           <CommandTray
             run={run}
@@ -973,6 +990,53 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       )}
 
       {tutorialOpen && <CastleTutorial step={tutorialStep} onStep={setTutorialStep} onComplete={finishTutorial} />}
+
+      {guideOpen && (
+        <aside className="castle-drawer-backdrop" onClick={() => setGuideOpen(false)}>
+          <section className="castle-drawer castle-field-guide" role="dialog" aria-modal="true" aria-labelledby="castle-guide-title" onClick={event => event.stopPropagation()}>
+            <button className="castle-drawer-close" onClick={() => setGuideOpen(false)}><X /></button>
+            <p className="castle-eyebrow">Pipplo’s field guide</p>
+            <h2 id="castle-guide-title">What everything does</h2>
+
+            <h3>Battle rhythm</h3>
+            <div className="castle-guide-meter-grid">
+              <span><Sparkles /><b>Energy</b><small>Correct recalls fund summons and castle powers.</small></span>
+              <span><Zap /><b>Recall Bolt</b><small>Five correct seen recalls deal 8 damage directly to the rival keep.</small></span>
+              <span><Swords /><b>Enemy Rally</b><small>A miss adds a pip. Three pips summon a bonus enemy squad.</small></span>
+              <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy so you can choose what to buy.</small></span>
+            </div>
+
+            <h3>Your summons</h3>
+            <div className="castle-guide-list">
+              {getPlayerSummonKinds().map(kind => {
+                const unit = CASTLE_UNIT_DEFS[kind];
+                return <article key={kind}><SlimeFace kind={kind} side="player" /><div><b>{unit.name}</b><span>{CASTLE_UNIT_GUIDE[kind]}</span><small>{unit.cost} energy · {unit.hp} HP · {unit.damage} attack · {unit.range >= 10 ? "ranged" : unit.speed >= 7 ? "fast" : "melee"}</small></div></article>;
+              })}
+            </div>
+
+            <h3>Castle powers</h3>
+            <div className="castle-guide-list is-powers">
+              {Object.values(CASTLE_POWER_DEFS).map(power => {
+                const unlocked = !power.requiredUpgradeId || run.upgrades.includes(power.requiredUpgradeId);
+                return <article key={power.id}><Zap /><div><b>{power.name}</b><span>{power.description}</span><small>{power.cost} energy · {unlocked ? "available this battle" : `requires ${CASTLE_UPGRADE_DEFS[power.requiredUpgradeId!].name}`}</small></div></article>;
+              })}
+            </div>
+
+            <h3>Enemy families</h3>
+            <div className="castle-guide-list">
+              {ENEMY_GUIDE_KINDS.map(kind => {
+                const unit = CASTLE_UNIT_DEFS[kind];
+                return <article key={kind}><SlimeFace kind={kind} side="enemy" /><div><b>{unit.name}</b><span>{CASTLE_UNIT_GUIDE[kind]}</span><small>{unit.hp} HP · {unit.damage} attack · {unit.range >= 10 ? "ranged" : unit.speed >= 7 ? "fast" : "melee"}</small></div></article>;
+              })}
+            </div>
+
+            <h3>Current run build</h3>
+            <div className="castle-guide-build">
+              {run.upgrades.length > 0 ? run.upgrades.map(id => <span key={id}><b>{CASTLE_UPGRADE_DEFS[id].name}</b>{CASTLE_UPGRADE_DEFS[id].description}</span>) : <p>Defeat the first castle to choose your first mutation.</p>}
+            </div>
+          </section>
+        </aside>
+      )}
 
       {helpOpen && (
         <aside className="castle-drawer-backdrop" onClick={() => setHelpOpen(false)}>

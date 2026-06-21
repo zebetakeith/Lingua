@@ -293,9 +293,12 @@
 .castle-army-panel { animation: castle-panel-slide-in 180ms ease-out; }
 .castle-army-status { display: flex; align-items: center; gap: 10px; padding: 10px 11px; color: #174f54; background: #e4f1db; border: 1px solid #bad5ad; border-radius: 15px; }
 .castle-army-status > svg { width: 28px; color: #d66e87; }
-.castle-army-status > div { display: grid; gap: 2px; }
+.castle-army-status > div { flex: 1; display: grid; gap: 2px; }
 .castle-army-status b { font-size: 12px; }
 .castle-army-status span { font-size: 9px; opacity: 0.72; }
+.castle-guide-button { display: grid; grid-template-columns: 16px auto; gap: 0 4px; align-items: center; min-height: 38px; padding: 5px 8px; color: #236e72; background: white; border: 1px solid rgba(35, 110, 114, 0.16); border-radius: 11px; font-size: 9px; font-weight: 950; }
+.castle-guide-button svg { grid-row: 1 / 3; width: 16px; }
+.castle-guide-button small { font-size: 7px; font-weight: 800; opacity: 0.6; }
 .castle-back-to-study { display: flex; align-items: center; justify-content: center; gap: 7px; min-height: 46px; color: white; background: linear-gradient(135deg, #3e9f9c, #216e75); border: 0; border-radius: 14px; font-size: 13px; font-weight: 950; box-shadow: 0 5px 0 #175a61; }
 .castle-back-to-study svg { width: 17px; }
 .castle-feedback-toast { position: fixed; z-index: 70; left: 50%; top: max(66px, calc(env(safe-area-inset-top) + 58px)); width: min(520px, calc(100vw - 24px)); transform: translateX(-50%); pointer-events: none; animation: castle-feedback-pop 220ms ease-out; filter: drop-shadow(0 10px 20px rgba(26, 75, 77, 0.22)); }
@@ -394,6 +397,25 @@
 .castle-drawer { position: relative; width: min(420px, 92vw); height: 100dvh; max-height: none; padding: max(28px, env(safe-area-inset-top)) 22px 24px; border-radius: 28px 0 0 28px; }
 .castle-drawer-close { position: absolute; right: 14px; top: max(14px, env(safe-area-inset-top)); display: grid; place-items: center; width: 36px; height: 36px; color: #246e73; background: white; border: 1px solid rgba(30, 99, 102, 0.14); border-radius: 50%; }
 .castle-drawer p:not(.castle-eyebrow) { padding: 10px; font-size: 12px; line-height: 1.5; background: rgba(255,255,255,0.55); border-radius: 13px; }
+.castle-field-guide h3 { margin: 20px 0 8px; color: #246f73; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.castle-guide-meter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.castle-guide-meter-grid > span { display: grid; grid-template-columns: 24px 1fr; gap: 1px 6px; align-items: center; padding: 9px; background: rgba(255,255,255,0.76); border: 1px solid rgba(30, 102, 104, 0.12); border-radius: 12px; }
+.castle-guide-meter-grid svg { grid-row: 1 / 3; width: 21px; color: #d4a824; }
+.castle-guide-meter-grid b { font-size: 10px; }
+.castle-guide-meter-grid small { font-size: 8px; line-height: 1.35; opacity: 0.72; }
+.castle-guide-list { display: grid; gap: 7px; }
+.castle-guide-list article { display: grid; grid-template-columns: 46px 1fr; gap: 8px; align-items: center; padding: 9px; background: rgba(255,255,255,0.78); border: 1px solid rgba(30, 102, 104, 0.12); border-radius: 13px; }
+.castle-guide-list article > .castle-unit-face,
+.castle-guide-list article > svg { justify-self: center; width: 34px; }
+.castle-guide-list article > div { display: grid; gap: 2px; }
+.castle-guide-list article b { font-size: 11px; }
+.castle-guide-list article span { font-size: 9px; line-height: 1.35; }
+.castle-guide-list article small { color: #3b7778; font-size: 8px; font-weight: 900; }
+.castle-guide-list.is-powers article > svg { color: #c99e1d; }
+.castle-guide-build { display: grid; gap: 6px; }
+.castle-guide-build > span { display: grid; gap: 2px; padding: 8px 10px; background: #fff7cc; border: 1px solid #eadc91; border-radius: 11px; font-size: 8px; line-height: 1.35; }
+.castle-guide-build > span b { font-size: 10px; }
+.castle-guide-build > p { margin: 0 !important; }
 .castle-drawer label { display: grid; gap: 5px; margin: 14px 0; font-size: 11px; font-weight: 900; }
 .castle-drawer select,
 .castle-setup-bottom select { min-height: 40px; padding: 6px 9px; color: #164d51; background: white; border: 1px solid rgba(30, 99, 102, 0.2); border-radius: 11px; font-weight: 800; }
