@@ -122,6 +122,13 @@ const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fr
     ),
   ]),
 ) as Record<PipploAnimationName, string[]>;
+const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
+  piplet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/piplet/seed-v1.png`,
+  dartlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/seed-v1.png`,
+  bubbleBud: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bubbleBud/seed-v1.png`,
+  spitlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/seed-v1.png`,
+  bigChonk: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/seed-v1.png`,
+};
 
 function PipploSprite({
   className = "",
@@ -156,6 +163,14 @@ function CastleHealth({ current, max, enemy = false }: { current: number; max: n
 }
 
 function SlimeFace({ kind, side }: { kind: CastleUnitKind; side: "player" | "enemy" }) {
+  const art = side === "player" ? FRIENDLY_UNIT_ART[kind] : undefined;
+  if (art) {
+    return (
+      <span className={`castle-unit-face is-production-art kind-${kind} side-${side}`} aria-hidden="true">
+        <img src={art} alt="" />
+      </span>
+    );
+  }
   return (
     <span className={`castle-unit-face kind-${kind} side-${side}`} aria-hidden="true">
       <i /><i />
@@ -636,7 +651,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   );
 
   useEffect(() => {
-    const preloadedImages = Object.values(PIPPLO_ANIMATION_FRAMES).flat().map(src => {
+    const preloadedImages = [
+      ...Object.values(PIPPLO_ANIMATION_FRAMES).flat(),
+      ...Object.values(FRIENDLY_UNIT_ART),
+    ].map(src => {
       const image = new Image();
       image.decoding = "async";
       image.src = src;
