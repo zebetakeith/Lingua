@@ -4,7 +4,11 @@ import {
   STARTER_CASTLE_UPGRADE_IDS,
   activateCastlePower,
   applyCastleStudyOutcome,
+  canChooseCastleEvent,
+  chooseCastleRoute,
+  claimCastleUpgrade,
   createInitialCastleRun,
+  resolveCastleEvent,
   resumeCastleBattle,
   summonCastleUnit,
   tickCastleRun,
@@ -105,4 +109,50 @@ progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon:
 assert.equal(progressionProfile.guardianClears, 2, "guardian clears should accumulate across separate runs");
 assert.equal(progressionProfile.unlockedUpgradeIds.length, STARTER_CASTLE_UPGRADE_IDS.length + 2, "each accumulated guardian clear should unlock one discovery");
 
-process.stdout.write("Castle mechanics: 22 assertions passed.\n");
+let routeDraft = {
+  ...freshRun(),
+  phase: "reward",
+  rewardChoices: ["springTail"],
+  carriedCastleHp: 50,
+  carriedEnergy: 0,
+};
+routeDraft = claimCastleUpgrade(routeDraft, "springTail");
+assert.equal(routeDraft.phase, "route", "claiming a non-final reward should open a route draft");
+assert.equal(routeDraft.routeChoices.length, 3, "each route draft should offer three paths, not every route every time");
+assert.equal(routeDraft.routeChoices.includes("battle"), true, "the safe straight road should always remain available");
+assert.equal(new Set(routeDraft.routeChoices).size, 3, "route choices should never duplicate");
+
+const workshop = chooseCastleRoute({ ...routeDraft, routeChoices: ["workshop"] }, "workshop");
+assert.equal(workshop.phase, "battle", "a workshop route should advance to the next battle");
+assert.equal(workshop.battle.energy, 1.5, "a workshop should grant 1.5 starting energy");
+assert.equal(workshop.battle.playerBarrier, 8, "a workshop should grant an eight-point starting barrier");
+
+const straight = chooseCastleRoute({ ...routeDraft, routeChoices: ["battle"] }, "battle");
+assert.equal(straight.battle.units.some(unit => unit.side === "player" && unit.kind === "piplet"), true, "the straight road should bring a scouting Piplet");
+assert.equal(straight.battle.energy, 0.5, "the straight road should grant a small energy head start");
+
+const eventDraw = chooseCastleRoute({ ...routeDraft, routeChoices: ["event"] }, "event");
+assert.equal(eventDraw.phase, "event", "an event route should pause at a revealed decision");
+assert.ok(eventDraw.pendingEventId, "an event route should deterministically select an event");
+
+const poorMarket = { ...eventDraw, pendingEventId: "wobbleMarket", carriedEnergy: 0 };
+assert.equal(canChooseCastleEvent(poorMarket, "marketSnack"), false, "resource-gated event choices should disclose and enforce their cost");
+assert.equal(resolveCastleEvent(poorMarket, "marketSnack").phase, "event", "an unaffordable event choice must not consume the event");
+
+const escorted = resolveCastleEvent({ ...eventDraw, pendingEventId: "hatchling" }, "hatchlingEscort");
+assert.equal(escorted.phase, "battle", "resolving an event should prepare the next battle");
+assert.equal(escorted.battle.units.filter(unit => unit.side === "player" && unit.kind === "piplet").length, 2, "the hatchling escort should start with two Piplets");
+assert.equal(escorted.pendingEventId, null, "resolved events should clear their pending state");
+
+const mutationEvent = {
+  ...eventDraw,
+  pendingEventId: "starwell",
+  upgrades: [],
+  draftPoolIds: STARTER_CASTLE_UPGRADE_IDS,
+  carriedCastleHp: 80,
+};
+const mutated = resolveCastleEvent(mutationEvent, "starwellDive");
+assert.equal(mutated.upgrades.length, 1, "a risky mutation event should add one available run mutation");
+assert.equal(mutated.battle.playerCastleHp, 66, "the Starwell dive should visibly charge its fourteen-HP cost");
+
+process.stdout.write("Castle mechanics assertions passed.\n");

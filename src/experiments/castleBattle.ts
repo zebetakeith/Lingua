@@ -8,9 +8,15 @@ export const CASTLE_MAX_ENERGY = 12;
 
 export type CastleSide = "player" | "enemy";
 export type CastleContractId = "quick" | "regular" | "long";
-export type CastleRunPhase = "battle" | "reward" | "route" | "retire" | "complete" | "lost";
+export type CastleRunPhase = "battle" | "reward" | "route" | "event" | "retire" | "complete" | "lost";
 export type CastleBattleMode = "study" | "command";
 export type CastleRouteChoice = "battle" | "rest" | "workshop" | "event";
+export type CastleEventId = "starwell" | "hatchling" | "wobbleMarket" | "rootOracle";
+export type CastleEventChoiceId =
+  | "starwellSip" | "starwellBottle" | "starwellDive"
+  | "hatchlingEscort" | "hatchlingShell" | "hatchlingShare"
+  | "marketSnack" | "marketTrade" | "marketEgg"
+  | "oracleListen" | "oracleShelter" | "oracleChallenge";
 export type CastleUnitKind = "piplet" | "dartlet" | "bubbleBud" | "spitlet" | "bigChonk" | "shellSlime" | "nibbleImp" | "sporeBud" | "echoMoth" | "rootLump";
 export type CastlePowerId = "slingshot" | "bubbleGate" | "snackCannon" | "gooMoat" | "timewobble" | "tongueSnatch" | "sporeMortar";
 export type CastleUpgradeCategory = "minion" | "castle" | "trait" | "study";
@@ -146,6 +152,8 @@ export interface CastleRunState {
   draftPoolIds: CastleUpgradeId[];
   rewardChoices: CastleUpgradeId[];
   routeChoices: CastleRouteChoice[];
+  pendingEventId: CastleEventId | null;
+  eventHistory: CastleEventId[];
   battle: CastleBattleState;
   rngState: number;
   carriedCastleHp: number;
@@ -178,10 +186,73 @@ export interface CastleContractDef {
   description: string;
 }
 
+export interface CastleEventChoiceDef {
+  id: CastleEventChoiceId;
+  name: string;
+  story: string;
+  effect: string;
+  requiresEnergy?: number;
+}
+
+export interface CastleEventDef {
+  id: CastleEventId;
+  eyebrow: string;
+  title: string;
+  story: string;
+  choices: CastleEventChoiceDef[];
+}
+
 export const CASTLE_CONTRACTS: Record<CastleContractId, CastleContractDef> = {
   quick: { id: "quick", name: "Quick", regions: 1, minutes: 10, newCards: 5, description: "One region and one guardian castle." },
   regular: { id: "regular", name: "Regular", regions: 2, minutes: 25, newCards: 15, description: "Two regions with a deeper build." },
   long: { id: "long", name: "Long", regions: 3, minutes: 50, newCards: 35, description: "Three regions and the fullest run arc." },
+};
+
+export const CASTLE_EVENT_DEFS: Record<CastleEventId, CastleEventDef> = {
+  starwell: {
+    id: "starwell",
+    eyebrow: "Shimmering detour",
+    title: "The Recall Starwell",
+    story: "A well hums with half-remembered words. The surface is gentle; the brightest stars glint much deeper.",
+    choices: [
+      { id: "starwellSip", name: "Sip the surface", story: "Take only the calm light.", effect: "Repair 22 keep HP." },
+      { id: "starwellBottle", name: "Bottle the fizz", story: "Save the bubbles for the next siege.", effect: "Gain 3 starting energy." },
+      { id: "starwellDive", name: "Dive for a deep star", story: "The stone rim is sharp, but something below can change the run.", effect: "Lose 14 HP; absorb one available mutation." },
+    ],
+  },
+  hatchling: {
+    id: "hatchling",
+    eyebrow: "Tiny traveler",
+    title: "A Lost Piplet Peeks Out",
+    story: "A wobbling hatchling has followed the army. It can march, share its shell, or split its snack.",
+    choices: [
+      { id: "hatchlingEscort", name: "March together", story: "Give it a place at the front.", effect: "Next battle starts with 2 Piplets." },
+      { id: "hatchlingShell", name: "Borrow its shell", story: "It curls safely into Pipplo's pack.", effect: "Next battle starts with 18 barrier." },
+      { id: "hatchlingShare", name: "Split the snack", story: "Everyone takes a small, useful bite.", effect: "Repair 10 HP and gain 1.5 energy." },
+    ],
+  },
+  wobbleMarket: {
+    id: "wobbleMarket",
+    eyebrow: "Roadside bargain",
+    title: "The Wobble Market",
+    story: "Three mushroom stalls lean toward Pipplo. Every price is written clearly, which is suspiciously considerate.",
+    choices: [
+      { id: "marketSnack", name: "Buy a giant snack", story: "Expensive, warm, and structurally restorative.", effect: "Spend 2 energy; repair 32 HP.", requiresEnergy: 2 },
+      { id: "marketTrade", name: "Trade a castle brick", story: "The merchant promises nobody will miss one brick.", effect: "Lose 10 HP; gain 4 energy." },
+      { id: "marketEgg", name: "Adopt the cracked egg", story: "Something supportive bubbles inside.", effect: "Spend 1 energy; start with a Bubble Bud.", requiresEnergy: 1 },
+    ],
+  },
+  rootOracle: {
+    id: "rootOracle",
+    eyebrow: "Whispering crossroads",
+    title: "The Forked Root Oracle",
+    story: "An ancient root offers three futures. It is terrible at smiling but excellent at stating consequences.",
+    choices: [
+      { id: "oracleListen", name: "Hear the secret", story: "A new shape waits behind a painful truth.", effect: "Lose 8 HP; absorb one available mutation." },
+      { id: "oracleShelter", name: "Rest under the roots", story: "Moss muffles the marching drums.", effect: "Repair 18 HP and gain 1 energy." },
+      { id: "oracleChallenge", name: "Take the heavy path", story: "A huge ally rolls downhill toward the next keep.", effect: "Lose 12 HP; start with a Big Chonk." },
+    ],
+  },
 };
 
 export const CASTLE_UNIT_DEFS: Record<CastleUnitKind, CastleUnitDef> = {
@@ -406,6 +477,8 @@ export function createInitialCastleRun(
     draftPoolIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...draftPoolIds])),
     rewardChoices: [],
     routeChoices: [],
+    pendingEventId: null,
+    eventHistory: [],
     battle,
     rngState: seed,
     carriedCastleHp: battle.playerCastleHp,
@@ -991,19 +1064,48 @@ export function pauseCastleBattle(run: CastleRunState, notice = "Combat paused."
   return { ...run, savedAt: Date.now(), battle: { ...run.battle, mode: "command", notice } };
 }
 
+function drawRouteChoices(rngState: number): { choices: CastleRouteChoice[]; rngState: number } {
+  const extras: CastleRouteChoice[] = ["rest", "workshop", "event"];
+  let state = rngState;
+  for (let index = extras.length - 1; index > 0; index -= 1) {
+    const roll = nextRandom(state);
+    state = roll.state;
+    const swapIndex = Math.floor(roll.value * (index + 1));
+    [extras[index], extras[swapIndex]] = [extras[swapIndex], extras[index]];
+  }
+  return { choices: ["battle", ...extras.slice(0, 2)], rngState: state };
+}
+
+function drawCastleEvent(run: CastleRunState): { eventId: CastleEventId; rngState: number } {
+  const recent = new Set(run.eventHistory.slice(-2));
+  const allEvents = Object.keys(CASTLE_EVENT_DEFS) as CastleEventId[];
+  const pool = allEvents.filter(id => !recent.has(id));
+  const candidates = pool.length > 0 ? pool : allEvents;
+  const roll = nextRandom(run.rngState);
+  return {
+    eventId: candidates[Math.floor(roll.value * candidates.length)] || "starwell",
+    rngState: roll.state,
+  };
+}
+
 export function claimCastleUpgrade(run: CastleRunState, upgradeId: CastleUpgradeId): CastleRunState {
   if (run.phase !== "reward" || !run.rewardChoices.includes(upgradeId)) return run;
   const upgrades = Array.from(new Set([...run.upgrades, upgradeId]));
   const healing = 12 + (hasUpgrade(upgrades, "sproutTuft") ? 8 : 0);
   const carriedCastleHp = Math.min(120, run.carriedCastleHp + healing);
   const contractComplete = run.battle.guardian && run.region >= run.targetRegions;
+  const routeDraft = contractComplete
+    ? { choices: [] as CastleRouteChoice[], rngState: run.rngState }
+    : drawRouteChoices(run.rngState);
   return {
     ...run,
     savedAt: Date.now(),
     phase: contractComplete ? "retire" : "route",
     upgrades,
     rewardChoices: [],
-    routeChoices: contractComplete ? [] : ["battle", "rest", "workshop", "event"],
+    routeChoices: routeDraft.choices,
+    rngState: routeDraft.rngState,
+    pendingEventId: null,
     carriedCastleHp,
     notice: contractComplete
       ? `${CASTLE_UPGRADE_DEFS[upgradeId].name} absorbed. The study contract is complete.`
@@ -1025,6 +1127,7 @@ function startNextBattle(run: CastleRunState, carriedCastleHp: number, carriedEn
       phase: "retire",
       region: run.targetRegions,
       routeChoices: [],
+      pendingEventId: null,
       notice: "Study contract cleared. Retire successfully or continue into endless regions.",
     };
   }
@@ -1039,25 +1142,151 @@ function startNextBattle(run: CastleRunState, carriedCastleHp: number, carriedEn
     carriedCastleHp: battle.playerCastleHp,
     carriedEnergy: battle.energy,
     routeChoices: [],
+    pendingEventId: null,
     bestRegion: Math.max(run.bestRegion, region),
     notice: battle.guardian ? `Region ${region} guardian ahead.` : `Region ${region}, castle ${battleInRegion}.`,
   };
 }
 
+function startNextBattleWithBonuses(
+  run: CastleRunState,
+  carriedCastleHp: number,
+  carriedEnergy: number,
+  allies: CastleUnitKind[] = [],
+  barrier = 0,
+  notice?: string,
+): CastleRunState {
+  const started = startNextBattle(run, carriedCastleHp, carriedEnergy);
+  if (started.phase !== "battle") return started;
+  let battle = started.battle;
+  for (const kind of allies) battle = addUnit(battle, "player", kind, started.upgrades);
+  battle = {
+    ...battle,
+    playerBarrier: battle.playerBarrier + barrier,
+    notice: notice || battle.notice,
+  };
+  return { ...started, battle, notice: notice || started.notice };
+}
+
 export function chooseCastleRoute(run: CastleRunState, choice: CastleRouteChoice): CastleRunState {
   if (run.phase !== "route" || !run.routeChoices.includes(choice)) return run;
+  if (choice === "event") {
+    const drawn = drawCastleEvent(run);
+    return {
+      ...run,
+      savedAt: Date.now(),
+      phase: "event",
+      pendingEventId: drawn.eventId,
+      eventHistory: [...run.eventHistory, drawn.eventId].slice(-6),
+      routeChoices: [],
+      rngState: drawn.rngState,
+      notice: `${CASTLE_EVENT_DEFS[drawn.eventId].title}: choose one revealed outcome.`,
+    };
+  }
   let hp = run.carriedCastleHp;
   let energy = run.carriedEnergy;
+  let barrier = 0;
+  let allies: CastleUnitKind[] = [];
+  let notice = "The next castle is ready.";
   if (choice === "rest") {
     hp = Math.min(120, hp + 28);
     if (hasUpgrade(run.upgrades, "mossCoat")) energy = Math.min(CASTLE_MAX_ENERGY, energy + 2);
+    notice = "Soft Nest: the keep repaired 28 HP before the next march.";
   } else if (choice === "workshop") {
     energy = Math.min(CASTLE_MAX_ENERGY, energy + 1.5);
-  } else if (choice === "event") {
-    hp = Math.max(1, hp - 5);
-    energy = Math.min(CASTLE_MAX_ENERGY, energy + 3);
+    barrier = 8;
+    notice = "Goo Workshop: +1.5 energy and an 8-point starting barrier.";
+  } else {
+    energy = Math.min(CASTLE_MAX_ENERGY, energy + 0.5);
+    allies = ["piplet"];
+    notice = "Straight Road: a scouting Piplet and +0.5 energy arrived early.";
   }
-  return startNextBattle(run, hp, energy);
+  return startNextBattleWithBonuses(run, hp, energy, allies, barrier, notice);
+}
+
+export function canChooseCastleEvent(run: CastleRunState, choiceId: CastleEventChoiceId): boolean {
+  if (run.phase !== "event" || !run.pendingEventId) return false;
+  const choice = CASTLE_EVENT_DEFS[run.pendingEventId].choices.find(candidate => candidate.id === choiceId);
+  return Boolean(choice && run.carriedEnergy >= (choice.requiresEnergy || 0));
+}
+
+export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventChoiceId): CastleRunState {
+  if (!canChooseCastleEvent(run, choiceId)) return run;
+  let preparedRun = run;
+  let hp = run.carriedCastleHp;
+  let energy = run.carriedEnergy;
+  let barrier = 0;
+  let allies: CastleUnitKind[] = [];
+  let result = "The road changed shape.";
+
+  const absorbMutation = (hpCost: number) => {
+    hp = Math.max(1, hp - hpCost);
+    const available = preparedRun.draftPoolIds.filter(id => !preparedRun.upgrades.includes(id));
+    if (available.length === 0) {
+      energy = Math.min(CASTLE_MAX_ENERGY, energy + 3);
+      result = `No new mutation answered, so the echo condensed into +3 energy.`;
+      return;
+    }
+    const roll = nextRandom(preparedRun.rngState);
+    const upgradeId = available[Math.floor(roll.value * available.length)] || available[0];
+    preparedRun = {
+      ...preparedRun,
+      upgrades: [...preparedRun.upgrades, upgradeId],
+      rngState: roll.state,
+    };
+    result = `${CASTLE_UPGRADE_DEFS[upgradeId].name} joined the run; the keep paid ${hpCost} HP.`;
+  };
+
+  if (choiceId === "starwellSip") {
+    hp = Math.min(120, hp + 22);
+    result = "Starwell water repaired 22 keep HP.";
+  } else if (choiceId === "starwellBottle") {
+    energy = Math.min(CASTLE_MAX_ENERGY, energy + 3);
+    result = "The bottled star-fizz became +3 starting energy.";
+  } else if (choiceId === "starwellDive") {
+    absorbMutation(14);
+  } else if (choiceId === "hatchlingEscort") {
+    allies = ["piplet", "piplet"];
+    result = "Two Piplets joined the opening march.";
+  } else if (choiceId === "hatchlingShell") {
+    barrier = 18;
+    result = "The hatchling wrapped the keep in 18 starting barrier.";
+  } else if (choiceId === "hatchlingShare") {
+    hp = Math.min(120, hp + 10);
+    energy = Math.min(CASTLE_MAX_ENERGY, energy + 1.5);
+    result = "The shared snack repaired 10 HP and added 1.5 energy.";
+  } else if (choiceId === "marketSnack") {
+    energy -= 2;
+    hp = Math.min(120, hp + 32);
+    result = "The giant snack cost 2 energy and repaired 32 HP.";
+  } else if (choiceId === "marketTrade") {
+    hp = Math.max(1, hp - 10);
+    energy = Math.min(CASTLE_MAX_ENERGY, energy + 4);
+    result = "One brick became +4 energy; the keep lost 10 HP.";
+  } else if (choiceId === "marketEgg") {
+    energy -= 1;
+    allies = ["bubbleBud"];
+    result = "The cracked egg hatched a free Bubble Bud.";
+  } else if (choiceId === "oracleListen") {
+    absorbMutation(8);
+  } else if (choiceId === "oracleShelter") {
+    hp = Math.min(120, hp + 18);
+    energy = Math.min(CASTLE_MAX_ENERGY, energy + 1);
+    result = "The roots repaired 18 HP and tucked away +1 energy.";
+  } else if (choiceId === "oracleChallenge") {
+    hp = Math.max(1, hp - 12);
+    allies = ["bigChonk"];
+    result = "The heavy path cost 12 HP, but a Big Chonk rolled into formation.";
+  }
+
+  return startNextBattleWithBonuses(
+    { ...preparedRun, pendingEventId: null },
+    hp,
+    energy,
+    allies,
+    barrier,
+    result,
+  );
 }
 
 export function retireCastleRun(run: CastleRunState): CastleRunState {

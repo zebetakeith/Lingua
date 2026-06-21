@@ -36,6 +36,7 @@ import {
 import type { StudyRewardCurve } from "../game/study";
 import {
   CASTLE_CONTRACTS,
+  CASTLE_EVENT_DEFS,
   CASTLE_POWER_DEFS,
   CASTLE_RECALL_BOLT_LIMIT,
   CASTLE_RALLY_LIMIT,
@@ -43,6 +44,7 @@ import {
   CASTLE_UPGRADE_DEFS,
   applyCastleStudyOutcome,
   activateCastlePower,
+  canChooseCastleEvent,
   chooseCastleRoute,
   claimCastleUpgrade,
   continueCastleRun,
@@ -53,11 +55,13 @@ import {
   getPlayerSummonKinds,
   pauseCastleBattle,
   recordCastleIntroductions,
+  resolveCastleEvent,
   resumeCastleBattle,
   retireCastleRun,
   summonCastleUnit,
   tickCastleRun,
   type CastleContractId,
+  type CastleEventId,
   type CastlePowerId,
   type CastleRouteChoice,
   type CastleRunState,
@@ -459,10 +463,17 @@ function DeckSetup({
 }
 
 const ROUTE_INFO: Record<CastleRouteChoice, { name: string; description: string; icon: typeof Swords }> = {
-  battle: { name: "Straight Road", description: "Press onward with no bargain.", icon: Swords },
-  rest: { name: "Soft Nest", description: "Repair 28 castle health.", icon: Heart },
-  workshop: { name: "Goo Workshop", description: "Begin with 1.5 extra energy.", icon: FlaskConical },
-  event: { name: "Humming Well", description: "Trade 5 castle health for 3 energy.", icon: Sparkles },
+  battle: { name: "Straight Road", description: "Start with a scouting Piplet and +0.5 energy.", icon: Swords },
+  rest: { name: "Soft Nest", description: "Repair 28 keep HP; Moss Coat also banks 2 energy.", icon: Heart },
+  workshop: { name: "Goo Workshop", description: "Start with +1.5 energy and 8 barrier.", icon: FlaskConical },
+  event: { name: "Wobbling Detour", description: "Reveal a three-choice story event with exact consequences.", icon: Sparkles },
+};
+
+const CASTLE_EVENT_ICONS: Record<CastleEventId, typeof Sparkles> = {
+  starwell: Sparkles,
+  hatchling: Heart,
+  wobbleMarket: FlaskConical,
+  rootOracle: Route,
 };
 
 const CASTLE_UNIT_GUIDE: Partial<Record<CastleUnitKind, string>> = {
@@ -502,7 +513,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Castle,
     eyebrow: "Run strategy",
     title: "Break keeps and build a run",
-    copy: "Every five correct recalls fires a Recall Bolt. Defeat castles, choose mutations, take routes, and carry your build toward the guardian.",
+    copy: "Every five correct recalls fires a Recall Bolt. After each keep, choose a mutation and one of three drafted routes; story events reveal every consequence before you commit.",
   },
 ] as const;
 
@@ -879,6 +890,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     );
   }
 
+  const activeEvent = run.pendingEventId ? CASTLE_EVENT_DEFS[run.pendingEventId] : null;
+
   return (
     <main className="castle-lab-shell">
       <header className="castle-lab-header">
@@ -1024,6 +1037,47 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         </aside>
       )}
 
+      {run.phase === "event" && activeEvent && (() => {
+        const EventIcon = CASTLE_EVENT_ICONS[activeEvent.id];
+        return (
+          <aside className="castle-overlay">
+            <section className="castle-event-sheet" role="dialog" aria-modal="true" aria-label={activeEvent.title}>
+              <EventIcon />
+              <p className="castle-eyebrow">{activeEvent.eyebrow}</p>
+              <h2>{activeEvent.title}</h2>
+              <p>{activeEvent.story}</p>
+              <div className="castle-event-resources">
+                <span><Heart />{Math.ceil(run.carriedCastleHp)} keep HP</span>
+                <span><Sparkles />{formatCastleEnergy(run.carriedEnergy)} energy</span>
+              </div>
+              <div className="castle-event-choice-grid">
+                {activeEvent.choices.map(choice => {
+                  const available = canChooseCastleEvent(run, choice.id);
+                  return (
+                    <button key={choice.id} disabled={!available} onClick={() => {
+                      playCastleSound("power", soundEnabled);
+                      setQuestion(null);
+                      setFeedback(null);
+                      setReveal(false);
+                      setInterrupted(false);
+                      setPanelMode("study");
+                      const resolved = resolveCastleEvent(run, choice.id);
+                      const nextRun = resolved.phase === "battle" ? introduceForBattle(resolved) : resolved;
+                      setRun(nextRun);
+                    }}>
+                      <strong>{choice.name}</strong>
+                      <span>{choice.story}</span>
+                      <b>{choice.effect}</b>
+                      {!available && choice.requiresEnergy && <small>Need {choice.requiresEnergy} energy</small>}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          </aside>
+        );
+      })()}
+
       {run.phase === "retire" && (
         <aside className="castle-overlay">
           <section className="castle-result-sheet is-win" role="dialog" aria-modal="true" aria-label="Study contract complete">
@@ -1106,6 +1160,15 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               })}
             </div>
 
+            <h3>Between battles</h3>
+            <div className="castle-guide-list is-routes">
+              {(Object.keys(ROUTE_INFO) as CastleRouteChoice[]).map(choice => {
+                const route = ROUTE_INFO[choice];
+                const Icon = route.icon;
+                return <article key={choice}><Icon /><div><b>{route.name}</b><span>{route.description}</span></div></article>;
+              })}
+            </div>
+
             <h3>Current run build</h3>
             <div className="castle-guide-build">
               {run.upgrades.length > 0 ? run.upgrades.map(id => <span key={id}><b>{CASTLE_UPGRADE_DEFS[id].name}</b>{CASTLE_UPGRADE_DEFS[id].description}</span>) : <p>Defeat the first castle to choose your first mutation.</p>}
@@ -1124,6 +1187,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live but requires a correction step and fills Enemy Rally.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; the battle keeps moving while that panel is open.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
+            <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
             <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries remain.</p>
             <button className="castle-tutorial-replay" onClick={() => { setHelpOpen(false); setTutorialStep(0); setTutorialOpen(true); }}><Play />Replay tutorial</button>
           </section>
