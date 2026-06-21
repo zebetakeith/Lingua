@@ -75,6 +75,10 @@ function simulate(curve, mastery) {
     energyEarned: run.battle.telemetry.energyEarned,
     energySpent: run.battle.telemetry.energySpent,
     summons: run.battle.telemetry.summons,
+    friendlyUnits: run.battle.units.filter(unit => unit.side === "player").length,
+    enemyUnits: run.battle.units.filter(unit => unit.side === "enemy").length,
+    friendlyFront: Math.round(Math.max(0, ...run.battle.units.filter(unit => unit.side === "player").map(unit => unit.position))),
+    enemyFront: Math.round(Math.min(100, ...run.battle.units.filter(unit => unit.side === "enemy").map(unit => unit.position))),
   };
 }
 

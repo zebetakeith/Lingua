@@ -183,12 +183,12 @@ export function getCorrectAnswerReward(
   curve: StudyRewardCurve,
   now = Date.now(),
 ): number {
-  if (curve === "current") return getCorrectAnswerAp(progress, questionType, now);
+  if (curve === "current") return Math.max(0.44, getCorrectAnswerAp(progress, questionType, now));
   const normalized = normalizeForToday(progress, now);
   const difficulty = 1 - normalized.mastery;
   const baseReward = curve === "steep"
-    ? 0.35 + (3.15 * Math.pow(difficulty, 3))
-    : 0.35 + (2.45 * Math.pow(difficulty, 2));
+    ? 0.5 + (3 * Math.pow(difficulty, 3))
+    : 0.5 + (2.3 * Math.pow(difficulty, 2));
   const repeatReward = normalized.correctToday === 0
     ? 1
     : normalized.correctToday === 1

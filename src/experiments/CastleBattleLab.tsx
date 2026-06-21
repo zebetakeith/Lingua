@@ -82,6 +82,8 @@ interface ReviewFeedback {
   masteryEvent: string;
 }
 
+type CastlePanelMode = "study" | "army";
+
 const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
   current: "Classic",
   quadratic: "Curved",
@@ -110,6 +112,8 @@ function SlimeFace({ kind, side }: { kind: CastleUnitKind; side: "player" | "ene
 
 function CastleScene({ run }: { run: CastleRunState }) {
   const battle = run.battle;
+  const playerCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position <= 3);
+  const enemyCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position >= 97);
   return (
     <section className={`castle-scene ${battle.mode === "study" ? "is-live" : "is-paused"}`} aria-label="Castle battlefield">
       <div className="castle-sky-orb" />
@@ -123,7 +127,7 @@ function CastleScene({ run }: { run: CastleRunState }) {
       </div>
 
       <div className="castle-lane">
-        <div className="castle-home is-player">
+        <div className={`castle-home is-player ${playerCastleHit ? "is-hit" : ""}`}>
           <div className="pipplo-keeper"><i /><i /><b /><em /></div>
           <div className="castle-tower"><span /><span /><span /></div>
           {battle.playerBarrier > 0 && <div className="castle-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
@@ -133,7 +137,7 @@ function CastleScene({ run }: { run: CastleRunState }) {
           {battle.units.map(unit => (
             <div
               key={unit.id}
-              className={`castle-lane-unit side-${unit.side}`}
+              className={`castle-lane-unit side-${unit.side} ${unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - 180 ? "is-attacking" : ""}`}
               style={{ "--unit-x": `${unit.position}%`, "--unit-accent": CASTLE_UNIT_DEFS[unit.kind].accent } as CSSProperties}
               title={`${CASTLE_UNIT_DEFS[unit.kind].name}: ${Math.ceil(unit.hp)}/${unit.maxHp} HP`}
             >
@@ -142,8 +146,19 @@ function CastleScene({ run }: { run: CastleRunState }) {
               <span className="castle-unit-hp"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
             </div>
           ))}
+          {battle.fxEvents.map(event => (
+            <span
+              key={event.id}
+              className={`castle-battle-fx fx-${event.kind} side-${event.side}`}
+              style={{ "--fx-x": `${event.position}%` } as CSSProperties}
+              aria-hidden="true"
+            >
+              <i />
+              {event.label && <b>{event.label}</b>}
+            </span>
+          ))}
         </div>
-        <div className="castle-home is-enemy">
+        <div className={`castle-home is-enemy ${enemyCastleHit ? "is-hit" : ""}`}>
           <div className="castle-tower"><span /><span /><span /></div>
           <div className="enemy-keeper"><i /><i /><b /></div>
         </div>
@@ -178,7 +193,7 @@ function CommandTray({
     <div className="castle-command-tray">
       <div className="castle-command-heading">
         <span><Sparkles />Spend or bank {formatCastleEnergy(run.battle.energy)} energy</span>
-        <small>Actions enter now and move when the next seen prompt goes live.</small>
+        <small>Combat keeps moving while this tray is open.</small>
       </div>
       <div className="castle-command-scroll">
         {getPlayerSummonKinds().map(kind => {
@@ -208,8 +223,7 @@ function CommandTray({
 function StudyCard({
   question,
   reveal,
-  graceLeft,
-  combatArmed,
+  combatLive,
   interrupted,
   onOption,
   onReveal,
@@ -218,8 +232,7 @@ function StudyCard({
 }: {
   question: StudyQuestion;
   reveal: boolean;
-  graceLeft: number;
-  combatArmed: boolean;
+  combatLive: boolean;
   interrupted: boolean;
   onOption: (option: string) => void;
   onReveal: () => void;
@@ -230,11 +243,9 @@ function StudyCard({
     ? "First exposure · combat safely paused"
     : interrupted
       ? "Interrupted · combat paused"
-      : combatArmed
-        ? `Combat live · ${question.pressure.combatSpeed}×`
-        : `Reading grace · ${(graceLeft / 1_000).toFixed(1)}s`;
+      : `Combat live · ${question.pressure.combatSpeed}×`;
   return (
-    <section className={`castle-study-card ${combatArmed ? "is-live" : ""} ${!question.seenBefore ? "is-new" : ""}`}>
+    <section className={`castle-study-card ${combatLive ? "is-live" : ""} ${!question.seenBefore ? "is-new" : ""}`}>
       <div className="castle-study-meta">
         <span>{question.direction === "term_to_definition" ? "Term → definition" : "Definition → term"}</span>
         <span>{question.masteryLabel}</span>
@@ -266,7 +277,7 @@ function StudyCard({
   );
 }
 
-function ReviewResult({ feedback }: { feedback: ReviewFeedback }) {
+function ReviewResult({ feedback, onContinue }: { feedback: ReviewFeedback; onContinue?: () => void }) {
   return (
     <div className={`castle-review-result ${feedback.correct ? "is-correct" : "is-wrong"}`}>
       <div>
@@ -274,6 +285,7 @@ function ReviewResult({ feedback }: { feedback: ReviewFeedback }) {
         <span>{feedback.correct ? "Recall recorded." : `Correct answer: ${feedback.answer}`}</span>
       </div>
       {feedback.masteryEvent && <small>{feedback.masteryEvent}</small>}
+      {onContinue && <button onClick={onContinue}>Continue learning</button>}
     </div>
   );
 }
@@ -376,9 +388,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [question, setQuestion] = useState<StudyQuestion | null>(null);
   const [feedback, setFeedback] = useState<ReviewFeedback | null>(null);
   const [reveal, setReveal] = useState(false);
-  const [graceLeft, setGraceLeft] = useState(0);
-  const [combatArmed, setCombatArmed] = useState(false);
   const [interrupted, setInterrupted] = useState(false);
+  const [panelMode, setPanelMode] = useState<CastlePanelMode>("study");
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const questionStartedAt = useRef(0);
@@ -387,8 +398,6 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const selectedDeck = useMemo(() => decks.find(deck => deck.id === selectedDeckId), [decks, selectedDeckId]);
   const simulationReady = Boolean(
     run
-    && question?.seenBefore
-    && combatArmed
     && !interrupted
     && run.phase === "battle"
     && run.battle.mode === "study",
@@ -404,33 +413,25 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   }, [run, selectedDeckId]);
 
   useEffect(() => {
-    if (!question?.seenBefore || interrupted || run?.battle.mode !== "study" || combatArmed) return;
+    if (!simulationReady) return;
+    const calmMultiplier = run?.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 0.75 : 1;
     const timer = window.setInterval(() => {
-      setGraceLeft(current => {
-        if (current <= 50) {
-          setCombatArmed(true);
-          return 0;
-        }
-        return current - 50;
-      });
-    }, 50);
-    return () => window.clearInterval(timer);
-  }, [question, interrupted, run?.battle.mode, combatArmed]);
-
-  useEffect(() => {
-    if (!simulationReady || !question) return;
-    const timer = window.setInterval(() => {
-      setRun(current => current ? tickCastleRun(current, 100, question.pressure.combatSpeed) : current);
+      setRun(current => current ? tickCastleRun(current, 100, (question?.pressure.combatSpeed || 1) * calmMultiplier) : current);
     }, 100);
     return () => window.clearInterval(timer);
-  }, [simulationReady, question]);
+  }, [simulationReady, question, run?.upgrades, run?.battle.playerCastleHp, run?.battle.playerCastleMaxHp]);
+
+  useEffect(() => {
+    if (!feedback || feedback.wasUnseen) return;
+    const timer = window.setTimeout(() => setFeedback(null), 2_800);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
 
   const pauseForInterruption = useCallback(() => {
-    if (!question || feedback) return;
-    setCombatArmed(false);
+    if (!question) return;
     setInterrupted(true);
     setRun(current => current ? pauseCastleBattle(current, "Combat paused after an interruption.") : current);
-  }, [question, feedback]);
+  }, [question]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -461,36 +462,40 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       createInitialCastleRun(selectedDeckId, contractId, rewardCurve, profile.unlockedUpgradeIds),
       introduced.length,
     );
+    const nextQuestion = drawStudyQuestion(selectedDeckId, next.rewardCurve);
     clearCastleRun(selectedDeckId);
-    setRun(next);
-    setDecks(getStudyDecks());
-  };
-
-  const beginQuestion = () => {
-    if (!run || run.phase !== "battle") return;
-    const previousKey = question ? getStudyQuestionKey(question) : undefined;
-    const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey);
     setQuestion(nextQuestion);
     setFeedback(null);
     setReveal(false);
     setInterrupted(false);
-    setCombatArmed(false);
-    const calmBellBonus = run.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 1_000 : 0;
-    setGraceLeft(nextQuestion.seenBefore ? nextQuestion.pressure.graceMs + calmBellBonus : 0);
+    setPanelMode("study");
     questionStartedAt.current = Date.now();
-    setRun(current => current
-      ? nextQuestion.seenBefore
-        ? resumeCastleBattle(current)
-        : pauseCastleBattle(current, "First exposure protected: combat remains paused while you learn this direction.")
-      : current);
+    setRun(nextQuestion.seenBefore
+      ? resumeCastleBattle(next)
+      : pauseCastleBattle(next, "First exposure protected: combat remains paused while you learn this direction."));
+    setDecks(getStudyDecks());
+  };
+
+  const beginQuestion = (baseRun = run, previousKeyOverride?: string | null) => {
+    if (!baseRun || baseRun.phase !== "battle") return;
+    const previousKey = previousKeyOverride === null
+      ? undefined
+      : previousKeyOverride ?? (question ? getStudyQuestionKey(question) : undefined);
+    const nextQuestion = drawStudyQuestion(selectedDeckId, baseRun.rewardCurve, previousKey);
+    setQuestion(nextQuestion);
+    setFeedback(null);
+    setReveal(false);
+    setInterrupted(false);
+    setPanelMode("study");
+    questionStartedAt.current = Date.now();
+    setRun(nextQuestion.seenBefore
+      ? resumeCastleBattle(baseRun)
+      : pauseCastleBattle(baseRun, "First exposure protected: combat remains paused while you learn this direction."));
   };
 
   const resumeInterruptedQuestion = () => {
     if (!question) return;
     setInterrupted(false);
-    setCombatArmed(false);
-    const calmBellBonus = run?.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 1_000 : 0;
-    setGraceLeft(Math.min(2_500, question.pressure.graceMs + calmBellBonus));
     questionStartedAt.current = Date.now();
     setRun(current => current
       ? question.seenBefore
@@ -500,36 +505,53 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   };
 
   const finishReview = (correct: boolean) => {
-    if (!question || !run || feedback) return;
-    setCombatArmed(false);
+    if (!question || !run || feedback?.wasUnseen) return;
     const result: StudyAnswerResult = answerStudyQuestion(selectedDeckId, question, correct);
     const responseMs = Math.max(0, Date.now() - questionStartedAt.current);
-    setRun(current => current ? applyCastleStudyOutcome(
-      pauseCastleBattle(current, "Review resolved. Choose a command."),
-      {
-        isCorrect: correct,
-        wasUnseen: result.wasUnseen,
-        reward: correct ? question.reward : 0,
-        progressKey: result.progressKey,
-        responseMs,
-        selfGraded: question.questionType === "self_grade",
-        due: question.due,
-      },
-    ) : current);
-    setFeedback({
+    const outcome = {
+      isCorrect: correct,
+      wasUnseen: result.wasUnseen,
+      reward: correct ? question.reward : 0,
+      progressKey: result.progressKey,
+      responseMs,
+      selfGraded: question.questionType === "self_grade",
+      due: question.due,
+    };
+    const nextFeedback: ReviewFeedback = {
       correct,
       answer: result.answer,
       reward: correct ? question.reward : 0,
       wasUnseen: result.wasUnseen,
       masteryEvent: result.masteryEvent,
-    });
+    };
+    if (result.wasUnseen) {
+      setRun(current => current ? pauseCastleBattle(
+        applyCastleStudyOutcome(current, outcome),
+        "First exposure complete. Review the answer before continuing.",
+      ) : current);
+      setFeedback(nextFeedback);
+    } else {
+      const previousKey = getStudyQuestionKey(question);
+      const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey);
+      setQuestion(nextQuestion);
+      setFeedback(nextFeedback);
+      setReveal(false);
+      setInterrupted(false);
+      setPanelMode("study");
+      questionStartedAt.current = Date.now();
+      setRun(current => {
+        if (!current) return current;
+        const resolved = applyCastleStudyOutcome(current, outcome);
+        return nextQuestion.seenBefore
+          ? resumeCastleBattle(resolved)
+          : pauseCastleBattle(resolved, "First exposure protected: combat remains paused while you learn this direction.");
+      });
+    }
     setDecks(getStudyDecks());
   };
 
   const revealAnswer = () => {
-    setCombatArmed(false);
     setReveal(true);
-    setRun(current => current ? pauseCastleBattle(current, "Answer revealed; combat paused for self-grading.") : current);
   };
 
   const resetRun = () => {
@@ -537,7 +559,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setRun(null);
     setQuestion(null);
     setFeedback(null);
-    setCombatArmed(false);
+    setPanelMode("study");
     setProfile(loadCastleProfile(selectedDeckId));
   };
 
@@ -584,16 +606,31 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       <CastleScene run={run} />
 
       <section className="castle-notice" aria-live="polite">
-        <b>{run.battle.mode === "study" ? "Study pressure" : "Command pause"}</b>
+        <b>{run.battle.mode === "study" ? "Combat live" : question && !question.seenBefore ? "New card pause" : "Paused"}</b>
         <span>{run.battle.notice || run.notice}</span>
       </section>
 
-      {run.phase === "battle" && question && !feedback && (
+      {run.phase === "battle" && (
+        <nav className="castle-mode-switch" aria-label="Battle panel">
+          <button className={panelMode === "study" ? "is-active" : ""} onClick={() => setPanelMode("study")}><BookOpen />Flashcards</button>
+          <button className={panelMode === "army" ? "is-active" : ""} onClick={() => setPanelMode("army")}><Swords />Army & powers <b>{formatCastleEnergy(run.battle.energy)}</b></button>
+        </nav>
+      )}
+
+      {feedback && !feedback.wasUnseen && <div className="castle-feedback-toast"><ReviewResult feedback={feedback} /></div>}
+
+      {run.phase === "battle" && panelMode === "study" && feedback?.wasUnseen && (
+        <section className="castle-protected-result">
+          <p className="castle-eyebrow">First exposure complete · combat remains paused</p>
+          <ReviewResult feedback={feedback} onContinue={() => beginQuestion(run, question ? getStudyQuestionKey(question) : undefined)} />
+        </section>
+      )}
+
+      {run.phase === "battle" && panelMode === "study" && question && !feedback?.wasUnseen && (
         <StudyCard
           question={question}
           reveal={reveal}
-          graceLeft={graceLeft}
-          combatArmed={combatArmed}
+          combatLive={simulationReady}
           interrupted={interrupted}
           onOption={option => finishReview(option === question.answer)}
           onReveal={revealAnswer}
@@ -602,25 +639,34 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         />
       )}
 
-      {run.phase === "battle" && (!question || feedback) && (
-        <section className="castle-command-panel">
-          {feedback ? <ReviewResult feedback={feedback} /> : (
-            <div className="castle-ready-copy">
-              <BookOpen />
-              <div>
-                <b>{run.reviews === 0 ? "The lane waits for your first card" : "Ready for another review"}</b>
-                <span>New directions pause safely. Seen directions begin moving after their reading grace.</span>
-              </div>
+      {run.phase === "battle" && panelMode === "study" && !question && (
+        <section className="castle-study-launch">
+          <div className="castle-ready-copy">
+            <BookOpen />
+            <div>
+              <b>{run.reviews === 0 ? "The lane is ready" : "Resume continuous study"}</b>
+              <span>Once started, seen cards flow automatically. Switch to Army only when you want to summon.</span>
             </div>
-          )}
+          </div>
+          <button className="castle-next-card" onClick={() => beginQuestion()}><Play />Start flashcards</button>
+        </section>
+      )}
+
+      {run.phase === "battle" && panelMode === "army" && (
+        <section className="castle-army-panel">
+          <div className="castle-army-status">
+            <Swords />
+            <div>
+              <b>{simulationReady ? "The lane is still fighting" : question && !question.seenBefore ? "An unseen direction is protecting the lane" : "Combat is manually paused"}</b>
+              <span>{question ? `Waiting flashcard: ${question.prompt}` : "Start flashcards when your army is ready."}</span>
+            </div>
+          </div>
           <CommandTray
             run={run}
             onSummon={kind => setRun(current => current ? summonCastleUnit(current, kind) : current)}
             onPower={id => setRun(current => current ? activateCastlePower(current, id) : current)}
           />
-          <button className="castle-next-card" onClick={beginQuestion}>
-            <BookOpen />{feedback ? "Next flashcard" : "Begin flashcard"}<ChevronRight />
-          </button>
+          <button className="castle-back-to-study" onClick={() => setPanelMode("study")}><BookOpen />Back to flashcards</button>
         </section>
       )}
 
@@ -636,11 +682,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                 const reward = CASTLE_UPGRADE_DEFS[id];
                 return (
                   <button key={id} style={{ "--reward-accent": reward.accent } as CSSProperties} onClick={() => {
-                    setCombatArmed(false);
                     setQuestion(null);
                     setFeedback(null);
                     setReveal(false);
-                    setRun(current => current ? claimCastleUpgrade(current, id) : current);
+                    setPanelMode("study");
+                    setRun(claimCastleUpgrade(run, id));
                   }}>
                     <span>{reward.category} · {reward.rarity}</span>
                     <strong>{reward.name}</strong>
@@ -664,11 +710,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                 const info = ROUTE_INFO[choice];
                 const Icon = info.icon;
                 return <button key={choice} onClick={() => {
-                  setCombatArmed(false);
                   setQuestion(null);
                   setFeedback(null);
                   setReveal(false);
-                  setRun(current => current ? chooseCastleRoute(current, choice) : current);
+                  setPanelMode("study");
+                  const nextRun = chooseCastleRoute(run, choice);
+                  if (nextRun.phase === "battle") beginQuestion(nextRun, null);
+                  else setRun(nextRun);
                 }}><Icon /><strong>{info.name}</strong><span>{info.description}</span></button>;
               })}
             </div>
@@ -686,11 +734,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <div>
               <button onClick={() => setRun(current => current ? retireCastleRun(current) : current)}>Retire successfully</button>
               <button onClick={() => {
-                setCombatArmed(false);
                 setQuestion(null);
                 setFeedback(null);
                 setReveal(false);
-                setRun(current => current ? continueCastleRun(current) : current);
+                setPanelMode("study");
+                const nextRun = continueCastleRun(run);
+                if (nextRun.phase === "battle") beginQuestion(nextRun, null);
+                else setRun(nextRun);
               }}>Continue endlessly</button>
             </div>
           </section>

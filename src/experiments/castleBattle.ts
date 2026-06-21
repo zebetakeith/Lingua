@@ -13,6 +13,7 @@ export type CastleRouteChoice = "battle" | "rest" | "workshop" | "event";
 export type CastleUnitKind = "piplet" | "dartlet" | "bubbleBud" | "spitlet" | "bigChonk" | "shellSlime" | "nibbleImp" | "sporeBud" | "echoMoth" | "rootLump";
 export type CastlePowerId = "slingshot" | "bubbleGate" | "snackCannon" | "gooMoat" | "timewobble" | "tongueSnatch" | "sporeMortar";
 export type CastleUpgradeCategory = "minion" | "castle" | "trait" | "study";
+export type CastleFxKind = "spawn" | "hit" | "pop" | "heal" | "power" | "shield";
 export type CastleUpgradeId =
   | "splitNursery" | "bubbleBrood" | "stretchyLegs" | "gooSoles" | "snackPockets" | "popcornBodies"
   | "relayJelly" | "bigSibling" | "copycatJelly" | "swarmSchool" | "shellPolish" | "overripeSplit"
@@ -68,6 +69,15 @@ export interface CastleUnitState {
   kills: number;
 }
 
+export interface CastleFxEvent {
+  id: number;
+  kind: CastleFxKind;
+  side: CastleSide;
+  position: number;
+  ttlMs: number;
+  label?: string;
+}
+
 export interface CastleBattleTelemetry {
   reviews: number;
   correct: number;
@@ -111,6 +121,8 @@ export interface CastleBattleState {
   enemySlowMs: number;
   units: CastleUnitState[];
   nextUnitId: number;
+  fxEvents: CastleFxEvent[];
+  nextFxId: number;
   notice: string;
   nextEnemyKind: CastleUnitKind;
   afterNextEnemyKind: CastleUnitKind;
@@ -241,7 +253,7 @@ export const CASTLE_UPGRADE_DEFS: Record<CastleUpgradeId, CastleUpgradeDef> = {
   redemptionRibbon: upgrade("redemptionRibbon", "Redemption Ribbon", "Clearing a Rally pip also repairs the castle.", "study", "uncommon", "#ef7792"),
   twoWayTreat: upgrade("twoWayTreat", "Two-Way Treat", "Recalling both directions of a card summons a Piplet.", "study", "rare", "#f0a96b"),
   deepRecall: upgrade("deepRecall", "Deep Recall", "Self-graded correct answers earn 10% more energy.", "study", "common", "#957ede"),
-  calmBell: upgrade("calmBell", "Calm Bell", "Low castle health grants one extra second of grace.", "study", "uncommon", "#7ac7c3"),
+  calmBell: upgrade("calmBell", "Calm Bell", "Below 25% castle health, enemy pressure slows without pausing combat.", "study", "uncommon", "#7ac7c3"),
   recallReservoir: upgrade("recallReservoir", "Recall Reservoir", "Carry up to 1.5 energy between battles.", "study", "rare", "#7489dd"),
   cleanStreak: upgrade("cleanStreak", "Clean Streak", "Every fifth consecutive correct review hastes allies.", "study", "uncommon", "#f0d04f"),
 };
@@ -356,6 +368,8 @@ function createBattle(
     enemySlowMs: 0,
     units: [],
     nextUnitId: 1,
+    fxEvents: [],
+    nextFxId: 1,
     notice: guardian ? "A guardian castle blocks the region gate." : "Pipplo's nursery is ready. Begin the next review.",
     nextEnemyKind: getEnemyWaveKind(region, battleInRegion, 0, guardian),
     afterNextEnemyKind: getEnemyWaveKind(region, battleInRegion, 1, guardian),
@@ -425,6 +439,9 @@ function createUnit(
     }
     if (playerSpawnCount % 3 === 2 && hasUpgrade(upgrades, "bubbleBrood")) shield += 8;
     if (paid && playerSpawnCount === 0 && hasUpgrade(upgrades, "bubbleBelly")) shield += 12;
+  } else {
+    if (kind === "shellSlime") shield += 6;
+    if (kind === "rootLump") shield += 8;
   }
   const hp = Math.round(def.hp * hpMultiplier);
   return {
@@ -455,8 +472,24 @@ function addUnit(
     ...battle,
     units: [...battle.units, unit],
     nextUnitId: battle.nextUnitId + 1,
+    fxEvents: [...battle.fxEvents, { id: battle.nextFxId, kind: "spawn" as const, side, position: unit.position, ttlMs: 450 }].slice(-14),
+    nextFxId: battle.nextFxId + 1,
     playerSpawnCount: side === "player" ? battle.playerSpawnCount + 1 : battle.playerSpawnCount,
     enemySpawnCount: side === "enemy" ? battle.enemySpawnCount + 1 : battle.enemySpawnCount,
+  };
+}
+
+function addBattleFx(
+  battle: CastleBattleState,
+  kind: CastleFxKind,
+  side: CastleSide,
+  position: number,
+  label?: string,
+): CastleBattleState {
+  return {
+    ...battle,
+    fxEvents: [...battle.fxEvents, { id: battle.nextFxId, kind, side, position, ttlMs: kind === "power" ? 700 : 480, label }].slice(-14),
+    nextFxId: battle.nextFxId + 1,
   };
 }
 
@@ -527,6 +560,9 @@ function resolveBattleStep(
       attackCooldownMs: Math.max(0, unit.attackCooldownMs - (unit.side === "enemy" ? deltaMs * enemyPressureSpeed : deltaMs)),
       slowMs: Math.max(0, unit.slowMs - deltaMs),
     })),
+    fxEvents: current.fxEvents
+      .map(event => ({ ...event, ttlMs: event.ttlMs - deltaMs }))
+      .filter(event => event.ttlMs > 0),
   };
 
   const autoInterval = hasUpgrade(upgrades, "nurseryChimney") ? 5_500 : 6_800;
@@ -546,9 +582,12 @@ function resolveBattleStep(
 
   const damageById = new Map<string, number>();
   const slowById = new Map<string, number>();
+  const shieldById = new Map<string, number>();
   const popSplashById = new Map<string, number>();
+  const generatedFx: Array<{ kind: CastleFxKind; side: CastleSide; position: number; label?: string }> = [];
   let playerCastleDamage = 0;
   let enemyCastleDamage = 0;
+  let energyDrain = 0;
   const updatedUnits = battle.units.map(unit => {
     if (unit.hp <= 0) return unit;
     const stats = getUnitStats(unit, upgrades, battle.units);
@@ -557,17 +596,36 @@ function resolveBattleStep(
     const castleDistance = unit.side === "player" ? CASTLE_LANE_LENGTH - unit.position : unit.position;
     const canAttackTarget = target && targetDistance <= stats.range;
     const canAttackCastle = !canAttackTarget && castleDistance <= stats.range + 3;
+    if (unit.side === "player" && unit.kind === "bubbleBud" && unit.attackCooldownMs <= 0) {
+      const ally = battle.units
+        .filter(candidate => candidate.side === "player" && candidate.id !== unit.id && candidate.hp > 0 && Math.abs(candidate.position - unit.position) <= 10)
+        .sort((a, b) => a.shield - b.shield)[0];
+      if (ally) {
+        shieldById.set(ally.id, (shieldById.get(ally.id) || 0) + 3);
+        generatedFx.push({ kind: "shield", side: "player", position: ally.position, label: "+3" });
+        return { ...unit, attackCooldownMs: 1_500 };
+      }
+    }
     if ((canAttackTarget || canAttackCastle) && unit.attackCooldownMs <= 0) {
       let damage = stats.damage;
       if (unit.side === "player" && unit.kind === "bigChonk" && hasUpgrade(upgrades, "rootMouth") && canAttackCastle) damage += 4;
       if (canAttackTarget && target) {
+        if (unit.kind === "spitlet" && target.shield > 0) damage += 3;
         damageById.set(target.id, (damageById.get(target.id) || 0) + damage);
+        generatedFx.push({ kind: "hit", side: unit.side, position: target.position, label: `${damage}` });
         if (unit.side === "player" && hasUpgrade(upgrades, "gooSoles")) {
           slowById.set(target.id, hasUpgrade(upgrades, "puddlePaws") ? 2_600 : 1_500);
         }
+        if (unit.side === "enemy" && unit.kind === "sporeBud") slowById.set(target.id, 1_600);
       } else if (canAttackCastle) {
-        if (unit.side === "player") enemyCastleDamage += damage;
-        else playerCastleDamage += damage;
+        if (unit.side === "player") {
+          enemyCastleDamage += damage;
+          generatedFx.push({ kind: "hit", side: "player", position: 98, label: `${damage}` });
+        } else {
+          playerCastleDamage += damage;
+          if (unit.kind === "echoMoth") energyDrain += 0.25;
+          generatedFx.push({ kind: "hit", side: "enemy", position: 2, label: `${damage}` });
+        }
       }
       return { ...unit, attackCooldownMs: stats.attackMs };
     }
@@ -586,13 +644,21 @@ function resolveBattleStep(
 
   const damagedUnits = updatedUnits.map(unit => {
     const damage = damageById.get(unit.id) || 0;
-    if (damage <= 0) return slowById.has(unit.id) ? { ...unit, slowMs: slowById.get(unit.id) || 0 } : unit;
+    if (damage <= 0) return {
+      ...unit,
+      shield: unit.shield + (shieldById.get(unit.id) || 0),
+      slowMs: Math.max(unit.slowMs, slowById.get(unit.id) || 0),
+    };
     const damaged = applyDamage(unit, damage);
     if (damaged.shieldBroke && hasUpgrade(upgrades, "popcornBodies")) {
       const nearby = updatedUnits.find(candidate => candidate.side !== unit.side && Math.abs(candidate.position - unit.position) <= 5);
         if (nearby) popSplashById.set(nearby.id, (popSplashById.get(nearby.id) || 0) + 2);
     }
-    return { ...damaged.unit, slowMs: Math.max(damaged.unit.slowMs, slowById.get(unit.id) || 0) };
+    return {
+      ...damaged.unit,
+      shield: damaged.unit.shield + (shieldById.get(unit.id) || 0),
+      slowMs: Math.max(damaged.unit.slowMs, slowById.get(unit.id) || 0),
+    };
   });
 
   battle = {
@@ -606,6 +672,7 @@ function resolveBattleStep(
     const target = battle.units.filter(unit => unit.side === "enemy" && unit.position <= 32 && unit.hp > 0).sort((a, b) => a.position - b.position)[0];
     if (target) {
       battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, 4).unit : unit);
+      generatedFx.push({ kind: "hit", side: "player", position: target.position, label: "4" });
       if (hasUpgrade(upgrades, "impHorns")) {
         const splash = battle.units.filter(unit => unit.side === "enemy" && unit.id !== target.id && unit.hp > 0).sort((a, b) => a.position - b.position)[0];
         if (splash) battle.units = battle.units.map(unit => unit.id === splash.id ? applyDamage(unit, 2).unit : unit);
@@ -615,7 +682,10 @@ function resolveBattleStep(
   }
   if (battle.enemyTurretTimerMs <= 0) {
     const target = battle.units.filter(unit => unit.side === "player" && unit.position >= 68 && unit.hp > 0).sort((a, b) => b.position - a.position)[0];
-    if (target) battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, battle.guardian ? 5 : 3).unit : unit);
+    if (target) {
+      battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, battle.guardian ? 5 : 3).unit : unit);
+      generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${battle.guardian ? 5 : 3}` });
+    }
     battle.enemyTurretTimerMs += battle.guardian ? 2_700 : 3_500;
   }
 
@@ -623,6 +693,7 @@ function resolveBattleStep(
   const survivors = battle.units.filter(unit => unit.hp > 0);
   let next = { ...battle, units: survivors };
   for (const unit of defeated) {
+    generatedFx.push({ kind: "pop", side: unit.side, position: unit.position });
     if (unit.side === "player") {
       if (hasUpgrade(upgrades, "snackPockets")) next.playerCastleHp = Math.min(next.playerCastleMaxHp, next.playerCastleHp + 1);
       if (unit.kind === "bigChonk" && hasUpgrade(upgrades, "splitNursery")) {
@@ -644,11 +715,13 @@ function resolveBattleStep(
   next.playerBarrier -= barrierAbsorb;
   next.playerCastleHp = Math.max(0, next.playerCastleHp - hpDamage);
   next.enemyCastleHp = Math.max(0, next.enemyCastleHp - enemyCastleDamage);
+  next.energy = roundEnergy(Math.max(0, next.energy - energyDrain));
   next.telemetry = {
     ...next.telemetry,
     damageTaken: next.telemetry.damageTaken + hpDamage,
     damageDealt: next.telemetry.damageDealt + enemyCastleDamage,
   };
+  for (const effect of generatedFx) next = addBattleFx(next, effect.kind, effect.side, effect.position, effect.label);
   return next;
 }
 
@@ -702,7 +775,7 @@ export function tickCastleRun(run: CastleRunState, deltaMs: number, combatSpeed 
 }
 
 export function summonCastleUnit(run: CastleRunState, kind: CastleUnitKind): CastleRunState {
-  if (run.phase !== "battle" || run.battle.mode !== "command") return run;
+  if (run.phase !== "battle") return run;
   if (!getPlayerSummonKinds().includes(kind)) return run;
   const def = CASTLE_UNIT_DEFS[kind];
   if (run.battle.energy < def.cost) return run;
@@ -723,11 +796,11 @@ export function summonCastleUnit(run: CastleRunState, kind: CastleUnitKind): Cas
 }
 
 export function activateCastlePower(run: CastleRunState, powerId: CastlePowerId): CastleRunState {
-  if (run.phase !== "battle" || run.battle.mode !== "command") return run;
+  if (run.phase !== "battle") return run;
   const power = CASTLE_POWER_DEFS[powerId];
   if (!getAvailableCastlePowers(run.upgrades).some(candidate => candidate.id === powerId)) return run;
   if (run.battle.energy < power.cost) return run;
-  const battle: CastleBattleState = {
+  let battle: CastleBattleState = {
     ...run.battle,
     energy: roundEnergy(run.battle.energy - power.cost),
     notice: `${power.name}! ${power.description}`,
@@ -741,22 +814,33 @@ export function activateCastlePower(run: CastleRunState, powerId: CastlePowerId)
     const targets = battle.units.filter(unit => unit.side === "enemy").sort((a, b) => a.position - b.position).slice(0, hasUpgrade(run.upgrades, "impHorns") ? 2 : 1);
     const ids = new Set(targets.map(unit => unit.id));
     battle.units = battle.units.map(unit => ids.has(unit.id) ? applyDamage(unit, unit.id === targets[0]?.id ? 12 : 6).unit : unit);
-    if (targets.length === 0) battle.enemyCastleHp = Math.max(0, battle.enemyCastleHp - 8);
+    if (targets.length === 0) {
+      battle.enemyCastleHp = Math.max(0, battle.enemyCastleHp - 8);
+      battle = addBattleFx(battle, "hit", "player", 98, "8");
+    } else {
+      for (const target of targets) battle = addBattleFx(battle, "hit", "player", target.position, target.id === targets[0]?.id ? "12" : "6");
+    }
+    battle = addBattleFx(battle, "power", "player", 18, "Fling!");
   } else if (powerId === "bubbleGate") {
     battle.playerBarrier += 24;
+    battle = addBattleFx(battle, "shield", "player", 4, "+24");
   } else if (powerId === "snackCannon") {
     battle.playerCastleHp = Math.min(battle.playerCastleMaxHp, battle.playerCastleHp + 10);
     battle.units = battle.units.map(unit => unit.side === "player" ? { ...unit, hp: Math.min(unit.maxHp, unit.hp + 8) } : unit);
+    battle = addBattleFx(battle, "heal", "player", 7, "+10");
   } else if (powerId === "gooMoat") {
     battle.units = battle.units.map(unit => unit.side === "enemy" ? { ...unit, slowMs: Math.max(unit.slowMs, hasUpgrade(run.upgrades, "puddlePaws") ? 6_000 : 4_000) } : unit);
+    battle = addBattleFx(battle, "power", "player", 50, "Goo moat!");
   } else if (powerId === "timewobble") {
     battle.enemySlowMs = 4_000;
+    battle = addBattleFx(battle, "power", "player", 66, "Wobble!");
   } else if (powerId === "tongueSnatch") {
     const threshold = hasUpgrade(run.upgrades, "nibbleTeeth") ? 0.65 : 0.4;
     const target = battle.units.filter(unit => unit.side === "enemy" && unit.kind !== "rootLump" && unit.hp / unit.maxHp <= threshold).sort((a, b) => a.position - b.position)[0];
     if (target) {
       battle.units = battle.units.filter(unit => unit.id !== target.id);
       battle.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, battle.energy + (hasUpgrade(run.upgrades, "digestor") ? 0.75 : 0.35)));
+      battle = addBattleFx(battle, "pop", "player", target.position, "Snatched!");
     } else {
       battle.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, battle.energy + power.cost));
       battle.notice = "No weakened enemy was close enough to snatch. Energy refunded.";
@@ -764,8 +848,11 @@ export function activateCastlePower(run: CastleRunState, powerId: CastlePowerId)
       battle.telemetry.powersUsed -= 1;
     }
   } else if (powerId === "sporeMortar") {
-    const ids = new Set(battle.units.filter(unit => unit.side === "enemy").sort((a, b) => a.position - b.position).slice(0, 3).map(unit => unit.id));
+    const targets = battle.units.filter(unit => unit.side === "enemy").sort((a, b) => a.position - b.position).slice(0, 3);
+    const ids = new Set(targets.map(unit => unit.id));
     battle.units = battle.units.map(unit => ids.has(unit.id) ? applyDamage(unit, 8).unit : unit);
+    for (const target of targets) battle = addBattleFx(battle, "hit", "player", target.position, "8");
+    battle = addBattleFx(battle, "power", "player", 54, "Spore burst!");
   }
   return { ...run, savedAt: Date.now(), battle };
 }
