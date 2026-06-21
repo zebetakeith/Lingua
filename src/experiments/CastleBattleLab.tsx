@@ -129,6 +129,12 @@ const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   spitlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/seed-v1.png`,
   bigChonk: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/seed-v1.png`,
 };
+const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
+  dartlet: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/attack/0${index + 1}.png`,
+  ),
+};
 
 function PipploSprite({
   className = "",
@@ -162,12 +168,32 @@ function CastleHealth({ current, max, enemy = false }: { current: number; max: n
   );
 }
 
-function SlimeFace({ kind, side }: { kind: CastleUnitKind; side: "player" | "enemy" }) {
+function SlimeFace({
+  kind,
+  side,
+  attacking = false,
+}: {
+  kind: CastleUnitKind;
+  side: "player" | "enemy";
+  attacking?: boolean;
+}) {
   const art = side === "player" ? FRIENDLY_UNIT_ART[kind] : undefined;
+  const attackFrames = attacking && side === "player" ? FRIENDLY_UNIT_ATTACK_FRAMES[kind] : undefined;
   if (art) {
     return (
-      <span className={`castle-unit-face is-production-art kind-${kind} side-${side}`} aria-hidden="true">
-        <img src={art} alt="" />
+      <span
+        className={`castle-unit-face is-production-art ${attackFrames ? "is-unit-action" : ""} kind-${kind} side-${side}`}
+        data-unit-animation={attackFrames ? "attack" : "idle"}
+        aria-hidden="true"
+      >
+        {(attackFrames || [art]).map((src, index) => (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            style={{ "--unit-art-frame": index } as CSSProperties}
+          />
+        ))}
       </span>
     );
   }
@@ -233,18 +259,21 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
         </div>
         <div className="castle-road">
           <div className="castle-mid-flag"><i /><span /></div>
-          {battle.units.map(unit => (
+          {battle.units.map(unit => {
+            const attacking = unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - 180;
+            return (
             <div
               key={unit.id}
-              className={`castle-lane-unit side-${unit.side} ${unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - 180 ? "is-attacking" : ""}`}
+              className={`castle-lane-unit side-${unit.side} ${attacking ? "is-attacking" : ""}`}
               style={{ "--unit-x": `${unit.position}%`, "--unit-accent": CASTLE_UNIT_DEFS[unit.kind].accent } as CSSProperties}
               title={`${CASTLE_UNIT_DEFS[unit.kind].name}: ${Math.ceil(unit.hp)}/${unit.maxHp} HP`}
             >
               {unit.shield > 0 && <span className="castle-unit-shield" />}
-              <SlimeFace kind={unit.kind} side={unit.side} />
+              <SlimeFace kind={unit.kind} side={unit.side} attacking={attacking} />
               <span className="castle-unit-hp"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
             </div>
-          ))}
+            );
+          })}
           {battle.fxEvents.map(event => (
             <span
               key={event.id}
@@ -654,6 +683,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const preloadedImages = [
       ...Object.values(PIPPLO_ANIMATION_FRAMES).flat(),
       ...Object.values(FRIENDLY_UNIT_ART),
+      ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
     ].map(src => {
       const image = new Image();
       image.decoding = "async";

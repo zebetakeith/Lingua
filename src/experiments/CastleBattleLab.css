@@ -165,6 +165,7 @@
 .castle-barrier svg { width: 14px; }
 
 .castle-lane-unit { position: absolute; z-index: 6; left: var(--unit-x); bottom: 22px; width: 34px; transform: translateX(-50%); transition: left 120ms linear; animation: castle-unit-arrive 260ms cubic-bezier(.2,.9,.3,1.25); }
+.castle-lane-unit.is-attacking { z-index: 8; }
 .castle-lane-unit.is-attacking.side-player .castle-unit-face { animation: castle-unit-lunge-player 180ms ease-out; }
 .castle-lane-unit.is-attacking.side-enemy .castle-unit-face { animation: castle-unit-lunge-enemy 180ms ease-out; }
 .castle-unit-face { position: relative; display: inline-block; width: 31px; height: 25px; background: var(--unit-accent, #d8e84f); border: 3px solid #285e63; border-radius: 55% 55% 38% 38%; box-shadow: inset -4px -3px 0 rgba(39, 82, 84, 0.15), 0 3px 0 rgba(34, 85, 83, 0.12); }
@@ -187,13 +188,16 @@
 .castle-unit-face.is-production-art::after,
 .castle-unit-face.is-production-art > i,
 .castle-unit-face.is-production-art > b { display: none; }
-.castle-unit-face.is-production-art > img { display: block; width: 100%; height: 100%; object-fit: contain; transform-origin: bottom center; filter: drop-shadow(0 2px 0 rgba(28, 82, 78, 0.15)); }
+.castle-unit-face.is-production-art > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; transform-origin: bottom center; filter: drop-shadow(0 2px 0 rgba(28, 82, 78, 0.15)); }
 .castle-unit-face.is-production-art.kind-piplet { width: 30px; height: 30px; }
 .castle-unit-face.is-production-art.kind-dartlet { width: 37px; height: 34px; transform: none; }
 .castle-unit-face.is-production-art.kind-bubbleBud { width: 39px; height: 39px; }
 .castle-unit-face.is-production-art.kind-spitlet { width: 39px; height: 34px; }
 .castle-unit-face.is-production-art.kind-bigChonk { width: 49px; height: 46px; }
+.castle-unit-face.is-production-art.is-unit-action.kind-dartlet { width: 68px; height: 56px; margin: -13px 0 -9px -7px; animation: none; }
+.castle-unit-face.is-production-art.is-unit-action > img { opacity: 0; animation: castle-unit-art-action-frame 45ms steps(1, end) 1 forwards; animation-delay: calc(var(--unit-art-frame) * 45ms); }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art > img { animation: castle-unit-art-walk var(--unit-bob, 700ms) ease-in-out infinite; }
+.castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art.is-unit-action > img { animation: castle-unit-art-action-frame 45ms steps(1, end) 1 forwards; animation-delay: calc(var(--unit-art-frame) * 45ms); }
 .castle-lane-unit:has(.kind-dartlet) { --unit-bob: 380ms; }
 .castle-lane-unit:has(.kind-bubbleBud) { --unit-bob: 820ms; }
 .castle-lane-unit:has(.kind-spitlet) { --unit-bob: 660ms; }
@@ -221,6 +225,7 @@
 
 @keyframes castle-unit-arrive { from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.55); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
 @keyframes castle-unit-art-walk { 0%,100% { transform: translateY(0) rotate(-1deg) scale(1); } 50% { transform: translateY(-2px) rotate(1deg) scale(1.025,.975); } }
+@keyframes castle-unit-art-action-frame { 0%, 94% { opacity: 1; } 95%, 100% { opacity: 0; } }
 @keyframes castle-unit-lunge-player { 0%,100% { transform: translateX(0) scale(1); } 48% { transform: translateX(7px) scale(1.12,.92); } }
 @keyframes castle-unit-lunge-enemy { 0%,100% { transform: scaleX(-1) translateX(0) scale(1); } 48% { transform: scaleX(-1) translateX(7px) scale(1.12,.92); } }
 @keyframes castle-home-hit-player { 0%,100% { transform: translateX(0); } 35% { transform: translateX(-5px) rotate(-2deg); } 70% { transform: translateX(3px) rotate(1deg); } }
@@ -243,7 +248,7 @@
 .castle-wave .castle-unit-face i:first-child { left: 4px; }
 .castle-wave .castle-unit-face i:nth-child(2) { right: 4px; }
 .castle-wave .castle-unit-face b { display: none; }
-.castle-scene.is-paused .castle-lane-unit,
+.castle-scene.is-paused .castle-lane-unit { animation: none; }
 .castle-scene.is-paused .goo-pipplo-sprite img,
 .castle-scene.is-paused .castle-unit-face.is-production-art > img { animation-play-state: paused; }
 
@@ -539,4 +544,6 @@
   .castle-lane-unit,
   .goo-pipplo-sprite img { animation: none !important; transition-duration: 0.01ms !important; }
   .goo-pipplo-sprite img:not(:first-child) { display: none; }
+  .castle-unit-face.is-unit-action > img { opacity: 0; }
+  .castle-unit-face.is-unit-action > img:first-child { opacity: 1; }
 }
