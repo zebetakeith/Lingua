@@ -18,6 +18,7 @@ export interface CastleDeckProfile {
   guardianClears: number;
   bestRegion: number;
   totalReviews: number;
+  tutorialComplete: boolean;
 }
 
 interface CastleDeckRecord {
@@ -50,6 +51,7 @@ export function createCastleProfile(deckId: string): CastleDeckProfile {
     guardianClears: 0,
     bestRegion: 1,
     totalReviews: 0,
+    tutorialComplete: false,
   };
 }
 
@@ -120,6 +122,13 @@ export function clearCastleRun(deckId: string) {
   const all = loadAll();
   const profile = loadCastleProfile(deckId);
   saveAll({ ...all, [deckId]: { profile, run: null } });
+}
+
+export function completeCastleTutorial(deckId: string): CastleDeckProfile {
+  const all = loadAll();
+  const profile = { ...loadCastleProfile(deckId), tutorialComplete: true };
+  saveAll({ ...all, [deckId]: { profile, run: all[deckId]?.run || null } });
+  return profile;
 }
 
 export function exportCastleBalanceData(deckId: string): string {

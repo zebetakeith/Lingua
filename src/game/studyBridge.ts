@@ -1,13 +1,13 @@
-import VOCABULARY, { generateDistractors, type VocabWord } from "../data/vocabulary";
+import VOCABULARY, { generateDistractors, type VocabWord } from "../data/vocabulary.ts";
 import {
   DEFAULT_STUDY_SETTINGS,
   chooseQuestionType,
-  createDirectionStudyProgress,
   getCorrectAnswerReward,
   getEnabledStudyDirections,
   getInitialMastery,
   getMasteryLabel,
   getStudyDirectionKey,
+  getReviewDay,
   getStudyPressureProfile,
   getStudyProgressWeight,
   getStudyQueuePriority,
@@ -20,11 +20,43 @@ import {
   type StudyPressureProfile,
   type StudyQuestionType,
   type StudyRewardCurve,
-} from "./study";
+} from "./study.ts";
 
 const SAVE_KEY = "lexicon_labyrinth_save";
 const STARTER_DECK_ID = "starter-japanese";
-const STARTER_CARD_COUNT = 6;
+
+function stableCardHash(value: string): string {
+  let hash = 2_166_136_261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function getCardFingerprint(card: Pick<VocabWord, "word" | "definition">): string {
+  const normalized = `${card.word.trim().toLocaleLowerCase()}\u241f${card.definition.trim().toLocaleLowerCase()}`;
+  return `card-${stableCardHash(normalized)}`;
+}
+
+function repairDuplicateCardIds(cards: VocabWord[]): VocabWord[] {
+  const usedIds = new Set<string>();
+  return cards.map((card, index) => {
+    const baseId = typeof card.id === "string" && card.id.trim() ? card.id.trim() : `card-${index + 1}`;
+    let repairedId = baseId;
+    if (usedIds.has(repairedId)) {
+      const fingerprint = getCardFingerprint(card);
+      repairedId = `${baseId}-recovered-${fingerprint}`;
+      let suffix = 2;
+      while (usedIds.has(repairedId)) {
+        repairedId = `${baseId}-recovered-${fingerprint}-${suffix}`;
+        suffix += 1;
+      }
+    }
+    usedIds.add(repairedId);
+    return repairedId === card.id ? card : { ...card, id: repairedId };
+  });
+}
 
 interface LegacyCardProgress {
   box: number;
@@ -122,7 +154,7 @@ function loadSave(): StudySave {
           selectedDeckId: typeof parsed.selectedDeckId === "string" ? parsed.selectedDeckId : parsed.decks[0].id,
           decks: parsed.decks.map(deck => ({
             ...deck,
-            cards: Array.isArray(deck.cards) ? deck.cards : [],
+            cards: repairDuplicateCardIds(Array.isArray(deck.cards) ? deck.cards : []),
             cardRatings: deck.cardRatings || {},
             cardProgress: deck.cardProgress || {},
             introducedCardIds: Array.isArray(deck.introducedCardIds) ? deck.introducedCardIds : [],
@@ -159,10 +191,16 @@ function updateDeck(deckId: string, updater: (deck: StudyDeck) => StudyDeck): St
 
 function getDirectionProgress(deck: StudyDeck, card: VocabWord, direction: StudyDirection): DirectionStudyProgress {
   const rating = deck.cardRatings?.[card.id];
-  return normalizeDirectionStudyProgress(
-    deck.directionProgress?.[getStudyDirectionKey(card.id, direction)],
+  const stored = deck.directionProgress?.[getStudyDirectionKey(card.id, direction)];
+  const fingerprint = getCardFingerprint(card);
+  const progress = stored?.cardFingerprint && stored.cardFingerprint !== fingerprint ? null : stored;
+  return {
+    ...normalizeDirectionStudyProgress(
+    progress,
     getInitialMastery(rating),
-  );
+    ),
+    cardFingerprint: fingerprint,
+  };
 }
 
 function ensureStudyCards(deckId: string): StudyDeck {
@@ -172,17 +210,12 @@ function ensureStudyCards(deckId: string): StudyDeck {
       .map(([cardId]) => cardId));
     const introducedIds = new Set((deck.introducedCardIds || [])
       .filter(cardId => deck.cards.some(card => card.id === cardId) && !knownIds.has(cardId)));
-    if (introducedIds.size === 0) {
-      deck.cards.filter(card => !knownIds.has(card.id)).slice(0, STARTER_CARD_COUNT).forEach(card => introducedIds.add(card.id));
-    }
     const directionProgress = { ...(deck.directionProgress || {}) };
     const settings = normalizeStudySettings(deck.studySettings);
     deck.cards.filter(card => introducedIds.has(card.id)).forEach(card => {
       getEnabledStudyDirections(settings).forEach(direction => {
         const key = getStudyDirectionKey(card.id, direction);
-        if (!directionProgress[key]) {
-          directionProgress[key] = createDirectionStudyProgress(getInitialMastery(deck.cardRatings?.[card.id]));
-        }
+        directionProgress[key] = getDirectionProgress({ ...deck, directionProgress }, card, direction);
       });
     });
     return {
@@ -244,9 +277,7 @@ export function introduceStudyCards(deckId: string, count: number): VocabWord[] 
       introducedIds.add(card.id);
       getEnabledStudyDirections(settings).forEach(direction => {
         const key = getStudyDirectionKey(card.id, direction);
-        if (!directionProgress[key]) {
-          directionProgress[key] = createDirectionStudyProgress(getInitialMastery(deck.cardRatings?.[card.id]));
-        }
+        directionProgress[key] = getDirectionProgress({ ...deck, directionProgress }, card, direction);
       });
     });
     return { ...deck, introducedCardIds: [...introducedIds], directionProgress };
@@ -372,4 +403,53 @@ export function answerStudyQuestion(
   });
   if (!answerResult) throw new Error("The reviewed card is no longer available.");
   return answerResult;
+}
+
+export function completeStudyExposure(
+  deckId: string,
+  question: StudyQuestion,
+): StudyAnswerResult {
+  let exposureResult: StudyAnswerResult | null = null;
+  updateDeck(deckId, deck => {
+    const card = deck.cards.find(candidate => candidate.id === question.cardId);
+    if (!card) return deck;
+    const key = getStudyDirectionKey(card.id, question.direction);
+    const currentDirection = getDirectionProgress(deck, card, question.direction);
+    const now = Date.now();
+    const nextDirection: DirectionStudyProgress = {
+      ...currentDirection,
+      seen: currentDirection.seen + 1,
+      dueAt: now,
+      reviewDay: getReviewDay(now),
+      lastReviewedAt: now,
+    };
+    const currentCard = deck.cardProgress?.[card.id] || {
+      box: 2,
+      correctStreak: 0,
+      wrongStreak: 0,
+      seen: 0,
+      correct: 0,
+      wrong: 0,
+      dueAt: 0,
+    };
+    exposureResult = {
+      isCorrect: true,
+      answer: question.answer,
+      masteryBefore: currentDirection.mastery,
+      masteryAfter: currentDirection.mastery,
+      masteryEvent: "",
+      wasUnseen: currentDirection.seen === 0,
+      progressKey: key,
+    };
+    return {
+      ...deck,
+      directionProgress: { ...(deck.directionProgress || {}), [key]: nextDirection },
+      cardProgress: {
+        ...(deck.cardProgress || {}),
+        [card.id]: { ...currentCard, seen: currentCard.seen + 1, dueAt: now },
+      },
+    };
+  });
+  if (!exposureResult) throw new Error("The introduced card is no longer available.");
+  return exposureResult;
 }

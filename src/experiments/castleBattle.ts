@@ -160,6 +160,7 @@ export interface CastleRunState {
 
 export interface CastleStudyOutcome {
   isCorrect: boolean;
+  isExposure?: boolean;
   wasUnseen: boolean;
   reward: number;
   progressKey: string;
@@ -869,20 +870,25 @@ function removeOne<T>(items: T[], value: T): T[] {
 
 export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStudyOutcome): CastleRunState {
   if (run.phase !== "battle") return run;
+  const graded = !outcome.isExposure;
   let battle: CastleBattleState = {
     ...run.battle,
     mode: "command",
     telemetry: {
       ...run.battle.telemetry,
       reviews: run.battle.telemetry.reviews + 1,
-      correct: run.battle.telemetry.correct + (outcome.isCorrect ? 1 : 0),
-      wrong: run.battle.telemetry.wrong + (outcome.isCorrect ? 0 : 1),
+      correct: run.battle.telemetry.correct + (graded && outcome.isCorrect ? 1 : 0),
+      wrong: run.battle.telemetry.wrong + (graded && !outcome.isCorrect ? 1 : 0),
       unseen: run.battle.telemetry.unseen + (outcome.wasUnseen ? 1 : 0),
       responseMs: [...run.battle.telemetry.responseMs, Math.max(0, outcome.responseMs)].slice(-200),
     },
   };
   let notice = "Review recorded.";
-  if (outcome.isCorrect) {
+  if (outcome.isExposure) {
+    battle.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, battle.energy + outcome.reward));
+    battle.telemetry.energyEarned = roundEnergy(battle.telemetry.energyEarned + outcome.reward);
+    notice = `New direction learned: +${roundEnergy(outcome.reward)} energy. Combat stayed safely paused.`;
+  } else if (outcome.isCorrect) {
     let reward = outcome.reward;
     if (outcome.selfGraded && hasUpgrade(run.upgrades, "deepRecall")) reward *= 1.1;
     if (!outcome.wasUnseen && !battle.firstSeenCorrectAwarded && hasUpgrade(run.upgrades, "firstRecall")) {
@@ -957,8 +963,8 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     ...run,
     savedAt: Date.now(),
     reviews: run.reviews + 1,
-    correct: run.correct + (outcome.isCorrect ? 1 : 0),
-    wrong: run.wrong + (outcome.isCorrect ? 0 : 1),
+    correct: run.correct + (graded && outcome.isCorrect ? 1 : 0),
+    wrong: run.wrong + (graded && !outcome.isCorrect ? 1 : 0),
     battle,
     notice,
   };

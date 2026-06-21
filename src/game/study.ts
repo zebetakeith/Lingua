@@ -17,6 +17,7 @@ export interface DeckStudySettings {
 }
 
 export interface DirectionStudyProgress {
+  cardFingerprint?: string;
   mastery: number;
   correctStreak: number;
   wrongStreak: number;
@@ -105,6 +106,7 @@ export function normalizeDirectionStudyProgress(
   const fallback = createDirectionStudyProgress(initialMastery);
   if (!progress) return fallback;
   return {
+    cardFingerprint: typeof progress.cardFingerprint === "string" ? progress.cardFingerprint : undefined,
     mastery: clampMastery(typeof progress.mastery === "number" ? progress.mastery : fallback.mastery),
     correctStreak: Math.max(0, Number(progress.correctStreak) || 0),
     wrongStreak: Math.max(0, Number(progress.wrongStreak) || 0),
@@ -242,6 +244,7 @@ export function updateDirectionStudyProgress(
                   : 8;
 
   return {
+    cardFingerprint: current.cardFingerprint,
     mastery,
     correctStreak: nextCorrectStreak,
     wrongStreak: nextWrongStreak,

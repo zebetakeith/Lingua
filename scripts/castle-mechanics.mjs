@@ -45,8 +45,11 @@ run = applyCastleStudyOutcome(run, outcome(4));
 assert.equal(run.battle.recallBoltCharge, 0, "fifth correct seen recall should consume the bolt charge");
 assert.equal(run.battle.enemyCastleHp, startingEnemyHp - 8, "Recall Bolt should deal eight keep damage");
 
-const unseen = applyCastleStudyOutcome(freshRun(), outcome(0, { wasUnseen: true, reward: 0.25 }));
+const unseen = applyCastleStudyOutcome(freshRun(), outcome(0, { isExposure: true, wasUnseen: true, reward: 0.25 }));
 assert.equal(unseen.battle.recallBoltCharge, 0, "first exposure must not charge Recall Bolt");
+assert.equal(unseen.correct, 0, "an ungraded first exposure must not count as a correct answer");
+assert.equal(unseen.wrong, 0, "an ungraded first exposure must not count as a miss");
+assert.equal(unseen.battle.energy, 0.25, "a completed first exposure should grant only its small learning bonus");
 
 let rally = freshRun();
 for (let index = 0; index < 3; index += 1) {
@@ -102,4 +105,4 @@ progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon:
 assert.equal(progressionProfile.guardianClears, 2, "guardian clears should accumulate across separate runs");
 assert.equal(progressionProfile.unlockedUpgradeIds.length, STARTER_CASTLE_UPGRADE_IDS.length + 2, "each accumulated guardian clear should unlock one discovery");
 
-process.stdout.write("Castle mechanics: 19 assertions passed.\n");
+process.stdout.write("Castle mechanics: 22 assertions passed.\n");
