@@ -89,7 +89,7 @@ interface ReviewFeedback {
 }
 
 type CastlePanelMode = "study" | "army";
-type PipploAnimationName = "idle" | "cast" | "hurt";
+type PipploAnimationName = "idle" | "cast" | "hurt" | "cheer";
 
 interface PipploAnimationState {
   name: PipploAnimationName;
@@ -103,7 +103,7 @@ const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
 const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
-  (["idle", "cast", "hurt"] as const).map(animation => [
+  (["idle", "cast", "hurt", "cheer"] as const).map(animation => [
     animation,
     Array.from(
       { length: 4 },
@@ -116,14 +116,16 @@ function PipploSprite({
   className = "",
   animation = "idle",
   animated = true,
+  loop,
 }: {
   className?: string;
   animation?: PipploAnimationName;
   animated?: boolean;
+  loop?: boolean;
 }) {
-  const animationClass = animated ? animation === "idle" ? "is-looping" : "is-action" : "";
+  const animationClass = animated ? (loop ?? animation === "idle") ? "is-looping" : "is-action" : "";
   return (
-    <div className={`pipplo-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
+    <div className={`goo-pipplo-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
       {PIPPLO_ANIMATION_FRAMES[animation].map((src, index) => (
         <img key={src} src={src} alt="" style={{ "--pipplo-frame": index } as CSSProperties} />
       ))}
@@ -156,8 +158,13 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
   const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => event.kind === "hit" && event.position <= 3);
   const playerCastleHit = Boolean(playerCastleHitEvent);
   const enemyCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position >= 97);
-  const activePipploAnimation: PipploAnimationName = playerCastleHitEvent ? "hurt" : pipploAnimation.name;
-  const activePipploSerial = playerCastleHitEvent ? `hit-${playerCastleHitEvent.id}` : pipploAnimation.serial;
+  const celebrating = run.phase === "reward" || run.phase === "retire" || run.phase === "complete";
+  const activePipploAnimation: PipploAnimationName = playerCastleHitEvent ? "hurt" : celebrating ? "cheer" : pipploAnimation.name;
+  const activePipploSerial = playerCastleHitEvent
+    ? `hit-${playerCastleHitEvent.id}`
+    : celebrating
+      ? `celebrate-${run.phase}-${battle.battleNumber}`
+      : pipploAnimation.serial;
   const friendlyUnits = battle.units.filter(unit => unit.side === "player").length;
   const enemyUnits = battle.units.length - friendlyUnits;
   return (
@@ -177,7 +184,12 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
 
       <div className="castle-lane">
         <div className={`castle-home is-player ${playerCastleHit ? "is-hit" : ""}`}>
-          <PipploSprite key={`${activePipploAnimation}-${activePipploSerial}`} className="pipplo-keeper" animation={activePipploAnimation} />
+          <PipploSprite
+            key={`${activePipploAnimation}-${activePipploSerial}`}
+            className="pipplo-keeper"
+            animation={activePipploAnimation}
+            loop={activePipploAnimation === "cheer"}
+          />
           <div className="castle-tower"><span /><span /><span /></div>
           {battle.playerBarrier > 0 && <div className="castle-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
         </div>
@@ -960,7 +972,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       {run.phase === "reward" && (
         <aside className="castle-overlay">
           <section className="castle-reward-sheet" role="dialog" aria-modal="true" aria-label="Choose a run upgrade">
-            <Sparkles />
+            <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop />
             <p className="castle-eyebrow">Castle absorbed</p>
             <h2>What should Pipplo digest?</h2>
             <p>Choose one transformation for the rest of this run.</p>
@@ -1015,7 +1027,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       {run.phase === "retire" && (
         <aside className="castle-overlay">
           <section className="castle-result-sheet is-win" role="dialog" aria-modal="true" aria-label="Study contract complete">
-            <Castle />
+            <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop />
             <p className="castle-eyebrow">Contract complete</p>
             <h2>Pipplo can head home—or wobble deeper</h2>
             <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · {run.battlesWon} castles defeated</p>
@@ -1039,7 +1051,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       {(run.phase === "complete" || run.phase === "lost") && (
         <aside className="castle-overlay">
           <section className={`castle-result-sheet ${run.phase === "complete" ? "is-win" : "is-loss"}`} role="dialog" aria-modal="true" aria-label={run.phase === "complete" ? "Expedition complete" : "Expedition lost"}>
-            {run.phase === "complete" ? <Sparkles /> : <Heart />}
+            {run.phase === "complete" ? <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop /> : <Heart />}
             <p className="castle-eyebrow">{run.phase === "complete" ? "Expedition complete" : "Pipplo needs a nap"}</p>
             <h2>{run.phase === "complete" ? "The deck-world grew" : "The castle fell; the learning stayed"}</h2>
             <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · best region {run.bestRegion}</p>
