@@ -197,9 +197,10 @@
 .castle-unit-face.is-production-art.is-unit-action.kind-dartlet { width: 68px; height: 56px; margin: -13px 0 -9px -7px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-bubbleBud { width: 62px; height: 52px; margin: -7px 0 -6px -8px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-spitlet { width: 68px; height: 46px; margin: -6px 0 -6px -6px; animation: none; }
-.castle-unit-face.is-production-art.is-unit-action > img { opacity: 0; animation: castle-unit-art-action-frame 45ms steps(1, end) 1 forwards; animation-delay: calc(var(--unit-art-frame) * 45ms); }
+.castle-unit-face.is-production-art.is-unit-action.kind-bigChonk { width: 76px; height: 66px; margin: -12px 0 -8px -10px; animation: none; }
+.castle-unit-face.is-production-art.is-unit-action > img { opacity: 0; animation: castle-unit-art-action-frame var(--unit-art-duration, 45ms) steps(1, end) 1 forwards; animation-delay: var(--unit-art-delay, 0ms); }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art > img { animation: castle-unit-art-walk var(--unit-bob, 700ms) ease-in-out infinite; }
-.castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art.is-unit-action > img { animation: castle-unit-art-action-frame 45ms steps(1, end) 1 forwards; animation-delay: calc(var(--unit-art-frame) * 45ms); }
+.castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art.is-unit-action > img { animation: castle-unit-art-action-frame var(--unit-art-duration, 45ms) steps(1, end) 1 forwards; animation-delay: var(--unit-art-delay, 0ms); }
 .castle-lane-unit:has(.kind-dartlet) { --unit-bob: 380ms; }
 .castle-lane-unit:has(.kind-bubbleBud) { --unit-bob: 820ms; }
 .castle-lane-unit:has(.kind-spitlet) { --unit-bob: 660ms; }

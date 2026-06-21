@@ -142,6 +142,16 @@ const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/attack/0${index + 1}.png`,
   ),
+  bigChonk: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/attack/0${index + 1}.png`,
+  ),
+};
+const FRIENDLY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
+  dartlet: 45,
+  bubbleBud: 55,
+  spitlet: 55,
+  bigChonk: 75,
 };
 
 function PipploSprite({
@@ -187,6 +197,7 @@ function SlimeFace({
 }) {
   const art = side === "player" ? FRIENDLY_UNIT_ART[kind] : undefined;
   const attackFrames = attacking && side === "player" ? FRIENDLY_UNIT_ATTACK_FRAMES[kind] : undefined;
+  const attackFrameMs = FRIENDLY_UNIT_ATTACK_FRAME_MS[kind] || 45;
   if (art) {
     return (
       <span
@@ -199,7 +210,10 @@ function SlimeFace({
             key={src}
             src={src}
             alt=""
-            style={{ "--unit-art-frame": index } as CSSProperties}
+            style={{
+              "--unit-art-duration": `${attackFrameMs}ms`,
+              "--unit-art-delay": `${index * attackFrameMs}ms`,
+            } as CSSProperties}
           />
         ))}
       </span>
@@ -268,7 +282,9 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
         <div className="castle-road">
           <div className="castle-mid-flag"><i /><span /></div>
           {battle.units.map(unit => {
-            const attacking = unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - 180;
+            const productionAttackFrameMs = unit.side === "player" ? FRIENDLY_UNIT_ATTACK_FRAME_MS[unit.kind] : undefined;
+            const attackAnimationMs = productionAttackFrameMs ? productionAttackFrameMs * 4 : 180;
+            const attacking = unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - attackAnimationMs;
             return (
             <div
               key={unit.id}
