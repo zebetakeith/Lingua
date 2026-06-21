@@ -5,7 +5,7 @@ import {
   type CastleRunState,
   type CastleUnitKind,
   type CastleUpgradeId,
-} from "./castleBattle";
+} from "./castleBattle.ts";
 
 const CASTLE_SAVE_KEY = "lexicon_labyrinth_castle_runs_v1";
 
@@ -74,6 +74,7 @@ export function loadCastleRun(deckId: string): CastleRunState | null {
           battle: {
             ...run.battle,
             afterNextEnemyKind: run.battle.afterNextEnemyKind || run.battle.nextEnemyKind,
+            recallBoltCharge: run.battle.recallBoltCharge || 0,
             fxEvents: run.battle.fxEvents || [],
             nextFxId: run.battle.nextFxId || 1,
           },
@@ -92,7 +93,10 @@ function unlockedForGuardianCount(guardianClears: number): CastleUpgradeId[] {
 export function saveCastleRun(deckId: string, run: CastleRunState): CastleDeckProfile {
   const all = loadAll();
   const previousProfile = loadCastleProfile(deckId);
-  const guardianClears = Math.max(previousProfile.guardianClears, Math.floor(run.battlesWon / 3));
+  const previousRun = all[deckId]?.run;
+  const previousGuardianMilestones = previousRun ? Math.floor(previousRun.battlesWon / 3) : 0;
+  const currentGuardianMilestones = Math.floor(run.battlesWon / 3);
+  const guardianClears = previousProfile.guardianClears + Math.max(0, currentGuardianMilestones - previousGuardianMilestones);
   const profile: CastleDeckProfile = {
     ...previousProfile,
     guardianClears,

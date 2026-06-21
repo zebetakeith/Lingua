@@ -35,6 +35,8 @@ import {
 import type { StudyRewardCurve } from "../game/study";
 import {
   CASTLE_CONTRACTS,
+  CASTLE_POWER_DEFS,
+  CASTLE_RECALL_BOLT_LIMIT,
   CASTLE_RALLY_LIMIT,
   CASTLE_UNIT_DEFS,
   CASTLE_UPGRADE_DEFS,
@@ -68,6 +70,7 @@ import {
   saveCastleRun,
   type CastleDeckProfile,
 } from "./castleStorage";
+import { playCastleSound } from "./castleAudio";
 import "./CastleBattleLab.css";
 
 interface CastleBattleLabProps {
@@ -89,6 +92,7 @@ const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
   quadratic: "Curved",
   steep: "Steep",
 };
+const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
 
 function CastleHealth({ current, max, enemy = false }: { current: number; max: number; enemy?: boolean }) {
   const percent = Math.max(0, Math.min(100, (current / Math.max(1, max)) * 100));
@@ -114,8 +118,13 @@ function CastleScene({ run }: { run: CastleRunState }) {
   const battle = run.battle;
   const playerCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position <= 3);
   const enemyCastleHit = battle.fxEvents.some(event => event.kind === "hit" && event.position >= 97);
+  const friendlyUnits = battle.units.filter(unit => unit.side === "player").length;
+  const enemyUnits = battle.units.length - friendlyUnits;
   return (
-    <section className={`castle-scene ${battle.mode === "study" ? "is-live" : "is-paused"}`} aria-label="Castle battlefield">
+    <section
+      className={`castle-scene ${battle.mode === "study" ? "is-live" : "is-paused"}`}
+      aria-label={`Castle battlefield. Pipplo's Keep ${Math.ceil(battle.playerCastleHp)} health, Rival Keep ${Math.ceil(battle.enemyCastleHp)} health. ${friendlyUnits} friendly and ${enemyUnits} enemy units in the lane.`}
+    >
       <div className="castle-sky-orb" />
       <div className="castle-scene-status">
         <CastleHealth current={battle.playerCastleHp} max={battle.playerCastleMaxHp} />
@@ -166,6 +175,10 @@ function CastleScene({ run }: { run: CastleRunState }) {
 
       <div className="castle-battle-strip">
         <span className="castle-energy"><Sparkles />{formatCastleEnergy(battle.energy)} energy</span>
+        <span className="castle-recall-bolt" title="Five correct seen-card recalls fire an 8-damage castle bolt">
+          Recall Bolt
+          {Array.from({ length: CASTLE_RECALL_BOLT_LIMIT }, (_, index) => <i key={index} className={index < battle.recallBoltCharge ? "is-filled" : ""} />)}
+        </span>
         <span className="castle-rally">
           Enemy Rally
           {Array.from({ length: CASTLE_RALLY_LIMIT }, (_, index) => <i key={index} className={index < battle.rally ? "is-filled" : ""} />)}
@@ -392,8 +405,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [panelMode, setPanelMode] = useState<CastlePanelMode>("study");
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(CASTLE_SOUND_KEY) !== "off");
   const questionStartedAt = useRef(0);
   const lastSaveAt = useRef(0);
+  const previousPhase = useRef<CastleRunState["phase"] | null>(initial.run?.phase || null);
 
   const selectedDeck = useMemo(() => decks.find(deck => deck.id === selectedDeckId), [decks, selectedDeckId]);
   const simulationReady = Boolean(
@@ -426,6 +441,30 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const timer = window.setTimeout(() => setFeedback(null), 2_800);
     return () => window.clearTimeout(timer);
   }, [feedback]);
+
+  useEffect(() => {
+    localStorage.setItem(CASTLE_SOUND_KEY, soundEnabled ? "on" : "off");
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    if (!run) return;
+    const before = previousPhase.current;
+    previousPhase.current = run.phase;
+    if (before === run.phase) return;
+    if (run.phase === "reward" || run.phase === "complete") playCastleSound("victory", soundEnabled);
+    if (run.phase === "lost") playCastleSound("defeat", soundEnabled);
+  }, [run, soundEnabled]);
+
+  useEffect(() => {
+    if (!helpOpen && !settingsOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setHelpOpen(false);
+      setSettingsOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [helpOpen, settingsOpen]);
 
   const pauseForInterruption = useCallback(() => {
     if (!question) return;
@@ -506,6 +545,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
   const finishReview = (correct: boolean) => {
     if (!question || !run || feedback?.wasUnseen) return;
+    const firesRecallBolt = correct && question.seenBefore && run.battle.recallBoltCharge === CASTLE_RECALL_BOLT_LIMIT - 1;
+    playCastleSound(firesRecallBolt ? "bolt" : correct ? "correct" : "wrong", soundEnabled);
     const result: StudyAnswerResult = answerStudyQuestion(selectedDeckId, question, correct);
     const responseMs = Math.max(0, Date.now() - questionStartedAt.current);
     const outcome = {
@@ -563,6 +604,19 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setProfile(loadCastleProfile(selectedDeckId));
   };
 
+  const summonUnit = (kind: CastleUnitKind) => {
+    if (!run || run.phase !== "battle" || run.battle.energy < CASTLE_UNIT_DEFS[kind].cost) return;
+    playCastleSound("summon", soundEnabled);
+    setRun(current => current ? summonCastleUnit(current, kind) : current);
+  };
+
+  const usePower = (id: CastlePowerId) => {
+    const power = CASTLE_POWER_DEFS[id];
+    if (!run || run.phase !== "battle" || run.battle.energy < power.cost) return;
+    playCastleSound("power", soundEnabled);
+    setRun(current => current ? activateCastlePower(current, id) : current);
+  };
+
   const downloadBalance = () => {
     const blob = new Blob([exportCastleBalanceData(selectedDeckId)], { type: "application/json" });
     const href = URL.createObjectURL(blob);
@@ -612,15 +666,15 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "battle" && (
         <nav className="castle-mode-switch" aria-label="Battle panel">
-          <button className={panelMode === "study" ? "is-active" : ""} onClick={() => setPanelMode("study")}><BookOpen />Flashcards</button>
-          <button className={panelMode === "army" ? "is-active" : ""} onClick={() => setPanelMode("army")}><Swords />Army & powers <b>{formatCastleEnergy(run.battle.energy)}</b></button>
+          <button aria-pressed={panelMode === "study"} className={panelMode === "study" ? "is-active" : ""} onClick={() => setPanelMode("study")}><BookOpen />Flashcards</button>
+          <button aria-pressed={panelMode === "army"} className={panelMode === "army" ? "is-active" : ""} onClick={() => setPanelMode("army")}><Swords />Army & powers <b>{formatCastleEnergy(run.battle.energy)}</b></button>
         </nav>
       )}
 
-      {feedback && !feedback.wasUnseen && <div className="castle-feedback-toast"><ReviewResult feedback={feedback} /></div>}
+      {feedback && !feedback.wasUnseen && <div className="castle-feedback-toast" role="status" aria-live="polite"><ReviewResult feedback={feedback} /></div>}
 
       {run.phase === "battle" && panelMode === "study" && feedback?.wasUnseen && (
-        <section className="castle-protected-result">
+        <section className="castle-protected-result" role="status" aria-live="polite">
           <p className="castle-eyebrow">First exposure complete · combat remains paused</p>
           <ReviewResult feedback={feedback} onContinue={() => beginQuestion(run, question ? getStudyQuestionKey(question) : undefined)} />
         </section>
@@ -663,8 +717,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
           </div>
           <CommandTray
             run={run}
-            onSummon={kind => setRun(current => current ? summonCastleUnit(current, kind) : current)}
-            onPower={id => setRun(current => current ? activateCastlePower(current, id) : current)}
+            onSummon={summonUnit}
+            onPower={usePower}
           />
           <button className="castle-back-to-study" onClick={() => setPanelMode("study")}><BookOpen />Back to flashcards</button>
         </section>
@@ -672,7 +726,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "reward" && (
         <aside className="castle-overlay">
-          <section className="castle-reward-sheet">
+          <section className="castle-reward-sheet" role="dialog" aria-modal="true" aria-label="Choose a run upgrade">
             <Sparkles />
             <p className="castle-eyebrow">Castle absorbed</p>
             <h2>What should Pipplo digest?</h2>
@@ -701,7 +755,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "route" && (
         <aside className="castle-overlay">
-          <section className="castle-route-sheet">
+          <section className="castle-route-sheet" role="dialog" aria-modal="true" aria-label="Choose the next route">
             <Route />
             <p className="castle-eyebrow">Choose the next stop</p>
             <h2>The road forks around a humming puddle</h2>
@@ -726,7 +780,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "retire" && (
         <aside className="castle-overlay">
-          <section className="castle-result-sheet is-win">
+          <section className="castle-result-sheet is-win" role="dialog" aria-modal="true" aria-label="Study contract complete">
             <Castle />
             <p className="castle-eyebrow">Contract complete</p>
             <h2>Pipplo can head home—or wobble deeper</h2>
@@ -749,7 +803,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {(run.phase === "complete" || run.phase === "lost") && (
         <aside className="castle-overlay">
-          <section className={`castle-result-sheet ${run.phase === "complete" ? "is-win" : "is-loss"}`}>
+          <section className={`castle-result-sheet ${run.phase === "complete" ? "is-win" : "is-loss"}`} role="dialog" aria-modal="true" aria-label={run.phase === "complete" ? "Expedition complete" : "Expedition lost"}>
             {run.phase === "complete" ? <Sparkles /> : <Heart />}
             <p className="castle-eyebrow">{run.phase === "complete" ? "Expedition complete" : "Pipplo needs a nap"}</p>
             <h2>{run.phase === "complete" ? "The deck-world grew" : "The castle fell; the learning stayed"}</h2>
@@ -766,13 +820,14 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {helpOpen && (
         <aside className="castle-drawer-backdrop" onClick={() => setHelpOpen(false)}>
-          <section className="castle-drawer" onClick={event => event.stopPropagation()}>
+          <section className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-help-title" onClick={event => event.stopPropagation()}>
             <button className="castle-drawer-close" onClick={() => setHelpOpen(false)}><X /></button>
             <p className="castle-eyebrow">How Goo Keep works</p>
-            <h2>Recall powers the nursery</h2>
-            <p>The first appearance of each card direction pauses combat. Once seen, it receives a mastery-based reading grace and then the lane becomes live.</p>
-            <p>Correct recall earns energy. Misses fill Enemy Rally, but recalling the missed direction later removes a Rally pip before it triggers.</p>
-            <p>After every answer, combat pauses. Summon a unit, use Pipplo's castle powers, or bank energy before starting the next card.</p>
+            <h2 id="castle-help-title">Recall powers the nursery</h2>
+            <p>The first appearance of each card direction safely pauses combat. Once that direction has been seen, the lane stays live while you answer it.</p>
+            <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. Misses fill Enemy Rally, but recalling the missed direction later removes a Rally pip before it triggers.</p>
+            <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; the battle keeps moving while that panel is open.</p>
+            <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries remain.</p>
           </section>
         </aside>
@@ -780,11 +835,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {settingsOpen && (
         <aside className="castle-drawer-backdrop" onClick={() => setSettingsOpen(false)}>
-          <section className="castle-drawer" onClick={event => event.stopPropagation()}>
+          <section className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-settings-title" onClick={event => event.stopPropagation()}>
             <button className="castle-drawer-close" onClick={() => setSettingsOpen(false)}><X /></button>
             <p className="castle-eyebrow">Balance lab</p>
-            <h2>Pressure and telemetry</h2>
+            <h2 id="castle-settings-title">Pressure and telemetry</h2>
             <label>Reward curve<select value={run.rewardCurve} onChange={event => setRun(current => current ? { ...current, rewardCurve: event.target.value as StudyRewardCurve } : current)}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select></label>
+            <label className="castle-sound-toggle"><input type="checkbox" checked={soundEnabled} onChange={event => setSoundEnabled(event.target.checked)} />Sound cues</label>
             <div className="castle-telemetry-grid">
               <span><b>{formatCastleEnergy(run.battle.telemetry.energyEarned)}</b>energy earned</span>
               <span><b>{formatCastleEnergy(run.battle.telemetry.energySpent)}</b>energy spent</span>

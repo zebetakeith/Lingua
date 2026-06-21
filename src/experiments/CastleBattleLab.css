@@ -63,6 +63,14 @@
 .castle-header-stats { display: flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 900; white-space: nowrap; }
 .castle-header-stats svg { width: 14px; height: 14px; color: #db718d; }
 
+.castle-lab-shell button:focus-visible,
+.castle-lab-shell select:focus-visible,
+.castle-setup-shell button:focus-visible,
+.castle-setup-shell select:focus-visible {
+  outline: 3px solid #174f54;
+  outline-offset: 3px;
+}
+
 .castle-scene {
   position: relative;
   min-height: 270px;
@@ -215,6 +223,8 @@
 .castle-battle-strip svg { width: 13px; height: 13px; color: #ffe265; }
 .castle-rally i { display: inline-block; width: 7px; height: 7px; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.44); border-radius: 50%; }
 .castle-rally i.is-filled { background: #ef7895; box-shadow: 0 0 6px #ef7895; }
+.castle-recall-bolt i { display: inline-block; width: 6px; height: 6px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); border-radius: 2px; transform: rotate(45deg); }
+.castle-recall-bolt i.is-filled { background: #ffe36d; box-shadow: 0 0 6px #ffe36d; }
 .castle-wave .castle-unit-face { width: 18px; height: 14px; border-width: 2px; }
 .castle-wave .castle-unit-face i { top: 4px; width: 2px; height: 3px; }
 .castle-wave .castle-unit-face i:first-child { left: 4px; }
@@ -353,6 +363,8 @@
 .castle-telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .castle-telemetry-grid span { display: grid; padding: 10px; background: white; border-radius: 13px; font-size: 9px; }
 .castle-telemetry-grid b { font-size: 17px; }
+.castle-sound-toggle { display: flex !important; align-items: center; gap: 8px; padding: 9px 11px; background: rgba(255,255,255,0.72); border: 1px solid rgba(24, 95, 97, 0.12); border-radius: 12px; font-size: 11px !important; }
+.castle-sound-toggle input { width: 18px; height: 18px; accent-color: #2f8c8d; }
 .castle-download,
 .castle-pause-button { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 44px; margin-top: 10px; color: white; background: #338d8d; border: 0; border-radius: 13px; font-weight: 900; }
 .castle-pause-button { background: #8c73ca; }
@@ -412,6 +424,7 @@
   .castle-lab-header > div b { font-size: 13px; }
   .castle-battle-strip { gap: 3px; }
   .castle-battle-strip > span { font-size: 8px; }
+  .castle-recall-bolt { max-width: 70px; overflow: hidden; white-space: nowrap; }
   .castle-wave { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .castle-answer-grid { grid-template-columns: 1fr; }
   .castle-study-card h2 { font-size: 25px; }

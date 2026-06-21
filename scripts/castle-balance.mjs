@@ -1,6 +1,10 @@
 import {
   applyCastleStudyOutcome,
+  activateCastlePower,
+  chooseCastleRoute,
+  claimCastleUpgrade,
   createInitialCastleRun,
+  retireCastleRun,
   resumeCastleBattle,
   summonCastleUnit,
   tickCastleRun,
@@ -26,6 +30,14 @@ function spendEnergy(run) {
   const priorities = ["bigChonk", "spitlet", "bubbleBud", "dartlet"];
   let next = run;
   for (let action = 0; action < 10; action += 1) {
+    if (next.battle.playerCastleHp / next.battle.playerCastleMaxHp < 0.85 && next.battle.energy >= 3) {
+      const defended = activateCastlePower(next, "bubbleGate");
+      if (defended !== next) {
+        next = defended;
+        continue;
+      }
+    }
+    if (next.battle.energy < 3.5) break;
     let spent = false;
     for (const kind of priorities) {
       const candidate = summonCastleUnit(next, kind);
@@ -82,6 +94,72 @@ function simulate(curve, mastery) {
   };
 }
 
+function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0) {
+  const seed = Math.round((mastery * 10_000) + ({ quick: 100, regular: 200, long: 300 }[contractId] || 0) + (seedOffset * 997));
+  let run = createInitialCastleRun(`full-${contractId}-${mastery}`, contractId, "quadratic", undefined, seed);
+  const reward = rewardFor("quadratic", mastery);
+  let reviews = 0;
+  let elapsedMs = 0;
+  const answerMs = mastery >= 0.85 ? 1_800 : mastery >= 0.5 ? 3_000 : 4_500;
+  let safety = 0;
+  let reviewsAtLastWin = 0;
+  const battleReviews = [];
+  while (!["complete", "lost"].includes(run.phase) && safety < 2_000) {
+    safety += 1;
+    if (run.phase === "reward") {
+      battleReviews.push(reviews - reviewsAtLastWin);
+      reviewsAtLastWin = reviews;
+      run = claimCastleUpgrade(run, run.rewardChoices[0]);
+      continue;
+    }
+    if (run.phase === "route") {
+      const route = (run.battleInRegion === 2 || run.carriedCastleHp < 65) && run.routeChoices.includes("rest")
+        ? "rest"
+        : run.routeChoices.includes("workshop") ? "workshop" : run.routeChoices[0];
+      run = chooseCastleRoute(run, route);
+      continue;
+    }
+    if (run.phase === "retire") {
+      run = retireCastleRun(run);
+      continue;
+    }
+    if (run.phase !== "battle") break;
+    const cycle = Math.max(2, Math.round(1 / Math.max(0.01, 1 - correctRate)));
+    const isCorrect = reviews % cycle !== cycle - 1;
+    run = applyCastleStudyOutcome(run, {
+      isCorrect,
+      wasUnseen: false,
+      reward: isCorrect ? reward : 0,
+      progressKey: `full-card-${reviews % 12}::term_to_definition`,
+      responseMs: answerMs,
+      selfGraded: false,
+      due: true,
+    });
+    run = spendEnergy(run);
+    run = resumeCastleBattle(run);
+    for (let step = 0; step < Math.round(answerMs / 100) && run.phase === "battle"; step += 1) {
+      run = tickCastleRun(run, 100, mastery < 0.22 ? 0.75 : mastery < 0.48 ? 0.9 : 1);
+      elapsedMs += 100;
+    }
+    reviews += 1;
+  }
+  return {
+    contractId,
+    mastery,
+    correctRate,
+    seedOffset,
+    result: run.phase,
+    regionsReached: run.bestRegion,
+    battlesWon: run.battlesWon,
+    reviews,
+    activeMinutes: Math.round(elapsedMs / 6_000) / 10,
+    upgrades: run.upgrades.length,
+    playerCastleHp: Math.round(run.battle.playerCastleHp),
+    enemyCastleHp: Math.round(run.battle.enemyCastleHp),
+    battleReviews,
+  };
+}
+
 const report = curves.flatMap(curve => masteries.map(mastery => simulate(curve, mastery)));
 const curveRanges = curves.map(curve => {
   const rows = report.filter(row => row.curve === curve);
@@ -92,5 +170,15 @@ const curveRanges = curves.map(curve => {
     ratio: Math.round((rows[0].reward / rows[rows.length - 1].reward) * 10) / 10,
   };
 });
+const fullRuns = ["quick", "regular", "long"].flatMap(contractId => [0, 1, 2].flatMap(seedOffset => [
+  simulateFullRun(contractId, 0.35, 0.82, seedOffset),
+  simulateFullRun(contractId, 0.6, 0.9, seedOffset),
+  simulateFullRun(contractId, 0.9, 0.96, seedOffset),
+]));
+const validation = {
+  unresolvedFirstBattles: report.filter(row => row.result === "battle").length,
+  incompleteFullRuns: fullRuns.filter(row => row.result !== "complete").length,
+};
 
-process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report }, null, 2)}\n`);
+process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, validation }, null, 2)}\n`);
+if (validation.unresolvedFirstBattles > 0 || validation.incompleteFullRuns > 0) process.exitCode = 1;

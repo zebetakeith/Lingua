@@ -3,6 +3,7 @@ import type { StudyRewardCurve } from "../game/study";
 export const CASTLE_RUN_VERSION = 1;
 export const CASTLE_LANE_LENGTH = 100;
 export const CASTLE_RALLY_LIMIT = 3;
+export const CASTLE_RECALL_BOLT_LIMIT = 5;
 export const CASTLE_MAX_ENERGY = 12;
 
 export type CastleSide = "player" | "enemy";
@@ -106,6 +107,7 @@ export interface CastleBattleState {
   enemyCastleMaxHp: number;
   energy: number;
   rally: number;
+  recallBoltCharge: number;
   missedDirectionKeys: string[];
   cleanStreak: number;
   playerSpawnCount: number;
@@ -190,8 +192,8 @@ export const CASTLE_UNIT_DEFS: Record<CastleUnitKind, CastleUnitDef> = {
   shellSlime: { kind: "shellSlime", name: "Shell Slime", cost: 0, hp: 18, damage: 2, speed: 3, range: 2.5, attackMs: 1_200, accent: "#8fb4b8", role: "Armored defender" },
   nibbleImp: { kind: "nibbleImp", name: "Nibble Imp", cost: 0, hp: 9, damage: 4, speed: 7.2, range: 2.2, attackMs: 850, accent: "#f08b68", role: "Rushing biter" },
   sporeBud: { kind: "sporeBud", name: "Spore Bud", cost: 0, hp: 12, damage: 3, speed: 2.7, range: 11, attackMs: 1_450, accent: "#d77bb7", role: "Hazard lobber" },
-  echoMoth: { kind: "echoMoth", name: "Echo Moth", cost: 0, hp: 10, damage: 4, speed: 4.8, range: 14, attackMs: 1_300, accent: "#8175d5", role: "Ranged siphon" },
-  rootLump: { kind: "rootLump", name: "Root Lump", cost: 0, hp: 58, damage: 8, speed: 1.8, range: 3, attackMs: 1_650, accent: "#678f45", role: "Guardian siege beast" },
+  echoMoth: { kind: "echoMoth", name: "Echo Moth", cost: 0, hp: 10, damage: 3, speed: 4.8, range: 14, attackMs: 1_400, accent: "#8175d5", role: "Ranged siphon" },
+  rootLump: { kind: "rootLump", name: "Root Lump", cost: 0, hp: 50, damage: 6, speed: 1.7, range: 3, attackMs: 1_750, accent: "#678f45", role: "Guardian siege beast" },
 };
 
 export const CASTLE_POWER_DEFS: Record<CastlePowerId, CastlePowerDef> = {
@@ -322,7 +324,7 @@ function createTelemetry(): CastleBattleTelemetry {
 }
 
 function getEnemyWaveKind(region: number, battleInRegion: number, wave: number, guardian: boolean): CastleUnitKind {
-  if (guardian && wave % 4 === 3) return "rootLump";
+  if (guardian && wave % 7 === 6) return "rootLump";
   const regionPool: CastleUnitKind[] = region <= 1
     ? ["shellSlime", "nibbleImp", "sporeBud"]
     : region === 2
@@ -353,6 +355,7 @@ function createBattle(
     enemyCastleMaxHp,
     energy: clamp(carriedEnergy, 0, CASTLE_MAX_ENERGY),
     rally: 0,
+    recallBoltCharge: 0,
     missedDirectionKeys: [],
     cleanStreak: 0,
     playerSpawnCount: 0,
@@ -382,9 +385,10 @@ export function createInitialCastleRun(
   contractId: CastleContractId = "regular",
   rewardCurve: StudyRewardCurve = "quadratic",
   draftPoolIds: CastleUpgradeId[] = STARTER_CASTLE_UPGRADE_IDS,
+  seedOverride?: number,
 ): CastleRunState {
   const contract = CASTLE_CONTRACTS[contractId];
-  const seed = seedFromString(`${deckId}:${contractId}:${Date.now()}`);
+  const seed = seedOverride ?? seedFromString(`${deckId}:${contractId}:${Date.now()}`);
   const battle = createBattle(1, 1, 100, 0, []);
   return {
     version: CASTLE_RUN_VERSION,
@@ -441,7 +445,7 @@ function createUnit(
     if (paid && playerSpawnCount === 0 && hasUpgrade(upgrades, "bubbleBelly")) shield += 12;
   } else {
     if (kind === "shellSlime") shield += 6;
-    if (kind === "rootLump") shield += 8;
+    if (kind === "rootLump") shield += 6;
   }
   const hp = Math.round(def.hp * hpMultiplier);
   return {
@@ -498,7 +502,6 @@ function getUnitStats(unit: CastleUnitState, upgrades: CastleUpgradeId[], units:
   const friendly = unit.side === "player";
   const meleeRangeBonus = friendly && hasUpgrade(upgrades, "stretchyLegs") && def.range < 4 ? 1.8 : 0;
   const speedMultiplier = friendly && hasUpgrade(upgrades, "springTail") ? 1.16 : 1;
-  const hasteMultiplier = friendly ? 1 : 1;
   const spitletRelay = friendly && hasUpgrade(upgrades, "relayJelly") && units.some(candidate => (
     candidate.side === "player"
     && candidate.kind === "spitlet"
@@ -507,7 +510,7 @@ function getUnitStats(unit: CastleUnitState, upgrades: CastleUpgradeId[], units:
   )) ? 1 : 0;
   return {
     damage: def.damage + unit.damageBonus + spitletRelay,
-    speed: def.speed * speedMultiplier * hasteMultiplier,
+    speed: def.speed * speedMultiplier,
     range: def.range + meleeRangeBonus,
     attackMs: def.attackMs,
   };
@@ -557,7 +560,9 @@ function resolveBattleStep(
     },
     units: current.units.map(unit => ({
       ...unit,
-      attackCooldownMs: Math.max(0, unit.attackCooldownMs - (unit.side === "enemy" ? deltaMs * enemyPressureSpeed : deltaMs)),
+      attackCooldownMs: Math.max(0, unit.attackCooldownMs - (unit.side === "enemy"
+        ? deltaMs * enemyPressureSpeed
+        : deltaMs * (current.hasteMs > 0 ? 1.3 : 1))),
       slowMs: Math.max(0, unit.slowMs - deltaMs),
     })),
     fxEvents: current.fxEvents
@@ -623,7 +628,7 @@ function resolveBattleStep(
           generatedFx.push({ kind: "hit", side: "player", position: 98, label: `${damage}` });
         } else {
           playerCastleDamage += damage;
-          if (unit.kind === "echoMoth") energyDrain += 0.25;
+          if (unit.kind === "echoMoth") energyDrain += 0.15;
           generatedFx.push({ kind: "hit", side: "enemy", position: 2, label: `${damage}` });
         }
       }
@@ -646,7 +651,7 @@ function resolveBattleStep(
     const damage = damageById.get(unit.id) || 0;
     if (damage <= 0) return {
       ...unit,
-      shield: unit.shield + (shieldById.get(unit.id) || 0),
+      shield: Math.min(18, unit.shield + (shieldById.get(unit.id) || 0)),
       slowMs: Math.max(unit.slowMs, slowById.get(unit.id) || 0),
     };
     const damaged = applyDamage(unit, damage);
@@ -656,7 +661,7 @@ function resolveBattleStep(
     }
     return {
       ...damaged.unit,
-      shield: damaged.unit.shield + (shieldById.get(unit.id) || 0),
+      shield: Math.min(18, damaged.unit.shield + (shieldById.get(unit.id) || 0)),
       slowMs: Math.max(damaged.unit.slowMs, slowById.get(unit.id) || 0),
     };
   });
@@ -683,8 +688,8 @@ function resolveBattleStep(
   if (battle.enemyTurretTimerMs <= 0) {
     const target = battle.units.filter(unit => unit.side === "player" && unit.position >= 68 && unit.hp > 0).sort((a, b) => b.position - a.position)[0];
     if (target) {
-      battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, battle.guardian ? 5 : 3).unit : unit);
-      generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${battle.guardian ? 5 : 3}` });
+      battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, battle.guardian ? 4 : 3).unit : unit);
+      generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${battle.guardian ? 4 : 3}` });
     }
     battle.enemyTurretTimerMs += battle.guardian ? 2_700 : 3_500;
   }
@@ -903,6 +908,18 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
       battle = addUnit(battle, "player", "piplet", run.upgrades);
     }
     battle.cleanStreak += 1;
+    let recallBoltFired = false;
+    if (!outcome.wasUnseen) {
+      battle.recallBoltCharge += 1;
+      if (battle.recallBoltCharge >= CASTLE_RECALL_BOLT_LIMIT) {
+        battle.recallBoltCharge -= CASTLE_RECALL_BOLT_LIMIT;
+        battle.enemyCastleHp = Math.max(0, battle.enemyCastleHp - 8);
+        battle.telemetry.damageDealt += 8;
+        battle = addBattleFx(battle, "power", "player", 12, "Recall Bolt!");
+        battle = addBattleFx(battle, "hit", "player", 98, "8");
+        recallBoltFired = true;
+      }
+    }
     if (battle.cleanStreak % 5 === 0) {
       if (hasUpgrade(run.upgrades, "rootRepair")) battle.playerCastleHp = Math.min(battle.playerCastleMaxHp, battle.playerCastleHp + 5);
       if (hasUpgrade(run.upgrades, "cleanStreak")) battle.hasteMs = Math.max(battle.hasteMs, 5_000);
@@ -910,7 +927,9 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     if (outcome.due && hasUpgrade(run.upgrades, "dueDew")) battle.playerBarrier += 3;
     battle.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, battle.energy + reward));
     battle.telemetry.energyEarned = roundEnergy(battle.telemetry.energyEarned + reward);
-    notice = recovered
+    notice = recallBoltFired
+      ? `Recall Bolt! +${roundEnergy(reward)} energy and 8 damage to the rival keep.`
+      : recovered
       ? `Recovered recall: +${roundEnergy(reward)} energy and one Rally pip cleared.`
       : `Correct: +${roundEnergy(reward)} summon energy.`;
   } else if (outcome.wasUnseen) {
@@ -925,6 +944,7 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     }
     if (battle.rally >= CASTLE_RALLY_LIMIT) {
       battle.rally = 0;
+      battle.missedDirectionKeys = [];
       battle = addUnit(addUnit(battle, "enemy", "nibbleImp", run.upgrades), "enemy", battle.guardian ? "sporeBud" : "shellSlime", run.upgrades);
       battle.telemetry.rallyTriggered += 1;
       notice = "Enemy Rally! A bonus squad joined the next wave.";
