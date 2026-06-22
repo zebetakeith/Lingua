@@ -165,6 +165,15 @@ const FRIENDLY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   spitlet: 55,
   bigChonk: 75,
 };
+const ENEMY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
+  shellSlime: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/shellSlime/attack/0${index + 1}.png`,
+  ),
+};
+const ENEMY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
+  shellSlime: 60,
+};
 
 function PipploSprite({
   className = "",
@@ -208,8 +217,14 @@ function SlimeFace({
   attacking?: boolean;
 }) {
   const art = side === "player" ? FRIENDLY_UNIT_ART[kind] : ENEMY_UNIT_ART[kind];
-  const attackFrames = attacking && side === "player" ? FRIENDLY_UNIT_ATTACK_FRAMES[kind] : undefined;
-  const attackFrameMs = FRIENDLY_UNIT_ATTACK_FRAME_MS[kind] || 45;
+  const attackFrames = attacking
+    ? side === "player"
+      ? FRIENDLY_UNIT_ATTACK_FRAMES[kind]
+      : ENEMY_UNIT_ATTACK_FRAMES[kind]
+    : undefined;
+  const attackFrameMs = (
+    side === "player" ? FRIENDLY_UNIT_ATTACK_FRAME_MS[kind] : ENEMY_UNIT_ATTACK_FRAME_MS[kind]
+  ) || 45;
   if (art) {
     return (
       <span
@@ -294,7 +309,9 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
         <div className="castle-road">
           <div className="castle-mid-flag"><i /><span /></div>
           {battle.units.map(unit => {
-            const productionAttackFrameMs = unit.side === "player" ? FRIENDLY_UNIT_ATTACK_FRAME_MS[unit.kind] : undefined;
+            const productionAttackFrameMs = unit.side === "player"
+              ? FRIENDLY_UNIT_ATTACK_FRAME_MS[unit.kind]
+              : ENEMY_UNIT_ATTACK_FRAME_MS[unit.kind];
             const attackAnimationMs = productionAttackFrameMs ? productionAttackFrameMs * 4 : 180;
             const attacking = unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - attackAnimationMs;
             return (
@@ -728,6 +745,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       ...Object.values(FRIENDLY_UNIT_ART),
       ...Object.values(ENEMY_UNIT_ART),
       ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
+      ...Object.values(ENEMY_UNIT_ATTACK_FRAMES).flat(),
     ].map(src => {
       const image = new Image();
       image.decoding = "async";
