@@ -9,6 +9,7 @@ import {
   chooseCastleRoute,
   claimCastleUpgrade,
   createInitialCastleRun,
+  getCastleStudyReport,
   resolveCastleEvent,
   resumeCastleBattle,
   summonCastleUnit,
@@ -32,6 +33,7 @@ function outcome(index, overrides = {}) {
     progressKey: `mechanic-card-${index}::term_to_definition`,
     responseMs: 2_500,
     selfGraded: false,
+    questionType: "multiple_choice",
     due: true,
     ...overrides,
   };
@@ -95,6 +97,22 @@ assert.equal(unseen.battle.recallBoltCharge, 0, "first exposure must not charge 
 assert.equal(unseen.correct, 0, "an ungraded first exposure must not count as a correct answer");
 assert.equal(unseen.wrong, 0, "an ungraded first exposure must not count as a miss");
 assert.equal(unseen.battle.energy, 0.25, "a completed first exposure should grant only its small learning bonus");
+assert.equal(unseen.studySummary.exposures, 1, "the learning report should count safe first exposures");
+assert.equal(unseen.studySummary.gradedReviews, 0, "safe first exposures must stay out of graded accuracy");
+assert.equal(unseen.studySummary.responseMs.length, 0, "reading time for first exposures must stay out of recall pace");
+
+const typedRecall = applyCastleStudyOutcome(freshRun(), outcome(0, {
+  reward: 1.8,
+  responseMs: 4_200,
+  questionType: "typed",
+}));
+const typedReport = getCastleStudyReport(typedRecall);
+assert.equal(typedReport.gradedReviews, 1, "graded prompts should enter the learning report");
+assert.equal(typedReport.typedReviews, 1, "typed prompts should be reported separately");
+assert.equal(typedReport.difficultRecalls, 1, "high-value correct recalls should count as difficult wins");
+assert.equal(typedReport.dueReviews, 1, "due prompts should be visible in the learning report");
+assert.equal(typedReport.averageResponseMs, 4_200, "active recall pace should use the recorded study duration");
+assert.equal(typedReport.accuracy, 1, "learning-report accuracy should exclude first exposures");
 
 let rally = freshRun();
 for (let index = 0; index < 3; index += 1) {
@@ -160,6 +178,24 @@ let paused = freshRun();
 const pausedSnapshot = paused.battle.activeTimeMs;
 paused = tickCastleRun(paused, 1_000, 1);
 assert.equal(paused.battle.activeTimeMs, pausedSnapshot, "command-mode battles must remain paused for unseen cards and interruptions");
+
+const startingTotalReviews = loadCastleProfile("mechanics").totalReviews;
+let reviewProgress = saveCastleRun("mechanics", { ...freshRun(), reviews: 4 });
+assert.equal(reviewProgress.totalReviews, startingTotalReviews + 4, "permanent review totals should count the first saved progress delta");
+reviewProgress = saveCastleRun("mechanics", { ...freshRun(), reviews: 4 });
+assert.equal(reviewProgress.totalReviews, startingTotalReviews + 4, "autosaving the same reviews twice must not duplicate the total");
+clearCastleRun("mechanics");
+reviewProgress = saveCastleRun("mechanics", { ...freshRun(), reviews: 3 });
+assert.equal(reviewProgress.totalReviews, startingTotalReviews + 7, "review totals should accumulate across separate runs");
+const legacyStudySave = JSON.parse(localStorage.getItem("lexicon_labyrinth_castle_runs_v1"));
+delete legacyStudySave.mechanics.run.studySummary;
+localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify(legacyStudySave));
+assert.deepEqual(
+  loadCastleRun("mechanics").studySummary,
+  { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [] },
+  "old in-progress runs should migrate with an empty learning report",
+);
+clearCastleRun("mechanics");
 
 let progressionRun = freshRun();
 saveCastleRun("mechanics", { ...progressionRun, battlesWon: 2 });

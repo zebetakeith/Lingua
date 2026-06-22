@@ -5,6 +5,7 @@ import {
   CASTLE_RUN_VERSION,
   STARTER_CASTLE_KEEPSAKE_IDS,
   STARTER_CASTLE_UPGRADE_IDS,
+  normalizeCastleRunStudySummary,
   type CastleKeepsakeId,
   type CastleRunState,
   type CastleUnitKind,
@@ -95,6 +96,7 @@ export function loadCastleRun(deckId: string): CastleRunState | null {
           keepsakeId: run.keepsakeId || null,
           pendingEventId: run.pendingEventId || null,
           eventHistory: run.eventHistory || [],
+          studySummary: normalizeCastleRunStudySummary(run.studySummary),
           battle: {
             ...run.battle,
             guardianPhase: run.battle.guardianPhase || (run.battle.guardian ? 1 : 0),
@@ -129,6 +131,7 @@ export function saveCastleRun(deckId: string, run: CastleRunState): CastleDeckPr
   const previousRun = all[deckId]?.run;
   const previousGuardianMilestones = previousRun ? Math.floor(previousRun.battlesWon / 3) : 0;
   const currentGuardianMilestones = Math.floor(run.battlesWon / 3);
+  const newReviews = Math.max(0, run.reviews - (previousRun?.reviews || 0));
   const guardianClears = previousProfile.guardianClears + Math.max(0, currentGuardianMilestones - previousGuardianMilestones);
   const completedRun = run.phase === "complete" && all[deckId]?.run?.phase !== "complete";
   const runsCompleted = previousProfile.runsCompleted + (completedRun ? 1 : 0);
@@ -140,7 +143,7 @@ export function saveCastleRun(deckId: string, run: CastleRunState): CastleDeckPr
     ...previousProfile,
     guardianClears,
     bestRegion: Math.max(previousProfile.bestRegion, run.bestRegion),
-    totalReviews: Math.max(previousProfile.totalReviews, run.reviews),
+    totalReviews: previousProfile.totalReviews + newReviews,
     runsCompleted,
     unlockedKeepsakeIds,
     selectedKeepsakeId: unlockedKeepsakeIds.includes(previousProfile.selectedKeepsakeId)

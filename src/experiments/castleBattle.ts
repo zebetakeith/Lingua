@@ -1,4 +1,4 @@
-import type { StudyRecallMode, StudyRewardCurve } from "../game/study";
+import type { StudyQuestionType, StudyRecallMode, StudyRewardCurve } from "../game/study";
 
 export const CASTLE_RUN_VERSION = 1;
 export const CASTLE_LANE_LENGTH = 100;
@@ -150,6 +150,21 @@ export interface CastleBattleState {
   telemetry: CastleBattleTelemetry;
 }
 
+export interface CastleRunStudySummary {
+  exposures: number;
+  gradedReviews: number;
+  dueReviews: number;
+  typedReviews: number;
+  difficultRecalls: number;
+  responseMs: number[];
+}
+
+export interface CastleStudyReport extends CastleRunStudySummary {
+  accuracy: number;
+  averageResponseMs: number;
+  recommendation: string;
+}
+
 export interface CastleRunState {
   version: typeof CASTLE_RUN_VERSION;
   deckId: string;
@@ -177,6 +192,7 @@ export interface CastleRunState {
   correct: number;
   wrong: number;
   introducedThisRun: number;
+  studySummary: CastleRunStudySummary;
   bestRegion: number;
   notice: string;
 }
@@ -189,6 +205,7 @@ export interface CastleStudyOutcome {
   progressKey: string;
   responseMs: number;
   selfGraded: boolean;
+  questionType?: StudyQuestionType;
   due: boolean;
 }
 
@@ -527,6 +544,47 @@ function createTelemetry(): CastleBattleTelemetry {
   };
 }
 
+export function normalizeCastleRunStudySummary(
+  summary?: Partial<CastleRunStudySummary> | null,
+): CastleRunStudySummary {
+  return {
+    exposures: Math.max(0, Math.floor(Number(summary?.exposures) || 0)),
+    gradedReviews: Math.max(0, Math.floor(Number(summary?.gradedReviews) || 0)),
+    dueReviews: Math.max(0, Math.floor(Number(summary?.dueReviews) || 0)),
+    typedReviews: Math.max(0, Math.floor(Number(summary?.typedReviews) || 0)),
+    difficultRecalls: Math.max(0, Math.floor(Number(summary?.difficultRecalls) || 0)),
+    responseMs: Array.isArray(summary?.responseMs)
+      ? summary.responseMs.filter(value => Number.isFinite(value) && value >= 0).slice(-500)
+      : [],
+  };
+}
+
+export function getCastleStudyReport(run: CastleRunState): CastleStudyReport {
+  const summary = normalizeCastleRunStudySummary(run.studySummary);
+  const accuracy = summary.gradedReviews > 0 ? run.correct / summary.gradedReviews : 0;
+  const averageResponseMs = summary.responseMs.length > 0
+    ? summary.responseMs.reduce((total, value) => total + value, 0) / summary.responseMs.length
+    : 0;
+  const typedShare = summary.gradedReviews > 0 ? summary.typedReviews / summary.gradedReviews : 0;
+  const recommendation = summary.gradedReviews === 0
+    ? "Keep the next expedition short while these new directions settle in."
+    : accuracy < 0.65
+      ? "Try a Quick contract with Curved rewards; corrections are doing useful work, so keep the pressure gentle."
+      : accuracy < 0.82
+        ? "Stay with Curved rewards and revisit this deck soon—the recall is forming, but still benefits from extra energy."
+        : averageResponseMs > 7_000
+          ? "Accuracy is strong. Repeat this deck once more before increasing pressure so recall can become quicker."
+          : typedShare < 0.25
+            ? "Accuracy is strong. Balanced Recall can add more typed prompts on the next expedition."
+            : "This deck handled the pressure well. A longer contract or Steep rewards is a fair next challenge.";
+  return {
+    ...summary,
+    accuracy,
+    averageResponseMs,
+    recommendation,
+  };
+}
+
 function getEnemyWaveKind(region: number, battleInRegion: number, wave: number, guardian: boolean): CastleUnitKind {
   if (guardian && wave % 7 === 6) return "rootLump";
   const regionPool: CastleUnitKind[] = region <= 1
@@ -624,6 +682,7 @@ export function createInitialCastleRun(
     correct: 0,
     wrong: 0,
     introducedThisRun: 0,
+    studySummary: normalizeCastleRunStudySummary(),
     bestRegion: 1,
     notice: `${contract.name} expedition: clear ${contract.regions} region${contract.regions === 1 ? "" : "s"}.`,
   };
@@ -1145,6 +1204,17 @@ function removeOne<T>(items: T[], value: T): T[] {
 export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStudyOutcome): CastleRunState {
   if (run.phase !== "battle") return run;
   const graded = !outcome.isExposure;
+  const previousStudySummary = normalizeCastleRunStudySummary(run.studySummary);
+  const studySummary: CastleRunStudySummary = {
+    exposures: previousStudySummary.exposures + (outcome.isExposure ? 1 : 0),
+    gradedReviews: previousStudySummary.gradedReviews + (graded ? 1 : 0),
+    dueReviews: previousStudySummary.dueReviews + (graded && outcome.due ? 1 : 0),
+    typedReviews: previousStudySummary.typedReviews + (graded && outcome.questionType === "typed" ? 1 : 0),
+    difficultRecalls: previousStudySummary.difficultRecalls + (graded && outcome.isCorrect && outcome.reward >= 1.5 ? 1 : 0),
+    responseMs: graded
+      ? [...previousStudySummary.responseMs, Math.max(0, outcome.responseMs)].slice(-500)
+      : previousStudySummary.responseMs,
+  };
   let battle: CastleBattleState = {
     ...run.battle,
     mode: "command",
@@ -1239,6 +1309,7 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     reviews: run.reviews + 1,
     correct: run.correct + (graded && outcome.isCorrect ? 1 : 0),
     wrong: run.wrong + (graded && !outcome.isCorrect ? 1 : 0),
+    studySummary,
     battle,
     notice,
   };

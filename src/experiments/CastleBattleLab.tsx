@@ -55,6 +55,7 @@ import {
   getAvailableCastlePowers,
   getCastleBattleProgress,
   getCastleRegionDef,
+  getCastleStudyReport,
   getPlayerSummonKinds,
   pauseCastleBattle,
   recordCastleIntroductions,
@@ -1152,6 +1153,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       progressKey: result.progressKey,
       responseMs,
       selfGraded: question.questionType === "self_grade",
+      questionType: question.questionType,
       due: question.due,
     };
     const nextFeedback: ReviewFeedback = {
@@ -1204,6 +1206,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       progressKey: result.progressKey,
       responseMs: getQuestionResponseMs(),
       selfGraded: false,
+      questionType: question.questionType,
       due: true,
     };
     const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
@@ -1293,6 +1296,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   }
 
   const activeEvent = run.pendingEventId ? CASTLE_EVENT_DEFS[run.pendingEventId] : null;
+  const studyReport = getCastleStudyReport(run);
 
   return (
     <main className="castle-lab-shell">
@@ -1525,6 +1529,17 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><b>{profile.unlockedUpgradeIds.length}</b>discoveries</span>
               <span><b>{profile.unlockedKeepsakeIds.length}</b>keepsakes</span>
             </div>
+            <section className="castle-learning-report" aria-label="Learning report">
+              <header><BookOpen /><div><span>Learning report</span><b>What this expedition strengthened</b></div></header>
+              <div className="castle-learning-metrics">
+                <span><b>{Math.round(studyReport.accuracy * 100)}%</b><small>graded accuracy</small></span>
+                <span><b>{studyReport.averageResponseMs > 0 ? `${Math.round(studyReport.averageResponseMs / 100) / 10}s` : "—"}</b><small>active recall pace</small></span>
+                <span><b>{studyReport.typedReviews}</b><small>typed recalls</small></span>
+                <span><b>{studyReport.difficultRecalls}</b><small>difficult wins</small></span>
+              </div>
+              <p>{studyReport.exposures} safe first exposure{studyReport.exposures === 1 ? "" : "s"} · {studyReport.dueReviews} due prompt{studyReport.dueReviews === 1 ? "" : "s"} practiced</p>
+              <aside><Sparkles /><div><b>Next expedition</b><span>{studyReport.recommendation}</span></div></aside>
+            </section>
             {run.keepsakeId && <p className="castle-result-keepsake"><Sparkles /><b>{CASTLE_KEEPSAKE_DEFS[run.keepsakeId].name}</b><span>keepsake carried through this expedition</span></p>}
             <button onClick={resetRun}><RefreshCcw />Start another run</button>
           </section>
