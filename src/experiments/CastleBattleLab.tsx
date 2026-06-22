@@ -170,9 +170,14 @@ const ENEMY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/shellSlime/attack/0${index + 1}.png`,
   ),
+  nibbleImp: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/nibbleImp/attack/0${index + 1}.png`,
+  ),
 };
 const ENEMY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   shellSlime: 60,
+  nibbleImp: 45,
 };
 
 function PipploSprite({
