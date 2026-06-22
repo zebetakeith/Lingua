@@ -65,8 +65,10 @@
 
 .castle-lab-shell button:focus-visible,
 .castle-lab-shell select:focus-visible,
+.castle-lab-shell input:focus-visible,
 .castle-setup-shell button:focus-visible,
-.castle-setup-shell select:focus-visible {
+.castle-setup-shell select:focus-visible,
+.castle-setup-shell input:focus-visible {
   outline: 3px solid #174f54;
   outline-offset: 3px;
 }

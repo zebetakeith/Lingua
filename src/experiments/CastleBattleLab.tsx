@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -34,7 +34,7 @@ import {
   type StudyDeckSummary,
   type StudyQuestion,
 } from "../game/studyBridge";
-import type { StudyRecallMode, StudyRewardCurve } from "../game/study";
+import { getActiveStudyResponseMs, type StudyRecallMode, type StudyRewardCurve } from "../game/study";
 import {
   CASTLE_CONTRACTS,
   CASTLE_EVENT_DEFS,
@@ -258,7 +258,14 @@ function MallowSprite({
 function CastleHealth({ current, max, enemy = false }: { current: number; max: number; enemy?: boolean }) {
   const percent = Math.max(0, Math.min(100, (current / Math.max(1, max)) * 100));
   return (
-    <div className={`castle-health ${enemy ? "is-enemy" : ""}`}>
+    <div
+      className={`castle-health ${enemy ? "is-enemy" : ""}`}
+      role="progressbar"
+      aria-label={`${enemy ? "Mallow's" : "Pipplo's"} Keep health`}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={Math.ceil(current)}
+    >
       <span>{enemy ? "Mallow's Keep" : "Pipplo's Keep"}</span>
       <div><i style={{ width: `${percent}%` }} /></div>
       <b>{Math.ceil(current)}/{max}</b>
@@ -429,11 +436,26 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
 
       <div className="castle-battle-strip">
         <span className="castle-energy"><Sparkles />{formatCastleEnergy(battle.energy)} energy</span>
-        <span className="castle-recall-bolt" title="Five correct seen-card recalls fire an 8-damage castle bolt">
+        <span
+          className="castle-recall-bolt"
+          title="Five correct seen-card recalls fire an 8-damage castle bolt"
+          role="progressbar"
+          aria-label="Recall Bolt charge"
+          aria-valuemin={0}
+          aria-valuemax={CASTLE_RECALL_BOLT_LIMIT}
+          aria-valuenow={battle.recallBoltCharge}
+        >
           Recall Bolt
           {Array.from({ length: CASTLE_RECALL_BOLT_LIMIT }, (_, index) => <i key={index} className={index < battle.recallBoltCharge ? "is-filled" : ""} />)}
         </span>
-        <span className="castle-rally">
+        <span
+          className="castle-rally"
+          role="progressbar"
+          aria-label="Enemy Rally charge"
+          aria-valuemin={0}
+          aria-valuemax={CASTLE_RALLY_LIMIT}
+          aria-valuenow={battle.rally}
+        >
           Enemy Rally
           {Array.from({ length: CASTLE_RALLY_LIMIT }, (_, index) => <i key={index} className={index < battle.rally ? "is-filled" : ""} />)}
         </span>
@@ -460,7 +482,7 @@ function CommandTray({
     <div className="castle-command-tray">
       <div className="castle-command-heading">
         <span><Sparkles />Spend or bank {formatCastleEnergy(run.battle.energy)} energy</span>
-        <small>Combat keeps moving while this tray is open.</small>
+        <small>Combat keeps moving; command time never counts as recall time.</small>
       </div>
       <div className="castle-command-scroll">
         {getPlayerSummonKinds().map(kind => {
@@ -558,6 +580,7 @@ function StudyCard({
               autoCapitalize="none"
               spellCheck={false}
               enterKeyHint="done"
+              autoFocus
             />
             <small>Case and punctuation are ignored. Answers separated by / or ; are accepted.</small>
             <button type="submit" disabled={!typedAnswer.trim()}><ChevronRight />Check recall</button>
@@ -601,7 +624,7 @@ function ReviewResult({ feedback, onContinue }: { feedback: ReviewFeedback; onCo
       </div>
       {feedback.masteryEvent && <small>{feedback.masteryEvent}</small>}
       {feedback.requiresCorrection && <small>Read the correction before returning to the next card. Combat is still moving.</small>}
-      {onContinue && <button onClick={onContinue}>{feedback.requiresCorrection ? "I’ve got it — next card" : "Continue learning"}</button>}
+      {onContinue && <button autoFocus onClick={onContinue}>{feedback.requiresCorrection ? "I’ve got it — next card" : "Continue learning"}</button>}
     </div>
   );
 }
@@ -764,7 +787,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Swords,
     eyebrow: "Army command",
     title: "Switch panels whenever you choose",
-    copy: "Open Army & Powers to summon units or cast from Pipplo’s keep. Seen-card combat remains live while the command tray is open.",
+    copy: "Open Army & Powers to summon units or cast from Pipplo’s keep. Seen-card combat remains live, but command time is excluded from your recall record.",
   },
   {
     icon: Castle,
@@ -774,13 +797,23 @@ const CASTLE_TUTORIAL_STEPS = [
   },
 ] as const;
 
-function CastleTutorial({ step, onStep, onComplete }: { step: number; onStep: (step: number) => void; onComplete: () => void }) {
+function CastleTutorial({
+  step,
+  dialogRef,
+  onStep,
+  onComplete,
+}: {
+  step: number;
+  dialogRef: RefObject<HTMLElement | null>;
+  onStep: (step: number) => void;
+  onComplete: () => void;
+}) {
   const current = CASTLE_TUTORIAL_STEPS[step] || CASTLE_TUTORIAL_STEPS[0];
   const Icon = current.icon;
   const finalStep = step === CASTLE_TUTORIAL_STEPS.length - 1;
   return (
     <aside className="castle-overlay castle-tutorial-overlay">
-      <section className="castle-tutorial-sheet" role="dialog" aria-modal="true" aria-labelledby="castle-tutorial-title">
+      <section ref={dialogRef} tabIndex={-1} className="castle-tutorial-sheet" role="dialog" aria-modal="true" aria-labelledby="castle-tutorial-title">
         <div className="castle-tutorial-art"><Icon /><PipploSprite className="castle-tutorial-pipplo" /></div>
         <p className="castle-eyebrow">{current.eyebrow}</p>
         <h2 id="castle-tutorial-title">{current.title}</h2>
@@ -827,11 +860,26 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [pipploAnimation, setPipploAnimation] = useState<PipploAnimationState>({ name: "idle", serial: 0 });
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(CASTLE_SOUND_KEY) !== "off");
   const questionStartedAt = useRef(0);
+  const questionCommandMs = useRef(0);
+  const questionCommandStartedAt = useRef<number | null>(null);
   const lastSaveAt = useRef(0);
   const previousPhase = useRef<CastleRunState["phase"] | null>(initial.run?.phase || null);
   const pipploAnimationTimer = useRef<number | null>(null);
+  const activeDialogRef = useRef<HTMLElement | null>(null);
+  const dialogReturnFocus = useRef<HTMLElement | null>(null);
 
   const selectedDeck = useMemo(() => decks.find(deck => deck.id === selectedDeckId), [decks, selectedDeckId]);
+  const activeDialogKey = tutorialOpen
+    ? "tutorial"
+    : guideOpen
+      ? "guide"
+      : helpOpen
+        ? "help"
+        : settingsOpen
+          ? "settings"
+          : run && ["reward", "route", "event", "retire", "complete", "lost"].includes(run.phase)
+            ? run.phase
+            : null;
   const simulationReady = Boolean(
     run
     && !interrupted
@@ -909,6 +957,56 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [helpOpen, settingsOpen, guideOpen]);
 
+  useEffect(() => {
+    if (!activeDialogKey) {
+      const returnTarget = dialogReturnFocus.current;
+      dialogReturnFocus.current = null;
+      if (returnTarget?.isConnected) returnTarget.focus();
+      return;
+    }
+
+    const dialog = activeDialogRef.current;
+    if (!dialog) return;
+    if (!dialogReturnFocus.current) {
+      const focused = document.activeElement;
+      if (focused instanceof HTMLElement && !dialog.contains(focused)) dialogReturnFocus.current = focused;
+    }
+
+    const getFocusable = () => Array.from(dialog.querySelectorAll<HTMLElement>([
+      "button:not([disabled])",
+      "a[href]",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(","))).filter(element => element.offsetParent !== null);
+    const focusFrame = window.requestAnimationFrame(() => (getFocusable()[0] || dialog).focus());
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const focused = document.activeElement;
+      if (event.shiftKey && (focused === first || !dialog.contains(focused))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (focused === last || !dialog.contains(focused))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", trapFocus);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", trapFocus);
+    };
+  }, [activeDialogKey]);
+
   const pauseForInterruption = useCallback(() => {
     if (!question) return;
     setInterrupted(true);
@@ -923,6 +1021,33 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       pipploAnimationTimer.current = null;
     }, 650);
   }, []);
+
+  const startQuestionTimer = useCallback(() => {
+    questionStartedAt.current = Date.now();
+    questionCommandMs.current = 0;
+    questionCommandStartedAt.current = null;
+  }, []);
+
+  const getQuestionResponseMs = useCallback(() => {
+    const now = Date.now();
+    return getActiveStudyResponseMs(
+      questionStartedAt.current,
+      now,
+      questionCommandMs.current,
+      questionCommandStartedAt.current,
+    );
+  }, []);
+
+  const changePanelMode = useCallback((nextMode: CastlePanelMode) => {
+    if (nextMode === panelMode) return;
+    const now = Date.now();
+    if (nextMode === "army" && question) questionCommandStartedAt.current = now;
+    if (nextMode === "study" && questionCommandStartedAt.current !== null) {
+      questionCommandMs.current += now - questionCommandStartedAt.current;
+      questionCommandStartedAt.current = null;
+    }
+    setPanelMode(nextMode);
+  }, [panelMode, question]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -976,7 +1101,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setTutorialStep(0);
     setInterrupted(showTutorial);
     setPanelMode("study");
-    questionStartedAt.current = Date.now();
+    startQuestionTimer();
     setRun(showTutorial
       ? pauseCastleBattle(next, "Welcome to Goo Keep. Combat is paused during the tutorial.")
       : nextQuestion.seenBefore
@@ -996,7 +1121,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setReveal(false);
     setInterrupted(false);
     setPanelMode("study");
-    questionStartedAt.current = Date.now();
+    startQuestionTimer();
     setRun(nextQuestion.seenBefore
       ? resumeCastleBattle(baseRun)
       : pauseCastleBattle(baseRun, "First exposure protected: combat remains paused while you learn this direction."));
@@ -1005,7 +1130,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const resumeInterruptedQuestion = () => {
     if (!question) return;
     setInterrupted(false);
-    questionStartedAt.current = Date.now();
+    startQuestionTimer();
     setRun(current => current
       ? question.seenBefore
         ? resumeCastleBattle(current)
@@ -1019,7 +1144,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     playCastleSound(firesRecallBolt ? "bolt" : correct ? "correct" : "wrong", soundEnabled);
     if (correct && question.seenBefore) triggerPipploAnimation("cast");
     const result: StudyAnswerResult = answerStudyQuestion(selectedDeckId, question, correct);
-    const responseMs = Math.max(0, Date.now() - questionStartedAt.current);
+    const responseMs = getQuestionResponseMs();
     const outcome = {
       isCorrect: correct,
       wasUnseen: result.wasUnseen,
@@ -1054,7 +1179,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       setReveal(false);
       setInterrupted(false);
       setPanelMode("study");
-      questionStartedAt.current = Date.now();
+      startQuestionTimer();
       setRun(current => {
         if (!current) return current;
         const resolved = applyCastleStudyOutcome(current, outcome);
@@ -1077,7 +1202,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       wasUnseen: true,
       reward: question.reward,
       progressKey: result.progressKey,
-      responseMs: Math.max(0, Date.now() - questionStartedAt.current),
+      responseMs: getQuestionResponseMs(),
       selfGraded: false,
       due: true,
     };
@@ -1087,7 +1212,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setReveal(false);
     setInterrupted(false);
     setPanelMode("study");
-    questionStartedAt.current = Date.now();
+    startQuestionTimer();
     setRun(current => {
       if (!current) return current;
       const resolved = applyCastleStudyOutcome(current, outcome);
@@ -1115,7 +1240,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setProfile(completeCastleTutorial(selectedDeckId));
     setTutorialOpen(false);
     setInterrupted(false);
-    questionStartedAt.current = Date.now();
+    startQuestionTimer();
     setRun(current => current
       ? question?.seenBefore
         ? resumeCastleBattle(current)
@@ -1191,8 +1316,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "battle" && (
         <nav className="castle-mode-switch" aria-label="Battle panel">
-          <button aria-pressed={panelMode === "study"} className={panelMode === "study" ? "is-active" : ""} onClick={() => setPanelMode("study")}><BookOpen />Flashcards</button>
-          <button aria-pressed={panelMode === "army"} className={panelMode === "army" ? "is-active" : ""} onClick={() => setPanelMode("army")}><Swords />Army & powers <b>{formatCastleEnergy(run.battle.energy)}</b></button>
+          <button aria-pressed={panelMode === "study"} className={panelMode === "study" ? "is-active" : ""} onClick={() => changePanelMode("study")}><BookOpen />Flashcards</button>
+          <button aria-pressed={panelMode === "army"} className={panelMode === "army" ? "is-active" : ""} onClick={() => changePanelMode("army")}><Swords />Army & powers <b>{formatCastleEnergy(run.battle.energy)}</b></button>
         </nav>
       )}
 
@@ -1257,13 +1382,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             onSummon={summonUnit}
             onPower={usePower}
           />
-          <button className="castle-back-to-study" onClick={() => setPanelMode("study")}><BookOpen />Back to flashcards</button>
+          <button className="castle-back-to-study" onClick={() => changePanelMode("study")}><BookOpen />Back to flashcards</button>
         </section>
       )}
 
       {run.phase === "reward" && (
         <aside className="castle-overlay">
-          <section className="castle-reward-sheet" role="dialog" aria-modal="true" aria-label="Choose a run upgrade">
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-reward-sheet" role="dialog" aria-modal="true" aria-label="Choose a run upgrade">
             <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop />
             <p className="castle-eyebrow">Castle absorbed</p>
             <h2>What should Pipplo digest?</h2>
@@ -1292,7 +1417,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "route" && (
         <aside className="castle-overlay">
-          <section className="castle-route-sheet" role="dialog" aria-modal="true" aria-label="Choose the next route">
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-route-sheet" role="dialog" aria-modal="true" aria-label="Choose the next route">
             <Route />
             <p className="castle-eyebrow">Choose the next stop</p>
             <h2>The road forks around a humming puddle</h2>
@@ -1320,7 +1445,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         const EventIcon = CASTLE_EVENT_ICONS[activeEvent.id];
         return (
           <aside className="castle-overlay">
-            <section className="castle-event-sheet" role="dialog" aria-modal="true" aria-label={activeEvent.title}>
+            <section ref={activeDialogRef} tabIndex={-1} className="castle-event-sheet" role="dialog" aria-modal="true" aria-label={activeEvent.title}>
               <EventIcon />
               <p className="castle-eyebrow">{activeEvent.eyebrow}</p>
               <h2>{activeEvent.title}</h2>
@@ -1359,7 +1484,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "retire" && (
         <aside className="castle-overlay">
-          <section className="castle-result-sheet is-win" role="dialog" aria-modal="true" aria-label="Study contract complete">
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-result-sheet is-win" role="dialog" aria-modal="true" aria-label="Study contract complete">
             <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop />
             <p className="castle-eyebrow">Contract complete</p>
             <h2>Pipplo can head home—or wobble deeper</h2>
@@ -1384,7 +1509,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {(run.phase === "complete" || run.phase === "lost") && (
         <aside className="castle-overlay">
-          <section className={`castle-result-sheet ${run.phase === "complete" ? "is-win" : "is-loss"}`} role="dialog" aria-modal="true" aria-label={run.phase === "complete" ? "Expedition complete" : "Expedition lost"}>
+          <section ref={activeDialogRef} tabIndex={-1} className={`castle-result-sheet ${run.phase === "complete" ? "is-win" : "is-loss"}`} role="dialog" aria-modal="true" aria-label={run.phase === "complete" ? "Expedition complete" : "Expedition lost"}>
             {run.phase === "complete" ? <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop /> : <Heart />}
             <p className="castle-eyebrow">{run.phase === "complete" ? "Expedition complete" : "Pipplo needs a nap"}</p>
             <h2>{run.phase === "complete" ? "The deck-world grew" : "The castle fell; the learning stayed"}</h2>
@@ -1406,12 +1531,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         </aside>
       )}
 
-      {tutorialOpen && <CastleTutorial step={tutorialStep} onStep={setTutorialStep} onComplete={finishTutorial} />}
+      {tutorialOpen && <CastleTutorial step={tutorialStep} dialogRef={activeDialogRef} onStep={setTutorialStep} onComplete={finishTutorial} />}
 
       {guideOpen && (
         <aside className="castle-drawer-backdrop" onClick={() => setGuideOpen(false)}>
-          <section className="castle-drawer castle-field-guide" role="dialog" aria-modal="true" aria-labelledby="castle-guide-title" onClick={event => event.stopPropagation()}>
-            <button className="castle-drawer-close" onClick={() => setGuideOpen(false)}><X /></button>
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-drawer castle-field-guide" role="dialog" aria-modal="true" aria-labelledby="castle-guide-title" onClick={event => event.stopPropagation()}>
+            <button className="castle-drawer-close" aria-label="Close field guide" onClick={() => setGuideOpen(false)}><X /></button>
             <p className="castle-eyebrow">Pipplo’s field guide</p>
             <h2 id="castle-guide-title">What everything does</h2>
 
@@ -1477,14 +1602,14 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {helpOpen && (
         <aside className="castle-drawer-backdrop" onClick={() => setHelpOpen(false)}>
-          <section className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-help-title" onClick={event => event.stopPropagation()}>
-            <button className="castle-drawer-close" onClick={() => setHelpOpen(false)}><X /></button>
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-help-title" onClick={event => event.stopPropagation()}>
+            <button className="castle-drawer-close" aria-label="Close how to play" onClick={() => setHelpOpen(false)}><X /></button>
             <p className="castle-eyebrow">How Goo Keep works</p>
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live but requires a correction step and fills Enemy Rally.</p>
             <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; Deck Default and Type Every Answer remain available in settings.</p>
-            <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; the battle keeps moving while that panel is open.</p>
+            <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
             <p>Each region has its own enemy mix and colors. Guardian keeps change at 66% and 33% HP; the center banner names the phase before the new squad arrives.</p>
@@ -1496,8 +1621,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {settingsOpen && (
         <aside className="castle-drawer-backdrop" onClick={() => setSettingsOpen(false)}>
-          <section className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-settings-title" onClick={event => event.stopPropagation()}>
-            <button className="castle-drawer-close" onClick={() => setSettingsOpen(false)}><X /></button>
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-settings-title" onClick={event => event.stopPropagation()}>
+            <button className="castle-drawer-close" aria-label="Close settings" onClick={() => setSettingsOpen(false)}><X /></button>
             <p className="castle-eyebrow">Balance lab</p>
             <h2 id="castle-settings-title">Pressure and telemetry</h2>
             <label>Reward curve<select value={run.rewardCurve} onChange={event => setRun(current => current ? { ...current, rewardCurve: event.target.value as StudyRewardCurve } : current)}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select></label>

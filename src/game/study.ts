@@ -40,6 +40,16 @@ export const DEFAULT_STUDY_SETTINGS: DeckStudySettings = {
   shuffleAnswers: true,
 };
 
+export function getActiveStudyResponseMs(
+  startedAt: number,
+  now = Date.now(),
+  excludedMs = 0,
+  excludedStartedAt: number | null = null,
+): number {
+  const openExcludedMs = excludedStartedAt === null ? 0 : Math.max(0, now - excludedStartedAt);
+  return Math.max(0, now - startedAt - Math.max(0, excludedMs) - openExcludedMs);
+}
+
 const MASTERY_INTERVALS_MS = [
   2 * 60_000,
   10 * 60_000,

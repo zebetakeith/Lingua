@@ -104,9 +104,21 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
   let safety = 0;
   let reviewsAtLastWin = 0;
   const battleReviews = [];
+  const countedBattles = new Set();
+  let damageTaken = 0;
+  let rallies = 0;
+  let minimumCastleHp = run.battle.playerCastleHp;
+  const captureBattle = () => {
+    const key = run.battle.battleNumber;
+    if (countedBattles.has(key)) return;
+    countedBattles.add(key);
+    damageTaken += run.battle.telemetry.damageTaken;
+    rallies += run.battle.telemetry.rallyTriggered;
+  };
   while (!["complete", "lost"].includes(run.phase) && safety < 2_000) {
     safety += 1;
     if (run.phase === "reward") {
+      captureBattle();
       battleReviews.push(reviews - reviewsAtLastWin);
       reviewsAtLastWin = reviews;
       run = claimCastleUpgrade(run, run.rewardChoices[0]);
@@ -139,10 +151,12 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
     run = resumeCastleBattle(run);
     for (let step = 0; step < Math.round(answerMs / 100) && run.phase === "battle"; step += 1) {
       run = tickCastleRun(run, 100, mastery < 0.22 ? 0.75 : mastery < 0.48 ? 0.9 : 1);
+      minimumCastleHp = Math.min(minimumCastleHp, run.battle.playerCastleHp);
       elapsedMs += 100;
     }
     reviews += 1;
   }
+  captureBattle();
   return {
     contractId,
     mastery,
@@ -155,6 +169,9 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
     activeMinutes: Math.round(elapsedMs / 6_000) / 10,
     upgrades: run.upgrades.length,
     playerCastleHp: Math.round(run.battle.playerCastleHp),
+    minimumCastleHp: Math.round(minimumCastleHp),
+    damageTaken: Math.round(damageTaken),
+    rallies,
     enemyCastleHp: Math.round(run.battle.enemyCastleHp),
     battleReviews,
   };
@@ -175,10 +192,20 @@ const fullRuns = ["quick", "regular", "long"].flatMap(contractId => [0, 1, 2].fl
   simulateFullRun(contractId, 0.6, 0.9, seedOffset),
   simulateFullRun(contractId, 0.9, 0.96, seedOffset),
 ]));
+const pressureRuns = [0.55, 0.65, 0.72].flatMap(correctRate => [0, 1, 2].map(seedOffset => (
+  simulateFullRun("quick", 0.35, correctRate, seedOffset)
+)));
 const validation = {
   unresolvedFirstBattles: report.filter(row => row.result === "battle").length,
   incompleteFullRuns: fullRuns.filter(row => row.result !== "complete").length,
+  pressureWins: pressureRuns.filter(row => row.result === "complete").length,
+  pressureLosses: pressureRuns.filter(row => row.result === "lost").length,
 };
 
-process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, validation }, null, 2)}\n`);
-if (validation.unresolvedFirstBattles > 0 || validation.incompleteFullRuns > 0) process.exitCode = 1;
+process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, validation }, null, 2)}\n`);
+if (
+  validation.unresolvedFirstBattles > 0
+  || validation.incompleteFullRuns > 0
+  || validation.pressureWins === 0
+  || validation.pressureLosses === 0
+) process.exitCode = 1;

@@ -9,6 +9,7 @@ globalThis.localStorage = {
 };
 
 const { drawStudyQuestion, introduceStudyCards, isTypedStudyAnswerCorrect, selectStudyDeck } = await import("../src/game/studyBridge.ts");
+const { getActiveStudyResponseMs } = await import("../src/game/study.ts");
 
 const cards = [
   { id: "new-1", word: "mizu", definition: "water", difficulty: 2, options: [] },
@@ -100,6 +101,9 @@ assert.equal(isTypedStudyAnswerCorrect("The water!", "water", "term_to_definitio
 assert.equal(isTypedStudyAnswerCorrect("liquid", "water; liquid", "term_to_definition"), true, "typed recall should accept explicit answer variants");
 assert.equal(isTypedStudyAnswerCorrect("dont", "don't", "term_to_definition"), true, "apostrophe differences should not create false misses");
 assert.equal(isTypedStudyAnswerCorrect("cafe", "café", "definition_to_term"), false, "meaningful spelling marks should remain part of foreign-term recall");
+assert.equal(getActiveStudyResponseMs(1_000, 9_000, 3_000), 5_000, "completed command time must be excluded from recall timing");
+assert.equal(getActiveStudyResponseMs(1_000, 9_000, 2_000, 7_000), 4_000, "an open command panel must be excluded from recall timing");
+assert.equal(getActiveStudyResponseMs(9_000, 1_000, 0), 0, "clock drift must never create a negative response time");
 
 putDeck("balanced-typing", {
   studySettings: {
