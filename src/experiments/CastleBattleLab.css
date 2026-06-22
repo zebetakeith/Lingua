@@ -519,6 +519,8 @@
 .castle-guide-build > span b { font-size: 10px; }
 .castle-guide-build > p { margin: 0 !important; }
 .castle-drawer label { display: grid; gap: 5px; margin: 14px 0; font-size: 11px; font-weight: 900; }
+.castle-drawer label > small,
+.castle-setup-bottom label > small { max-width: 270px; color: #4e7375; font-size: 7px; font-weight: 750; line-height: 1.35; }
 .castle-drawer select,
 .castle-setup-bottom select { min-height: 40px; padding: 6px 9px; color: #164d51; background: white; border: 1px solid rgba(30, 99, 102, 0.2); border-radius: 11px; font-weight: 800; }
 .castle-telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -530,6 +532,14 @@
 .castle-pause-button { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 44px; margin-top: 10px; color: white; background: #338d8d; border: 0; border-radius: 13px; font-weight: 900; }
 .castle-pause-button { background: #8c73ca; }
 .castle-download svg, .castle-pause-button svg { width: 17px; }
+.castle-abandon-button { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 42px; margin-top: 10px; color: #8a4053; background: #fff0f2; border: 1px solid #edc5ce; border-radius: 13px; font-weight: 900; }
+.castle-abandon-button svg { width: 16px; }
+.castle-abandon-confirm { display: grid; gap: 8px; margin-top: 10px; padding: 11px; color: #714553; background: #fff0f2; border: 1px solid #e9bdc7; border-radius: 14px; }
+.castle-abandon-confirm > p { display: grid; gap: 2px; margin: 0 !important; padding: 0 !important; background: transparent !important; font-size: 9px !important; }
+.castle-abandon-confirm > p b { font-size: 11px; }
+.castle-abandon-confirm > div { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.castle-abandon-confirm button { min-height: 38px; color: #5d5362; background: white; border: 1px solid #dfcbd0; border-radius: 10px; font-weight: 900; }
+.castle-abandon-confirm button.is-danger { color: white; background: #b54c68; border-color: #9e3e58; }
 
 .castle-setup-shell { position: relative; display: grid; place-items: center; min-height: 100dvh; padding: 58px 14px 28px; overflow: hidden; }
 .castle-setup-shell::before { content: ""; position: fixed; inset: auto -10% -22% -10%; height: 55%; background: radial-gradient(ellipse at center, #8ccc76 0 45%, #b9df89 46% 67%, transparent 68%); }
@@ -543,6 +553,20 @@
 .castle-setup-loop svg { flex: 0 0 auto; width: 20px; color: #3b9793; }
 .castle-setup-loop span { display: grid; gap: 1px; font-size: 8px; line-height: 1.3; }
 .castle-setup-loop b { font-size: 10px; }
+.castle-profile-summary { display: grid; gap: 8px; margin: 0 0 15px; padding: 11px; color: #285b60; background: rgba(255,255,255,0.58); border: 1px solid rgba(32, 103, 105, 0.14); border-radius: 16px; }
+.castle-profile-summary > header { display: flex; align-items: center; gap: 8px; }
+.castle-profile-summary > header svg { width: 23px; color: #4b9994; }
+.castle-profile-summary > header div { display: grid; gap: 1px; }
+.castle-profile-summary > header span { color: #3d8986; font-size: 7px; font-weight: 1000; letter-spacing: 0.09em; text-transform: uppercase; }
+.castle-profile-summary > header b { font-size: 10px; }
+.castle-profile-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.castle-profile-metrics span { display: grid; min-width: 0; padding: 7px 8px; background: white; border-radius: 10px; }
+.castle-profile-metrics b { font-size: 15px; }
+.castle-profile-metrics small { font-size: 7px; line-height: 1.2; }
+.castle-profile-summary > p { display: flex; align-items: center; gap: 7px; margin: 0; padding: 7px 9px; color: #5c511c; background: #fff3b7; border-radius: 10px; }
+.castle-profile-summary > p svg { flex: 0 0 auto; width: 18px; color: #c79b17; }
+.castle-profile-summary > p span { display: grid; gap: 1px; font-size: 7px; }
+.castle-profile-summary > p b { font-size: 9px; }
 .castle-setup-pipplo { right: 22px; top: 8px; width: 100px; height: 100px; transform: rotate(3deg); }
 .castle-setup-label { display: block; margin: 13px 0 6px; font-size: 10px; font-weight: 1000; letter-spacing: 0.08em; text-transform: uppercase; }
 .castle-deck-grid { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
@@ -599,6 +623,7 @@
   .castle-setup-card > p:not(.castle-eyebrow) { padding-right: 58px; }
   .castle-setup-loop { grid-template-columns: 1fr; padding-right: 0; }
   .castle-setup-loop > div { min-height: 46px; }
+  .castle-profile-metrics { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 390px) {

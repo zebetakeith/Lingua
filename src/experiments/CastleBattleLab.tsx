@@ -9,6 +9,7 @@ import {
   Download,
   FlaskConical,
   Heart,
+  LogOut,
   Pause,
   Play,
   RefreshCcw,
@@ -112,10 +113,20 @@ const REWARD_CURVE_LABELS: Record<StudyRewardCurve, string> = {
   quadratic: "Curved",
   steep: "Steep",
 };
+const REWARD_CURVE_HELP: Record<StudyRewardCurve, string> = {
+  current: "Smooth rewards with a gentler gap between hard and mastered cards.",
+  quadratic: "Recommended: difficult recalls pay about four times as much as mastered ones.",
+  steep: "The sharpest struggle bonus and the leanest rewards for fluent cards.",
+};
 const RECALL_MODE_LABELS: Record<StudyRecallMode, string> = {
   balanced: "Balanced recall",
   deck: "Deck default",
   typed: "Type every answer",
+};
+const RECALL_MODE_HELP: Record<StudyRecallMode, string> = {
+  balanced: "Recommended: recognition first, then typed foreign-term recall as mastery grows.",
+  deck: "Use the multiple-choice and self-grade rules already saved with this deck.",
+  typed: "Type every seen answer for maximum production practice.",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
 const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
@@ -684,6 +695,7 @@ function DeckSetup({
   onStart: () => void;
   onExit: () => void;
 }) {
+  const nextKeepsake = Object.values(CASTLE_KEEPSAKE_DEFS).find(keepsake => !profile.unlockedKeepsakeIds.includes(keepsake.id));
   return (
     <main className="castle-setup-shell">
       <button className="castle-setup-exit" onClick={onExit}><ArrowLeft />Main menu</button>
@@ -698,6 +710,19 @@ function DeckSetup({
           <div><Swords /><span><b>2. Command</b>Switch panels to spend recall energy.</span></div>
           <div><Castle /><span><b>3. Conquer</b>Break keeps and evolve your run build.</span></div>
         </div>
+
+        <section className="castle-profile-summary" aria-label="Keeper chronicle">
+          <header><FlaskConical /><div><span>Keeper chronicle</span><b>This deck-world remembers every expedition</b></div></header>
+          <div className="castle-profile-metrics">
+            <span><b>{profile.runsCompleted}</b><small>runs completed</small></span>
+            <span><b>{profile.guardianClears}</b><small>guardians cleared</small></span>
+            <span><b>{profile.totalReviews}</b><small>reviews recorded</small></span>
+            <span><b>{profile.bestRegion}</b><small>deepest region</small></span>
+          </div>
+          {nextKeepsake
+            ? <p><Sparkles /><span><b>Next keepsake: {nextKeepsake.name}</b>{nextKeepsake.unlockHint}</span></p>
+            : <p><Sparkles /><span><b>All keepsakes discovered</b>Mallow has no more trinkets to hide.</span></p>}
+        </section>
 
         <label className="castle-setup-label">Study world</label>
         <div className="castle-deck-grid">
@@ -753,12 +778,14 @@ function DeckSetup({
             <select value={rewardCurve} onChange={event => onCurve(event.target.value as StudyRewardCurve)}>
               {(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}
             </select>
+            <small>{REWARD_CURVE_HELP[rewardCurve]}</small>
           </label>
           <label>
             Recall style
             <select value={recallMode} onChange={event => onRecallMode(event.target.value as StudyRecallMode)}>
               {(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}
             </select>
+            <small>{RECALL_MODE_HELP[recallMode]}</small>
           </label>
           <div><Sparkles /><b>{profile.unlockedKeepsakeIds.length}/{Object.keys(CASTLE_KEEPSAKE_DEFS).length}</b><span>keepsakes / {profile.unlockedUpgradeIds.length} discoveries</span></div>
         </div>
@@ -883,6 +910,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
+  const [abandonConfirmOpen, setAbandonConfirmOpen] = useState(false);
   const [pipploAnimation, setPipploAnimation] = useState<PipploAnimationState>({ name: "idle", serial: 0 });
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(CASTLE_SOUND_KEY) !== "off");
   const questionStartedAt = useRef(0);
@@ -977,6 +1005,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       if (event.key !== "Escape") return;
       setHelpOpen(false);
       setSettingsOpen(false);
+      setAbandonConfirmOpen(false);
       setGuideOpen(false);
     };
     document.addEventListener("keydown", onKeyDown);
@@ -1262,6 +1291,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setFeedback(null);
     setPanelMode("study");
     setProfile(loadCastleProfile(selectedDeckId));
+  };
+
+  const abandonRun = () => {
+    setSettingsOpen(false);
+    setAbandonConfirmOpen(false);
+    resetRun();
   };
 
   const finishTutorial = () => {
@@ -1660,17 +1695,17 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       )}
 
       {settingsOpen && (
-        <aside className="castle-drawer-backdrop" onClick={() => setSettingsOpen(false)}>
+        <aside className="castle-drawer-backdrop" onClick={() => { setSettingsOpen(false); setAbandonConfirmOpen(false); }}>
           <section ref={activeDialogRef} tabIndex={-1} className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-settings-title" onClick={event => event.stopPropagation()}>
-            <button className="castle-drawer-close" aria-label="Close settings" onClick={() => setSettingsOpen(false)}><X /></button>
+            <button className="castle-drawer-close" aria-label="Close settings" onClick={() => { setSettingsOpen(false); setAbandonConfirmOpen(false); }}><X /></button>
             <p className="castle-eyebrow">Balance lab</p>
             <h2 id="castle-settings-title">Pressure and telemetry</h2>
-            <label>Reward curve<select value={run.rewardCurve} onChange={event => setRun(current => current ? { ...current, rewardCurve: event.target.value as StudyRewardCurve } : current)}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select></label>
+            <label>Reward curve<select value={run.rewardCurve} onChange={event => setRun(current => current ? { ...current, rewardCurve: event.target.value as StudyRewardCurve } : current)}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select><small>{REWARD_CURVE_HELP[run.rewardCurve]}</small></label>
             <label>Recall style<select value={run.recallMode} onChange={event => {
               const mode = event.target.value as StudyRecallMode;
               setRecallMode(mode);
               setRun(current => current ? { ...current, recallMode: mode } : current);
-            }}>{(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}</select></label>
+            }}>{(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}</select><small>{RECALL_MODE_HELP[run.recallMode]}</small></label>
             <label className="castle-sound-toggle"><input type="checkbox" checked={soundEnabled} onChange={event => setSoundEnabled(event.target.checked)} />Sound cues</label>
             <div className="castle-telemetry-grid">
               <span><b>{formatCastleEnergy(run.battle.telemetry.energyEarned)}</b>energy earned</span>
@@ -1679,7 +1714,18 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><b>{Math.round(run.battle.telemetry.activeCombatMs / 1_000)}s</b>live combat</span>
             </div>
             <button className="castle-download" onClick={downloadBalance}><Download />Export local balance data</button>
-            <button className="castle-pause-button" onClick={() => { pauseForInterruption(); setSettingsOpen(false); }}><Pause />Pause current prompt</button>
+            <button className="castle-pause-button" onClick={() => { pauseForInterruption(); setSettingsOpen(false); setAbandonConfirmOpen(false); }}><Pause />Pause current prompt</button>
+            {!abandonConfirmOpen ? (
+              <button className="castle-abandon-button" onClick={() => setAbandonConfirmOpen(true)}><LogOut />End this expedition</button>
+            ) : (
+              <section className="castle-abandon-confirm" aria-label="Confirm ending expedition">
+                <p><b>Return to run setup?</b>Your reviews and permanent discoveries stay saved. Only this unfinished run and its temporary mutations are cleared.</p>
+                <div>
+                  <button autoFocus onClick={() => setAbandonConfirmOpen(false)}>Keep playing</button>
+                  <button className="is-danger" onClick={abandonRun}>End run</button>
+                </div>
+              </section>
+            )}
           </section>
         </aside>
       )}
