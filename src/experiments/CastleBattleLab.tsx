@@ -550,6 +550,10 @@ function StudyCard({
 }) {
   const [typedAnswer, setTypedAnswer] = useState("");
   const promptRef = useRef<HTMLHeadingElement | null>(null);
+  const onOptionRef = useRef(onOption);
+  useEffect(() => {
+    onOptionRef.current = onOption;
+  }, [onOption]);
   useEffect(() => {
     if (question.seenBefore && question.questionType === "typed" && !interrupted) return;
     const focusFrame = window.requestAnimationFrame(() => promptRef.current?.focus({ preventScroll: true }));
@@ -565,11 +569,11 @@ function StudyCard({
       const option = question.options[answerIndex];
       if (!option || answerIndex < 0 || answerIndex > 3) return;
       event.preventDefault();
-      onOption(option);
+      onOptionRef.current(option);
     };
     window.addEventListener("keydown", answerByNumber);
     return () => window.removeEventListener("keydown", answerByNumber);
-  }, [interrupted, onOption, question.options, question.questionType, question.seenBefore]);
+  }, [interrupted, question.options, question.questionType, question.seenBefore]);
   const status = !question.seenBefore
     ? "First exposure · combat safely paused"
     : interrupted
@@ -1143,6 +1147,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setProfile(loadCastleProfile(deckId));
     const restored = loadCastleRun(deckId);
     setRun(restored ? pauseCastleBattle(restored, "Saved run restored. Resume when ready.") : null);
+    setRewardCurve(restored?.rewardCurve || "quadratic");
     setRecallMode(restored?.recallMode || "balanced");
     setDecks(getStudyDecks());
   };
@@ -1725,7 +1730,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <button className="castle-drawer-close" aria-label="Close settings" onClick={() => { setSettingsOpen(false); setAbandonConfirmOpen(false); }}><X /></button>
             <p className="castle-eyebrow">Balance lab</p>
             <h2 id="castle-settings-title">Pressure and telemetry</h2>
-            <label>Reward curve<select value={run.rewardCurve} onChange={event => setRun(current => current ? { ...current, rewardCurve: event.target.value as StudyRewardCurve } : current)}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select><small>{REWARD_CURVE_HELP[run.rewardCurve]}</small></label>
+            <label>Reward curve<select value={run.rewardCurve} onChange={event => {
+              const curve = event.target.value as StudyRewardCurve;
+              setRewardCurve(curve);
+              setRun(current => current ? { ...current, rewardCurve: curve } : current);
+            }}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select><small>{REWARD_CURVE_HELP[run.rewardCurve]}</small></label>
             <label>Recall style<select value={run.recallMode} onChange={event => {
               const mode = event.target.value as StudyRecallMode;
               setRecallMode(mode);
