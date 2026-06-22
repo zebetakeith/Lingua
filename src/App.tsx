@@ -2756,6 +2756,12 @@ export default function App() {
   }, [save]);
 
   useEffect(() => {
+    document.title = castleBattleLabOpen ? "Pipplo's Goo Keep" : "Lexicon Labyrinth";
+    const themeColor = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (themeColor) themeColor.content = castleBattleLabOpen ? "#a5dfdf" : "#050816";
+  }, [castleBattleLabOpen]);
+
+  useEffect(() => {
     if (!combat || (combat.relicChoices.length === 0 && combat.traitChoices.length === 0 && combat.curioChoices.length === 0 && combat.snackChoices.length === 0)) {
       setRewardDrawerOpen(false);
     }

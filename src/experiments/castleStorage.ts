@@ -147,17 +147,20 @@ export function loadCastleProfile(deckId: string): CastleDeckProfile {
   const runsCompleted = saved.runsCompleted || 0;
   const unlockedKeepsakeIds = Array.from(new Set([
     ...STARTER_CASTLE_KEEPSAKE_IDS,
-    ...(saved.unlockedKeepsakeIds || []),
+    ...(saved.unlockedKeepsakeIds || []).filter(id => ALL_CASTLE_KEEPSAKE_IDS.includes(id)),
     ...unlockedKeepsakesForProgress(guardianClears, runsCompleted),
   ]));
   return {
     ...base,
     ...saved,
     deckId,
-    unlockedUpgradeIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...(saved.unlockedUpgradeIds || [])])),
+    unlockedUpgradeIds: Array.from(new Set([
+      ...STARTER_CASTLE_UPGRADE_IDS,
+      ...(saved.unlockedUpgradeIds || []).filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id)),
+    ])),
     unlockedKeepsakeIds,
     selectedKeepsakeId: unlockedKeepsakeIds.includes(saved.selectedKeepsakeId) ? saved.selectedKeepsakeId : "starBuckle",
-    discoveredEnemyKinds: Array.from(new Set(saved.discoveredEnemyKinds || [])),
+    discoveredEnemyKinds: Array.from(new Set((saved.discoveredEnemyKinds || []).filter(kind => kind in CASTLE_UNIT_DEFS))),
   };
 }
 

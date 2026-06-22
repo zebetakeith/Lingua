@@ -1671,9 +1671,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               })}
             </div>
 
-            <h3>Enemy families</h3>
+            <h3>Enemy families <small>{ENEMY_GUIDE_KINDS.filter(kind => profile.discoveredEnemyKinds.includes(kind)).length}/{ENEMY_GUIDE_KINDS.length} discovered</small></h3>
             <div className="castle-guide-list">
               {ENEMY_GUIDE_KINDS.map(kind => {
+                const discovered = profile.discoveredEnemyKinds.includes(kind) || run.battle.units.some(unit => unit.side === "enemy" && unit.kind === kind);
+                if (!discovered) {
+                  return <article key={kind} className="is-undiscovered"><span className="castle-unit-unknown" aria-hidden="true">?</span><div><b>Unknown rival</b><span>Meet this family in the lane to reveal its role and battle stats.</span><small>Undiscovered</small></div></article>;
+                }
                 const unit = CASTLE_UNIT_DEFS[kind];
                 return <article key={kind}><SlimeFace kind={kind} side="enemy" /><div><b>{unit.name}</b><span>{CASTLE_UNIT_GUIDE[kind]}</span><small>{unit.hp} HP · {unit.damage} attack · {unit.range >= 10 ? "ranged" : unit.speed >= 7 ? "fast" : "melee"}</small></div></article>;
               })}

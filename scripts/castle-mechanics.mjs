@@ -67,8 +67,10 @@ localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify({
     profile: {
       version: 1,
       deckId: "legacy",
-      unlockedUpgradeIds: [],
-      discoveredEnemyKinds: [],
+      unlockedUpgradeIds: ["retired-prototype-upgrade"],
+      unlockedKeepsakeIds: ["retired-prototype-keepsake"],
+      selectedKeepsakeId: "retired-prototype-keepsake",
+      discoveredEnemyKinds: ["retired-prototype-enemy"],
       runsCompleted: 0,
       guardianClears: 0,
       bestRegion: 1,
@@ -81,6 +83,8 @@ localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify({
 const migratedProfile = loadCastleProfile("legacy");
 assert.deepEqual(migratedProfile.unlockedKeepsakeIds, ["starBuckle"], "old profiles should migrate with the starter keepsake unlocked");
 assert.equal(migratedProfile.selectedKeepsakeId, "starBuckle", "old profiles should safely equip the starter keepsake");
+assert.deepEqual(migratedProfile.unlockedUpgradeIds, STARTER_CASTLE_UPGRADE_IDS, "retired prototype upgrades should be removed during profile recovery");
+assert.deepEqual(migratedProfile.discoveredEnemyKinds, [], "retired prototype enemies should be removed during profile recovery");
 localStorage.clear();
 
 let run = freshRun();
