@@ -460,8 +460,12 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
           Enemy Rally
           {Array.from({ length: CASTLE_RALLY_LIMIT }, (_, index) => <i key={index} className={index < battle.rally ? "is-filled" : ""} />)}
         </span>
-        <span className="castle-wave">
-          Next: <SlimeFace kind={battle.nextEnemyKind} side="enemy" /> {CASTLE_UNIT_DEFS[battle.nextEnemyKind].name}
+        <span
+          className="castle-wave"
+          title={`Next enemy wave: ${CASTLE_UNIT_DEFS[battle.nextEnemyKind].name}`}
+          aria-label={`Next enemy wave in ${Math.max(0, Math.ceil(battle.enemySpawnTimerMs / 1_000))} seconds: ${CASTLE_UNIT_DEFS[battle.nextEnemyKind].name}`}
+        >
+          <b className="castle-wave-countdown">{Math.max(0, Math.ceil(battle.enemySpawnTimerMs / 1_000))}s</b> <SlimeFace kind={battle.nextEnemyKind} side="enemy" /> {CASTLE_UNIT_DEFS[battle.nextEnemyKind].name}
           {run.upgrades.includes("mothEars") && <> · then {CASTLE_UNIT_DEFS[battle.afterNextEnemyKind].name}</>}
         </span>
       </div>
@@ -534,6 +538,27 @@ function StudyCard({
   onResume: () => void;
 }) {
   const [typedAnswer, setTypedAnswer] = useState("");
+  const promptRef = useRef<HTMLHeadingElement | null>(null);
+  useEffect(() => {
+    if (question.seenBefore && question.questionType === "typed" && !interrupted) return;
+    const focusFrame = window.requestAnimationFrame(() => promptRef.current?.focus({ preventScroll: true }));
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, [interrupted, question.cardId, question.direction, question.questionType, question.seenBefore, reveal]);
+  useEffect(() => {
+    if (!question.seenBefore || interrupted || question.questionType !== "multiple_choice") return;
+    const answerByNumber = (event: KeyboardEvent) => {
+      if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+      const answerIndex = Number(event.key) - 1;
+      const option = question.options[answerIndex];
+      if (!option || answerIndex < 0 || answerIndex > 3) return;
+      event.preventDefault();
+      onOption(option);
+    };
+    window.addEventListener("keydown", answerByNumber);
+    return () => window.removeEventListener("keydown", answerByNumber);
+  }, [interrupted, onOption, question.options, question.questionType, question.seenBefore]);
   const status = !question.seenBefore
     ? "First exposure · combat safely paused"
     : interrupted
@@ -553,7 +578,7 @@ function StudyCard({
         <div className="castle-first-exposure">
           <span>New direction</span>
           <small>{question.direction === "term_to_definition" ? "Term" : "Meaning"}</small>
-          <h2>{question.prompt}</h2>
+          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <i aria-hidden="true">↓</i>
           <small>{question.direction === "term_to_definition" ? "Meaning" : "Term"}</small>
           <strong>{question.answer}</strong>
@@ -562,12 +587,12 @@ function StudyCard({
         </div>
       ) : interrupted ? (
         <>
-          <h2>{question.prompt}</h2>
+          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <button className="castle-resume-card" onClick={onResume}><Play />Resume this prompt</button>
         </>
       ) : question.questionType === "typed" ? (
         <>
-          <h2>{question.prompt}</h2>
+          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <form className="castle-typed-answer" onSubmit={event => {
             event.preventDefault();
             if (typedAnswer.trim()) onTyped(typedAnswer);
@@ -589,14 +614,14 @@ function StudyCard({
         </>
       ) : question.questionType === "multiple_choice" ? (
         <>
-          <h2>{question.prompt}</h2>
+          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <div className="castle-answer-grid">
-            {question.options.map(option => <button key={option} onClick={() => onOption(option)}>{option}</button>)}
+            {question.options.map((option, index) => <button key={option} onClick={() => onOption(option)}><kbd aria-hidden="true">{index + 1}</kbd><span>{option}</span></button>)}
           </div>
         </>
       ) : reveal ? (
         <>
-          <h2>{question.prompt}</h2>
+          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <div className="castle-self-grade">
             <strong>{question.answer}</strong>
             <span>Did you recall it before revealing?</span>
@@ -608,7 +633,7 @@ function StudyCard({
         </>
       ) : (
         <>
-          <h2>{question.prompt}</h2>
+          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <button className="castle-flip-card" onClick={onReveal}>Reveal answer</button>
         </>
       )}
@@ -1623,7 +1648,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live but requires a correction step and fills Enemy Rally.</p>
-            <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; Deck Default and Type Every Answer remain available in settings.</p>
+            <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; multiple-choice prompts also accept keys 1–4. Deck Default and Type Every Answer remain available in settings.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
