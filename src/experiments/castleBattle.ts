@@ -560,13 +560,19 @@ export function normalizeCastleRunStudySummary(
 }
 
 export function getCastleStudyReport(run: CastleRunState): CastleStudyReport {
-  const summary = normalizeCastleRunStudySummary(run.studySummary);
-  const accuracy = summary.gradedReviews > 0 ? run.correct / summary.gradedReviews : 0;
+  const normalized = normalizeCastleRunStudySummary(run.studySummary);
+  const gradedReviews = Math.max(normalized.gradedReviews, run.correct + run.wrong);
+  const summary = {
+    ...normalized,
+    exposures: Math.max(normalized.exposures, run.reviews - gradedReviews),
+    gradedReviews,
+  };
+  const accuracy = gradedReviews > 0 ? Math.min(1, run.correct / gradedReviews) : 0;
   const averageResponseMs = summary.responseMs.length > 0
     ? summary.responseMs.reduce((total, value) => total + value, 0) / summary.responseMs.length
     : 0;
-  const typedShare = summary.gradedReviews > 0 ? summary.typedReviews / summary.gradedReviews : 0;
-  const recommendation = summary.gradedReviews === 0
+  const typedShare = gradedReviews > 0 ? summary.typedReviews / gradedReviews : 0;
+  const recommendation = gradedReviews === 0
     ? "Keep the next expedition short while these new directions settle in."
     : accuracy < 0.65
       ? "Try a Quick contract with Curved rewards; corrections are doing useful work, so keep the pressure gentle."

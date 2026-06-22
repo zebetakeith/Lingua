@@ -113,6 +113,16 @@ assert.equal(typedReport.difficultRecalls, 1, "high-value correct recalls should
 assert.equal(typedReport.dueReviews, 1, "due prompts should be visible in the learning report");
 assert.equal(typedReport.averageResponseMs, 4_200, "active recall pace should use the recorded study duration");
 assert.equal(typedReport.accuracy, 1, "learning-report accuracy should exclude first exposures");
+const reconstructedReport = getCastleStudyReport({
+  ...freshRun(),
+  reviews: 12,
+  correct: 7,
+  wrong: 2,
+  studySummary: { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [] },
+});
+assert.equal(reconstructedReport.gradedReviews, 9, "legacy reports should reconstruct graded reviews from correct and wrong totals");
+assert.equal(reconstructedReport.exposures, 3, "legacy reports should infer the remaining reviews as safe exposures");
+assert.equal(reconstructedReport.accuracy, 7 / 9, "legacy report accuracy must stay within the valid range");
 
 let rally = freshRun();
 for (let index = 0; index < 3; index += 1) {

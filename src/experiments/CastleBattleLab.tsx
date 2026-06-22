@@ -660,7 +660,7 @@ function ReviewResult({ feedback, onContinue }: { feedback: ReviewFeedback; onCo
         <span>{feedback.correct ? "Recall recorded." : `Correct answer: ${feedback.answer}`}</span>
       </div>
       {feedback.masteryEvent && <small>{feedback.masteryEvent}</small>}
-      {feedback.requiresCorrection && <small>Read the correction before returning to the next card. Combat is still moving.</small>}
+      {feedback.requiresCorrection && <small>Read the correction before returning to the next card. Combat is still moving; recalling this direction later clears one Rally pip.</small>}
       {onContinue && <button autoFocus onClick={onContinue}>{feedback.requiresCorrection ? "I’ve got it — next card" : "Continue learning"}</button>}
     </div>
   );
@@ -940,15 +940,14 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     && run.phase === "battle"
     && run.battle.mode === "study",
   );
+  const runActive = Boolean(run);
 
   useEffect(() => {
     const preloadedImages = [
-      ...Object.values(PIPPLO_ANIMATION_FRAMES).flat(),
-      ...Object.values(MALLOW_ANIMATION_FRAMES).flat(),
+      ...PIPPLO_ANIMATION_FRAMES.idle,
+      ...MALLOW_ANIMATION_FRAMES.idle,
       ...Object.values(FRIENDLY_UNIT_ART),
       ...Object.values(ENEMY_UNIT_ART),
-      ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
-      ...Object.values(ENEMY_UNIT_ATTACK_FRAMES).flat(),
     ].map(src => {
       const image = new Image();
       image.decoding = "async";
@@ -957,6 +956,28 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     });
     return () => preloadedImages.forEach(image => { image.src = ""; });
   }, []);
+
+  useEffect(() => {
+    if (!runActive) return;
+    const preloadedImages: HTMLImageElement[] = [];
+    const preloadTimer = window.setTimeout(() => {
+      [
+      ...Object.entries(PIPPLO_ANIMATION_FRAMES).filter(([name]) => name !== "idle").flatMap(([, frames]) => frames),
+      ...Object.entries(MALLOW_ANIMATION_FRAMES).filter(([name]) => name !== "idle").flatMap(([, frames]) => frames),
+      ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
+      ...Object.values(ENEMY_UNIT_ATTACK_FRAMES).flat(),
+      ].forEach(src => {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = src;
+        preloadedImages.push(image);
+      });
+    }, 250);
+    return () => {
+      window.clearTimeout(preloadTimer);
+      preloadedImages.forEach(image => { image.src = ""; });
+    };
+  }, [runActive]);
 
   useEffect(() => {
     if (!run) return;
@@ -1619,7 +1640,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <div className="castle-guide-meter-grid">
               <span><Sparkles /><b>Energy</b><small>Correct recalls fund summons and castle powers.</small></span>
               <span><Zap /><b>Recall Bolt</b><small>Five correct seen recalls deal 8 damage directly to the rival keep.</small></span>
-              <span><Swords /><b>Enemy Rally</b><small>A miss adds a pip. Three pips summon a bonus enemy squad.</small></span>
+              <span><Swords /><b>Enemy Rally</b><small>A miss adds a pip. Recall that direction later to clear one; three uncleared pips summon a bonus squad.</small></span>
               <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy so you can choose what to buy.</small></span>
               <span><Castle /><b>Guardian phases</b><small>At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
             </div>
@@ -1682,7 +1703,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p className="castle-eyebrow">How Goo Keep works</p>
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
-            <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live but requires a correction step and fills Enemy Rally.</p>
+            <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip before it triggers.</p>
             <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; multiple-choice prompts also accept keys 1–4. Deck Default and Type Every Answer remain available in settings.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
