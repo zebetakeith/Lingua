@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { lazy, Suspense, useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot, Beaker } from "lucide-react";
 import VOCABULARY, { generateDistractors, type VocabWord } from "./data/vocabulary";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
@@ -91,7 +91,7 @@ import {
   type RuneStatus,
   type TileKind,
 } from "./game/runes";
-import CastleBattleLab from "./experiments/CastleBattleLab";
+const CastleBattleLab = lazy(() => import("./experiments/CastleBattleLab"));
 
 const assetUrl = (path?: string | null) => {
   if (!path) return "";
@@ -5979,11 +5979,21 @@ export default function App() {
   // ─── RENDER: Main Menu ────────────────────────────────
   if (castleBattleLabOpen) {
     return (
-      <CastleBattleLab
-        onExit={() => {
-          window.location.href = window.location.pathname;
-        }}
-      />
+      <Suspense fallback={(
+        <main className="flex min-h-screen items-center justify-center bg-[#fff9dd] text-[#225d62]">
+          <div className="grid justify-items-center gap-3 rounded-3xl bg-white/80 px-8 py-7 shadow-lg" role="status" aria-live="polite">
+            <Sparkles className="h-8 w-8 animate-pulse text-[#d4a92e]" />
+            <b>Opening Pipplo's Goo Keep…</b>
+            <span className="text-xs">Waking the nursery and Mallow's moon gate</span>
+          </div>
+        </main>
+      )}>
+        <CastleBattleLab
+          onExit={() => {
+            window.location.href = window.location.pathname;
+          }}
+        />
+      </Suspense>
     );
   }
 
