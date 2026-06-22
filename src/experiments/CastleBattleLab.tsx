@@ -96,6 +96,7 @@ interface ReviewFeedback {
 
 type CastlePanelMode = "study" | "army";
 type PipploAnimationName = "idle" | "cast" | "hurt" | "cheer";
+type MallowAnimationName = "idle" | "cast" | "hurt" | "cheer";
 
 interface PipploAnimationState {
   name: PipploAnimationName;
@@ -122,6 +123,15 @@ const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fr
     ),
   ]),
 ) as Record<PipploAnimationName, string[]>;
+const MALLOW_ANIMATION_FRAMES: Record<MallowAnimationName, string[]> = Object.fromEntries(
+  (["idle", "cast", "hurt", "cheer"] as const).map(animation => [
+    animation,
+    Array.from(
+      { length: 4 },
+      (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/characters/mallow/${animation}/0${index + 1}.png`,
+    ),
+  ]),
+) as Record<MallowAnimationName, string[]>;
 const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   piplet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/piplet/seed-v1.png`,
   dartlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/seed-v1.png`,
@@ -208,9 +218,35 @@ function PipploSprite({
 }) {
   const animationClass = animated ? (loop ?? animation === "idle") ? "is-looping" : "is-action" : "";
   return (
-    <div className={`goo-pipplo-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
+    <div className={`goo-keeper-sprite goo-pipplo-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
       {PIPPLO_ANIMATION_FRAMES[animation].map((src, index) => (
         <img key={src} src={src} alt="" style={{ "--pipplo-frame": index } as CSSProperties} />
+      ))}
+    </div>
+  );
+}
+
+function MallowSprite({
+  className = "",
+  animation = "idle",
+}: {
+  className?: string;
+  animation?: MallowAnimationName;
+}) {
+  const animationClass = animation === "idle" ? "is-looping" : "is-action";
+  return (
+    <div className={`goo-keeper-sprite goo-mallow-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
+      {MALLOW_ANIMATION_FRAMES[animation].map((src, index) => (
+        <img
+          key={src}
+          src={src}
+          alt=""
+          style={{
+            "--pipplo-frame": index,
+            "--keeper-action-duration": "115ms",
+            "--keeper-action-delay": `${index * 110}ms`,
+          } as CSSProperties}
+        />
       ))}
     </div>
   );
@@ -220,7 +256,7 @@ function CastleHealth({ current, max, enemy = false }: { current: number; max: n
   const percent = Math.max(0, Math.min(100, (current / Math.max(1, max)) * 100));
   return (
     <div className={`castle-health ${enemy ? "is-enemy" : ""}`}>
-      <span>{enemy ? "Rival Keep" : "Pipplo's Keep"}</span>
+      <span>{enemy ? "Mallow's Keep" : "Pipplo's Keep"}</span>
       <div><i style={{ width: `${percent}%` }} /></div>
       <b>{Math.ceil(current)}/{max}</b>
     </div>
@@ -279,7 +315,9 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
   const region = getCastleRegionDef(run.region);
   const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => (event.kind === "hit" || event.kind === "projectile") && event.position <= 3);
   const playerCastleHit = Boolean(playerCastleHitEvent);
-  const enemyCastleHit = battle.fxEvents.some(event => (event.kind === "hit" || event.kind === "projectile") && event.position >= 97);
+  const enemyCastleHitEvent = battle.fxEvents.slice().reverse().find(event => (event.kind === "hit" || event.kind === "projectile") && event.position >= 97);
+  const enemyCastleHit = Boolean(enemyCastleHitEvent);
+  const enemyCastEvent = battle.fxEvents.slice().reverse().find(event => event.kind === "spawn" && event.side === "enemy");
   const celebrating = run.phase === "reward" || run.phase === "retire" || run.phase === "complete";
   const activePipploAnimation: PipploAnimationName = playerCastleHitEvent ? "hurt" : celebrating ? "cheer" : pipploAnimation.name;
   const activePipploSerial = playerCastleHitEvent
@@ -287,6 +325,20 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
     : celebrating
       ? `celebrate-${run.phase}-${battle.battleNumber}`
       : pipploAnimation.serial;
+  const activeMallowAnimation: MallowAnimationName = enemyCastleHitEvent
+    ? "hurt"
+    : enemyCastEvent
+      ? "cast"
+      : playerCastleHitEvent
+        ? "cheer"
+        : "idle";
+  const activeMallowSerial = enemyCastleHitEvent
+    ? `hurt-${enemyCastleHitEvent.id}`
+    : enemyCastEvent
+      ? `cast-${enemyCastEvent.id}`
+      : playerCastleHitEvent
+        ? `cheer-${playerCastleHitEvent.id}`
+        : `idle-${battle.battleNumber}`;
   const friendlyUnits = battle.units.filter(unit => unit.side === "player").length;
   const enemyUnits = battle.units.length - friendlyUnits;
   return (
@@ -302,7 +354,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
         "--region-road-bottom": region.roadBottom,
         "--region-sun": region.sun,
       } as CSSProperties}
-      aria-label={`${region.name} castle battlefield. Pipplo's Keep ${Math.ceil(battle.playerCastleHp)} health, Rival Keep ${Math.ceil(battle.enemyCastleHp)} health. ${friendlyUnits} friendly and ${enemyUnits} enemy units in the lane.`}
+      aria-label={`${region.name} castle battlefield. Pipplo's Keep ${Math.ceil(battle.playerCastleHp)} health, Mallow's Keep ${Math.ceil(battle.enemyCastleHp)} health. ${friendlyUnits} friendly and ${enemyUnits} enemy units in the lane.`}
     >
       <div className="castle-sky-orb" />
       <div className="castle-scene-status">
@@ -368,7 +420,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
         </div>
         <div className={`castle-home is-enemy ${enemyCastleHit ? "is-hit" : ""}`}>
           <div className="castle-tower"><span /><span /><span /></div>
-          <div className="enemy-keeper"><i /><i /><b /></div>
+          <MallowSprite key={`${activeMallowAnimation}-${activeMallowSerial}`} className="mallow-keeper" animation={activeMallowAnimation} />
         </div>
       </div>
 
@@ -762,6 +814,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   useEffect(() => {
     const preloadedImages = [
       ...Object.values(PIPPLO_ANIMATION_FRAMES).flat(),
+      ...Object.values(MALLOW_ANIMATION_FRAMES).flat(),
       ...Object.values(FRIENDLY_UNIT_ART),
       ...Object.values(ENEMY_UNIT_ART),
       ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
