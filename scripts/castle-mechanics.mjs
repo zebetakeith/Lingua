@@ -14,7 +14,7 @@ import {
   summonCastleUnit,
   tickCastleRun,
 } from "../src/experiments/castleBattle.ts";
-import { clearCastleRun, loadCastleRun, saveCastleRun } from "../src/experiments/castleStorage.ts";
+import { clearCastleRun, loadCastleProfile, loadCastleRun, saveCastleRun, selectCastleKeepsake } from "../src/experiments/castleStorage.ts";
 
 const localValues = new Map();
 globalThis.localStorage = {
@@ -40,6 +40,46 @@ function outcome(index, overrides = {}) {
 function freshRun() {
   return createInitialCastleRun("mechanics", "quick", "quadratic", ALL_CASTLE_UPGRADE_IDS, 42);
 }
+
+function keepsakeRun(keepsakeId) {
+  return createInitialCastleRun("mechanics", "quick", "quadratic", ALL_CASTLE_UPGRADE_IDS, 42, "balanced", keepsakeId);
+}
+
+assert.equal(keepsakeRun("starBuckle").battle.energy, 1, "Star Buckle should grant one starting energy");
+assert.equal(keepsakeRun("shellButton").battle.playerBarrier, 10, "Shell Button should grant ten starting barrier");
+assert.equal(keepsakeRun("boltBead").battle.recallBoltCharge, 1, "Bolt Bead should grant one Recall Bolt charge");
+assert.equal(keepsakeRun("nurseryBell").battle.units.filter(unit => unit.kind === "piplet").length, 1, "Nursery Bell should hatch one starting Piplet");
+assert.equal(keepsakeRun("moonTreaty").battle.energy, 2, "Moon Treaty should grant two starting energy");
+assert.equal(keepsakeRun("moonTreaty").battle.rally, 1, "Moon Treaty should disclose its one-pip Rally risk");
+
+const mossRoute = chooseCastleRoute({
+  ...keepsakeRun("mossPatch"),
+  phase: "route",
+  routeChoices: ["battle"],
+  carriedCastleHp: 50,
+}, "battle");
+assert.equal(mossRoute.battle.playerCastleHp, 58, "Moss Patch should repair eight HP when the next battle begins");
+
+localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify({
+  legacy: {
+    profile: {
+      version: 1,
+      deckId: "legacy",
+      unlockedUpgradeIds: [],
+      discoveredEnemyKinds: [],
+      runsCompleted: 0,
+      guardianClears: 0,
+      bestRegion: 1,
+      totalReviews: 0,
+      tutorialComplete: false,
+    },
+    run: null,
+  },
+}));
+const migratedProfile = loadCastleProfile("legacy");
+assert.deepEqual(migratedProfile.unlockedKeepsakeIds, ["starBuckle"], "old profiles should migrate with the starter keepsake unlocked");
+assert.equal(migratedProfile.selectedKeepsakeId, "starBuckle", "old profiles should safely equip the starter keepsake");
+localStorage.clear();
 
 let run = freshRun();
 const startingEnemyHp = run.battle.enemyCastleHp;
@@ -125,6 +165,7 @@ let progressionRun = freshRun();
 saveCastleRun("mechanics", { ...progressionRun, battlesWon: 2 });
 let progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
 assert.equal(progressionProfile.guardianClears, 1, "first guardian clear should advance permanent progression");
+assert.equal(progressionProfile.unlockedKeepsakeIds.includes("shellButton"), true, "the first guardian should unlock Shell Button");
 progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
 assert.equal(progressionProfile.guardianClears, 1, "saving the same guardian clear twice must not duplicate progression");
 clearCastleRun("mechanics");
@@ -134,6 +175,16 @@ saveCastleRun("mechanics", progressionRun);
 progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
 assert.equal(progressionProfile.guardianClears, 2, "guardian clears should accumulate across separate runs");
 assert.equal(progressionProfile.unlockedUpgradeIds.length, STARTER_CASTLE_UPGRADE_IDS.length + 2, "each accumulated guardian clear should unlock one discovery");
+assert.equal(progressionProfile.unlockedKeepsakeIds.includes("boltBead"), true, "the second guardian should unlock Bolt Bead");
+
+clearCastleRun("mechanics");
+progressionRun = freshRun();
+saveCastleRun("mechanics", progressionRun);
+progressionProfile = saveCastleRun("mechanics", { ...progressionRun, phase: "complete" });
+assert.equal(progressionProfile.runsCompleted, 1, "a finished expedition should advance permanent run progression once");
+assert.equal(progressionProfile.unlockedKeepsakeIds.includes("mossPatch"), true, "the first finished expedition should unlock Moss Patch");
+assert.equal(selectCastleKeepsake("mechanics", "mossPatch").selectedKeepsakeId, "mossPatch", "an unlocked keepsake should be selectable");
+assert.equal(selectCastleKeepsake("mechanics", "moonTreaty").selectedKeepsakeId, "mossPatch", "a locked keepsake must not be selectable");
 
 let routeDraft = {
   ...freshRun(),

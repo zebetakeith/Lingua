@@ -1,7 +1,11 @@
 import {
   ALL_CASTLE_UPGRADE_IDS,
+  ALL_CASTLE_KEEPSAKE_IDS,
+  CASTLE_KEEPSAKE_DEFS,
   CASTLE_RUN_VERSION,
+  STARTER_CASTLE_KEEPSAKE_IDS,
   STARTER_CASTLE_UPGRADE_IDS,
+  type CastleKeepsakeId,
   type CastleRunState,
   type CastleUnitKind,
   type CastleUpgradeId,
@@ -13,6 +17,8 @@ export interface CastleDeckProfile {
   version: 1;
   deckId: string;
   unlockedUpgradeIds: CastleUpgradeId[];
+  unlockedKeepsakeIds: CastleKeepsakeId[];
+  selectedKeepsakeId: CastleKeepsakeId;
   discoveredEnemyKinds: CastleUnitKind[];
   runsCompleted: number;
   guardianClears: number;
@@ -46,6 +52,8 @@ export function createCastleProfile(deckId: string): CastleDeckProfile {
     version: 1,
     deckId,
     unlockedUpgradeIds: [...STARTER_CASTLE_UPGRADE_IDS],
+    unlockedKeepsakeIds: [...STARTER_CASTLE_KEEPSAKE_IDS],
+    selectedKeepsakeId: "starBuckle",
     discoveredEnemyKinds: ["shellSlime", "nibbleImp", "sporeBud"],
     runsCompleted: 0,
     guardianClears: 0,
@@ -58,11 +66,21 @@ export function createCastleProfile(deckId: string): CastleDeckProfile {
 export function loadCastleProfile(deckId: string): CastleDeckProfile {
   const saved = loadAll()[deckId]?.profile;
   if (!saved) return createCastleProfile(deckId);
+  const base = createCastleProfile(deckId);
+  const guardianClears = saved.guardianClears || 0;
+  const runsCompleted = saved.runsCompleted || 0;
+  const unlockedKeepsakeIds = Array.from(new Set([
+    ...STARTER_CASTLE_KEEPSAKE_IDS,
+    ...(saved.unlockedKeepsakeIds || []),
+    ...unlockedKeepsakesForProgress(guardianClears, runsCompleted),
+  ]));
   return {
-    ...createCastleProfile(deckId),
+    ...base,
     ...saved,
     deckId,
     unlockedUpgradeIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...(saved.unlockedUpgradeIds || [])])),
+    unlockedKeepsakeIds,
+    selectedKeepsakeId: unlockedKeepsakeIds.includes(saved.selectedKeepsakeId) ? saved.selectedKeepsakeId : "starBuckle",
     discoveredEnemyKinds: Array.from(new Set(saved.discoveredEnemyKinds || [])),
   };
 }
@@ -74,6 +92,7 @@ export function loadCastleRun(deckId: string): CastleRunState | null {
       ? {
           ...run,
           recallMode: run.recallMode || "balanced",
+          keepsakeId: run.keepsakeId || null,
           pendingEventId: run.pendingEventId || null,
           eventHistory: run.eventHistory || [],
           battle: {
@@ -96,6 +115,14 @@ function unlockedForGuardianCount(guardianClears: number): CastleUpgradeId[] {
   return locked.slice(0, Math.max(0, guardianClears));
 }
 
+function unlockedKeepsakesForProgress(guardianClears: number, runsCompleted: number): CastleKeepsakeId[] {
+  return ALL_CASTLE_KEEPSAKE_IDS.filter(id => {
+    const keepsake = CASTLE_KEEPSAKE_DEFS[id];
+    return guardianClears >= (keepsake.guardianRequirement || 0)
+      && runsCompleted >= (keepsake.runRequirement || 0);
+  });
+}
+
 export function saveCastleRun(deckId: string, run: CastleRunState): CastleDeckProfile {
   const all = loadAll();
   const previousProfile = loadCastleProfile(deckId);
@@ -103,12 +130,22 @@ export function saveCastleRun(deckId: string, run: CastleRunState): CastleDeckPr
   const previousGuardianMilestones = previousRun ? Math.floor(previousRun.battlesWon / 3) : 0;
   const currentGuardianMilestones = Math.floor(run.battlesWon / 3);
   const guardianClears = previousProfile.guardianClears + Math.max(0, currentGuardianMilestones - previousGuardianMilestones);
+  const completedRun = run.phase === "complete" && all[deckId]?.run?.phase !== "complete";
+  const runsCompleted = previousProfile.runsCompleted + (completedRun ? 1 : 0);
+  const unlockedKeepsakeIds = Array.from(new Set([
+    ...previousProfile.unlockedKeepsakeIds,
+    ...unlockedKeepsakesForProgress(guardianClears, runsCompleted),
+  ]));
   const profile: CastleDeckProfile = {
     ...previousProfile,
     guardianClears,
     bestRegion: Math.max(previousProfile.bestRegion, run.bestRegion),
     totalReviews: Math.max(previousProfile.totalReviews, run.reviews),
-    runsCompleted: previousProfile.runsCompleted + (run.phase === "complete" && all[deckId]?.run?.phase !== "complete" ? 1 : 0),
+    runsCompleted,
+    unlockedKeepsakeIds,
+    selectedKeepsakeId: unlockedKeepsakeIds.includes(previousProfile.selectedKeepsakeId)
+      ? previousProfile.selectedKeepsakeId
+      : "starBuckle",
     unlockedUpgradeIds: Array.from(new Set([
       ...previousProfile.unlockedUpgradeIds,
       ...unlockedForGuardianCount(guardianClears),
@@ -133,6 +170,15 @@ export function completeCastleTutorial(deckId: string): CastleDeckProfile {
   const profile = { ...loadCastleProfile(deckId), tutorialComplete: true };
   saveAll({ ...all, [deckId]: { profile, run: all[deckId]?.run || null } });
   return profile;
+}
+
+export function selectCastleKeepsake(deckId: string, keepsakeId: CastleKeepsakeId): CastleDeckProfile {
+  const all = loadAll();
+  const profile = loadCastleProfile(deckId);
+  if (!profile.unlockedKeepsakeIds.includes(keepsakeId)) return profile;
+  const next = { ...profile, selectedKeepsakeId: keepsakeId };
+  saveAll({ ...all, [deckId]: { profile: next, run: all[deckId]?.run || null } });
+  return next;
 }
 
 export function exportCastleBalanceData(deckId: string): string {

@@ -11,6 +11,7 @@ export type CastleContractId = "quick" | "regular" | "long";
 export type CastleRunPhase = "battle" | "reward" | "route" | "event" | "retire" | "complete" | "lost";
 export type CastleBattleMode = "study" | "command";
 export type CastleRouteChoice = "battle" | "rest" | "workshop" | "event";
+export type CastleKeepsakeId = "starBuckle" | "shellButton" | "boltBead" | "nurseryBell" | "mossPatch" | "moonTreaty";
 export type CastleEventId = "starwell" | "hatchling" | "wobbleMarket" | "rootOracle";
 export type CastleEventChoiceId =
   | "starwellSip" | "starwellBottle" | "starwellDive"
@@ -60,6 +61,16 @@ export interface CastleUpgradeDef {
   category: CastleUpgradeCategory;
   rarity: "common" | "uncommon" | "rare";
   accent: string;
+}
+
+export interface CastleKeepsakeDef {
+  id: CastleKeepsakeId;
+  name: string;
+  description: string;
+  unlockHint: string;
+  accent: string;
+  guardianRequirement?: number;
+  runRequirement?: number;
 }
 
 export interface CastleUnitState {
@@ -151,6 +162,7 @@ export interface CastleRunState {
   phase: CastleRunPhase;
   rewardCurve: StudyRewardCurve;
   recallMode: StudyRecallMode;
+  keepsakeId: CastleKeepsakeId | null;
   upgrades: CastleUpgradeId[];
   draftPoolIds: CastleUpgradeId[];
   rewardChoices: CastleUpgradeId[];
@@ -225,6 +237,59 @@ export const CASTLE_CONTRACTS: Record<CastleContractId, CastleContractDef> = {
   regular: { id: "regular", name: "Regular", regions: 2, minutes: 25, newCards: 15, description: "Two regions with a deeper build." },
   long: { id: "long", name: "Long", regions: 3, minutes: 50, newCards: 35, description: "Three regions and the fullest run arc." },
 };
+
+export const CASTLE_KEEPSAKE_DEFS: Record<CastleKeepsakeId, CastleKeepsakeDef> = {
+  starBuckle: {
+    id: "starBuckle",
+    name: "Star Buckle",
+    description: "Begin every battle with +1 energy.",
+    unlockHint: "A gift for every new keeper.",
+    accent: "#f0c95e",
+  },
+  shellButton: {
+    id: "shellButton",
+    name: "Shell Button",
+    description: "Begin every battle with 10 keep barrier.",
+    unlockHint: "Clear 1 guardian castle.",
+    accent: "#8dcbe0",
+    guardianRequirement: 1,
+  },
+  boltBead: {
+    id: "boltBead",
+    name: "Bolt Bead",
+    description: "Begin every battle with 1 Recall Bolt charge.",
+    unlockHint: "Clear 2 guardian castles.",
+    accent: "#e6aede",
+    guardianRequirement: 2,
+  },
+  nurseryBell: {
+    id: "nurseryBell",
+    name: "Nursery Bell",
+    description: "A free Piplet scouts at the start of every battle.",
+    unlockHint: "Clear 4 guardian castles.",
+    accent: "#a9d968",
+    guardianRequirement: 4,
+  },
+  mossPatch: {
+    id: "mossPatch",
+    name: "Moss Patch",
+    description: "Repair 8 keep HP when each new battle begins.",
+    unlockHint: "Complete 1 expedition.",
+    accent: "#76b987",
+    runRequirement: 1,
+  },
+  moonTreaty: {
+    id: "moonTreaty",
+    name: "Moon Treaty",
+    description: "Begin with +2 energy, but Mallow starts with 1 Rally pip.",
+    unlockHint: "Complete 3 expeditions.",
+    accent: "#9d83dc",
+    runRequirement: 3,
+  },
+};
+
+export const ALL_CASTLE_KEEPSAKE_IDS = Object.keys(CASTLE_KEEPSAKE_DEFS) as CastleKeepsakeId[];
+export const STARTER_CASTLE_KEEPSAKE_IDS: CastleKeepsakeId[] = ["starBuckle"];
 
 export const CASTLE_EVENT_DEFS: Record<CastleEventId, CastleEventDef> = {
   starwell: {
@@ -527,10 +592,11 @@ export function createInitialCastleRun(
   draftPoolIds: CastleUpgradeId[] = STARTER_CASTLE_UPGRADE_IDS,
   seedOverride?: number,
   recallMode: StudyRecallMode = "balanced",
+  keepsakeId: CastleKeepsakeId | null = null,
 ): CastleRunState {
   const contract = CASTLE_CONTRACTS[contractId];
   const seed = seedOverride ?? seedFromString(`${deckId}:${contractId}:${Date.now()}`);
-  const battle = createBattle(1, 1, 100, 0, []);
+  const battle = applyCastleKeepsake(createBattle(1, 1, 100, 0, []), keepsakeId, []);
   return {
     version: CASTLE_RUN_VERSION,
     deckId,
@@ -543,6 +609,7 @@ export function createInitialCastleRun(
     phase: "battle",
     rewardCurve,
     recallMode,
+    keepsakeId,
     upgrades: [],
     draftPoolIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...draftPoolIds])),
     rewardChoices: [],
@@ -552,7 +619,7 @@ export function createInitialCastleRun(
     battle,
     rngState: seed,
     carriedCastleHp: battle.playerCastleHp,
-    carriedEnergy: 0,
+    carriedEnergy: battle.energy,
     reviews: 0,
     correct: 0,
     wrong: 0,
@@ -625,6 +692,26 @@ function addUnit(
     playerSpawnCount: side === "player" ? battle.playerSpawnCount + 1 : battle.playerSpawnCount,
     enemySpawnCount: side === "enemy" ? battle.enemySpawnCount + 1 : battle.enemySpawnCount,
   };
+}
+
+function applyCastleKeepsake(
+  battle: CastleBattleState,
+  keepsakeId: CastleKeepsakeId | null,
+  upgrades: CastleUpgradeId[],
+): CastleBattleState {
+  if (!keepsakeId) return battle;
+  let next = battle;
+  if (keepsakeId === "starBuckle") next = { ...next, energy: Math.min(CASTLE_MAX_ENERGY, next.energy + 1) };
+  if (keepsakeId === "shellButton") next = { ...next, playerBarrier: next.playerBarrier + 10 };
+  if (keepsakeId === "boltBead") next = { ...next, recallBoltCharge: Math.min(CASTLE_RECALL_BOLT_LIMIT - 1, next.recallBoltCharge + 1) };
+  if (keepsakeId === "nurseryBell") next = addUnit(next, "player", "piplet", upgrades);
+  if (keepsakeId === "mossPatch") next = { ...next, playerCastleHp: Math.min(next.playerCastleMaxHp, next.playerCastleHp + 8) };
+  if (keepsakeId === "moonTreaty") next = {
+    ...next,
+    energy: Math.min(CASTLE_MAX_ENERGY, next.energy + 2),
+    rally: Math.min(CASTLE_RALLY_LIMIT - 1, next.rally + 1),
+  };
+  return next;
 }
 
 function addBattleFx(
@@ -1238,7 +1325,11 @@ function startNextBattle(run: CastleRunState, carriedCastleHp: number, carriedEn
       notice: "Study contract cleared. Retire successfully or continue into endless regions.",
     };
   }
-  const battle = createBattle(region, battleInRegion, carriedCastleHp, carriedEnergy, run.upgrades);
+  const battle = applyCastleKeepsake(
+    createBattle(region, battleInRegion, carriedCastleHp, carriedEnergy, run.upgrades),
+    run.keepsakeId,
+    run.upgrades,
+  );
   return {
     ...run,
     savedAt: Date.now(),

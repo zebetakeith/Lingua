@@ -279,8 +279,13 @@
 .castle-wave .castle-unit-face i:nth-child(2) { right: 4px; }
 .castle-wave .castle-unit-face b { display: none; }
 .castle-scene.is-paused .castle-lane-unit { animation: none; }
-.castle-scene.is-paused .goo-pipplo-sprite img,
+.castle-scene.is-paused .goo-keeper-sprite img,
 .castle-scene.is-paused .castle-unit-face.is-production-art > img { animation-play-state: paused; }
+.castle-guide-keepsake { display: flex; align-items: center; gap: 9px; margin: 8px 0 14px; padding: 10px; background: color-mix(in srgb, var(--keepsake-accent) 13%, white); border: 2px solid color-mix(in srgb, var(--keepsake-accent) 42%, transparent); border-radius: 14px; }
+.castle-guide-keepsake > svg { width: 24px; color: var(--keepsake-accent); }
+.castle-guide-keepsake > div { display: grid; gap: 2px; }
+.castle-guide-keepsake b { font-size: 11px; }
+.castle-guide-keepsake span { font-size: 9px; line-height: 1.35; }
 
 .castle-notice { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 12px; background: rgba(255, 249, 215, 0.95); border-bottom: 1px solid rgba(20, 91, 94, 0.12); }
 .castle-notice b { flex: 0 0 auto; padding: 3px 7px; color: white; background: #3f9897; border-radius: 8px; font-size: 9px; text-transform: uppercase; }
@@ -440,9 +445,14 @@
 .castle-result-sheet { text-align: center; }
 .castle-result-sheet > div:not(.castle-result-stats) { display: flex; justify-content: center; gap: 8px; }
 .castle-result-sheet button { min-height: 44px; padding: 9px 14px; color: white; background: #318b8b; border: 0; border-radius: 13px; font-weight: 900; }
-.castle-result-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 14px 0; }
+.castle-result-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 14px 0; }
 .castle-result-stats span { display: grid; padding: 10px; background: white; border-radius: 13px; font-size: 9px; }
 .castle-result-stats b { font-size: 18px; }
+.castle-result-story { max-width: 540px; margin-inline: auto; color: #4f696b; font-size: 10px; line-height: 1.45; }
+.castle-result-keepsake { display: grid; grid-template-columns: 25px auto; column-gap: 7px; align-items: center; width: min(360px, 100%); box-sizing: border-box; margin: 4px auto 10px; padding: 9px 12px; color: #4f4662; background: #f2e8fb; border: 1px solid #d9c5ea; border-radius: 13px; text-align: left; }
+.castle-result-keepsake svg { grid-row: 1 / 3; width: 23px; color: #a47bd0; }
+.castle-result-keepsake b { font-size: 11px; }
+.castle-result-keepsake span { font-size: 8px; }
 
 .castle-tutorial-overlay { z-index: 130; place-items: center; }
 .castle-tutorial-sheet { width: min(520px, 100%); padding: 24px; text-align: center; background: linear-gradient(180deg, #fffdf0, #eef7d9); border: 3px solid rgba(37, 104, 105, 0.22); border-radius: 28px; box-shadow: 0 24px 70px rgba(13, 65, 68, 0.3); }
@@ -525,6 +535,17 @@
 .castle-contract-grid strong { font-size: 13px; }
 .castle-contract-grid span { font-size: 9px; }
 .castle-contract-grid small { font-size: 8px; opacity: 0.7; }
+.castle-setup-label small { margin-left: 5px; color: rgba(22, 77, 81, 0.62); font-size: 8px; font-weight: 700; }
+.castle-keepsake-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.castle-keepsake-grid button { position: relative; display: grid; grid-template-columns: 24px 1fr; gap: 2px 7px; min-height: 76px; padding: 9px; color: #174f54; background: color-mix(in srgb, var(--keepsake-accent) 11%, white); border: 2px solid color-mix(in srgb, var(--keepsake-accent) 42%, transparent); border-radius: 14px; text-align: left; }
+.castle-keepsake-grid button > svg { grid-row: 1 / 4; width: 21px; color: var(--keepsake-accent); }
+.castle-keepsake-grid button strong { font-size: 11px; }
+.castle-keepsake-grid button span { font-size: 8px; line-height: 1.25; }
+.castle-keepsake-grid button small { font-size: 7px; font-weight: 800; opacity: 0.68; }
+.castle-keepsake-grid button.is-selected { color: white; background: color-mix(in srgb, var(--keepsake-accent) 72%, #285f68); border-color: var(--keepsake-accent); box-shadow: 0 3px 0 color-mix(in srgb, var(--keepsake-accent) 50%, #31515b); }
+.castle-keepsake-grid button.is-selected > svg { color: white; }
+.castle-keepsake-grid button:disabled { color: #6e7775; background: #eef0ea; border-color: rgba(77, 93, 91, 0.12); opacity: 0.75; }
+.castle-keepsake-grid button:disabled > svg { color: #969e99; }
 .castle-setup-bottom { display: grid; grid-template-columns: auto auto 1fr; align-items: end; gap: 10px; margin: 13px 0; }
 .castle-setup-bottom label { display: grid; gap: 4px; font-size: 9px; font-weight: 900; }
 .castle-setup-bottom > div { display: grid; grid-template-columns: 25px auto; column-gap: 5px; align-items: center; }
@@ -547,6 +568,7 @@
   .castle-event-choice-grid button { min-height: 112px; }
   .castle-contract-grid { grid-template-columns: 1fr; }
   .castle-contract-grid button { min-height: 62px; }
+  .castle-keepsake-grid { grid-template-columns: 1fr 1fr; }
   .castle-setup-bottom { grid-template-columns: 1fr 1fr; }
   .castle-setup-bottom > div { grid-column: 1 / -1; }
   .castle-setup-pipplo { right: 19px; top: 21px; transform: scale(0.75) rotate(4deg); transform-origin: top right; }
@@ -567,13 +589,15 @@
   .castle-answer-grid { grid-template-columns: 1fr; }
   .castle-study-card h2 { font-size: 25px; }
   .castle-route-grid { grid-template-columns: 1fr; }
+  .castle-keepsake-grid { grid-template-columns: 1fr; }
+  .castle-result-stats { grid-template-columns: 1fr 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .castle-scene *,
   .castle-lane-unit,
-  .goo-pipplo-sprite img { animation: none !important; transition-duration: 0.01ms !important; }
-  .goo-pipplo-sprite img:not(:first-child) { display: none; }
+  .goo-keeper-sprite img { animation: none !important; transition-duration: 0.01ms !important; }
+  .goo-keeper-sprite img:not(:first-child) { display: none; }
   .castle-unit-face.is-unit-action > img { opacity: 0; }
   .castle-unit-face.is-unit-action > img:first-child { opacity: 1; }
   .castle-battle-fx.fx-projectile::before,

@@ -53,7 +53,7 @@ function spendEnergy(run) {
 }
 
 function simulate(curve, mastery) {
-  let run = createInitialCastleRun(`balance-${curve}-${mastery}`, "quick", curve);
+  let run = createInitialCastleRun(`balance-${curve}-${mastery}`, "quick", curve, undefined, undefined, "balanced", "starBuckle");
   const reward = rewardFor(curve, mastery);
   let reviews = 0;
   let elapsedMs = 0;
@@ -96,7 +96,7 @@ function simulate(curve, mastery) {
 
 function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0) {
   const seed = Math.round((mastery * 10_000) + ({ quick: 100, regular: 200, long: 300 }[contractId] || 0) + (seedOffset * 997));
-  let run = createInitialCastleRun(`full-${contractId}-${mastery}`, contractId, "quadratic", undefined, seed);
+  let run = createInitialCastleRun(`full-${contractId}-${mastery}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle");
   const reward = rewardFor("quadratic", mastery);
   let reviews = 0;
   let elapsedMs = 0;

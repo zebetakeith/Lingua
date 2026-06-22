@@ -38,6 +38,7 @@ import type { StudyRecallMode, StudyRewardCurve } from "../game/study";
 import {
   CASTLE_CONTRACTS,
   CASTLE_EVENT_DEFS,
+  CASTLE_KEEPSAKE_DEFS,
   CASTLE_POWER_DEFS,
   CASTLE_RECALL_BOLT_LIMIT,
   CASTLE_RALLY_LIMIT,
@@ -64,6 +65,7 @@ import {
   tickCastleRun,
   type CastleContractId,
   type CastleEventId,
+  type CastleKeepsakeId,
   type CastlePowerId,
   type CastleRouteChoice,
   type CastleRunState,
@@ -76,6 +78,7 @@ import {
   loadCastleProfile,
   loadCastleRun,
   saveCastleRun,
+  selectCastleKeepsake,
   type CastleDeckProfile,
 } from "./castleStorage";
 import { playCastleSound } from "./castleAudio";
@@ -614,6 +617,7 @@ function DeckSetup({
   onContract,
   onCurve,
   onRecallMode,
+  onKeepsake,
   onStart,
   onExit,
 }: {
@@ -627,6 +631,7 @@ function DeckSetup({
   onContract: (id: CastleContractId) => void;
   onCurve: (curve: StudyRewardCurve) => void;
   onRecallMode: (mode: StudyRecallMode) => void;
+  onKeepsake: (id: CastleKeepsakeId) => void;
   onStart: () => void;
   onExit: () => void;
 }) {
@@ -670,6 +675,29 @@ function DeckSetup({
           })}
         </div>
 
+        <label className="castle-setup-label">Keeper keepsake <small>Choose one persistent starting rule</small></label>
+        <div className="castle-keepsake-grid">
+          {Object.values(CASTLE_KEEPSAKE_DEFS).map(keepsake => {
+            const unlocked = profile.unlockedKeepsakeIds.includes(keepsake.id);
+            const selected = profile.selectedKeepsakeId === keepsake.id;
+            return (
+              <button
+                key={keepsake.id}
+                className={selected ? "is-selected" : ""}
+                disabled={!unlocked}
+                onClick={() => onKeepsake(keepsake.id)}
+                style={{ "--keepsake-accent": keepsake.accent } as CSSProperties}
+                aria-pressed={selected}
+              >
+                <Sparkles />
+                <strong>{keepsake.name}</strong>
+                <span>{keepsake.description}</span>
+                <small>{unlocked ? selected ? "Equipped for the next run" : "Unlocked" : keepsake.unlockHint}</small>
+              </button>
+            );
+          })}
+        </div>
+
         <div className="castle-setup-bottom">
           <label>
             Balance curve
@@ -683,7 +711,7 @@ function DeckSetup({
               {(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}
             </select>
           </label>
-          <div><Sparkles /><b>{profile.unlockedUpgradeIds.length}</b><span>discoveries unlocked</span></div>
+          <div><Sparkles /><b>{profile.unlockedKeepsakeIds.length}/{Object.keys(CASTLE_KEEPSAKE_DEFS).length}</b><span>keepsakes / {profile.unlockedUpgradeIds.length} discoveries</span></div>
         </div>
         <button className="castle-start-run" onClick={onStart}><Castle />Begin castle run<ChevronRight /></button>
       </section>
@@ -929,7 +957,15 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
   const startRun = () => {
     selectStudyDeck(selectedDeckId);
-    const next = introduceForBattle(createInitialCastleRun(selectedDeckId, contractId, rewardCurve, profile.unlockedUpgradeIds, undefined, recallMode));
+    const next = introduceForBattle(createInitialCastleRun(
+      selectedDeckId,
+      contractId,
+      rewardCurve,
+      profile.unlockedUpgradeIds,
+      undefined,
+      recallMode,
+      profile.selectedKeepsakeId,
+    ));
     const nextQuestion = drawStudyQuestion(selectedDeckId, next.rewardCurve, undefined, next.recallMode);
     clearCastleRun(selectedDeckId);
     setQuestion(nextQuestion);
@@ -1124,6 +1160,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         onContract={setContractId}
         onCurve={setRewardCurve}
         onRecallMode={setRecallMode}
+        onKeepsake={id => setProfile(selectCastleKeepsake(selectedDeckId, id))}
         onStart={startRun}
         onExit={onExit}
       />
@@ -1326,6 +1363,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop />
             <p className="castle-eyebrow">Contract complete</p>
             <h2>Pipplo can head home—or wobble deeper</h2>
+            <p className="castle-result-story">Mallow lowers her wand and rolls the moon gate open. The promised study road is clear, but she is already grinning about a rematch.</p>
             <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · {run.battlesWon} castles defeated</p>
             <div>
               <button onClick={() => setRun(current => current ? retireCastleRun(current) : current)}>Retire successfully</button>
@@ -1350,12 +1388,19 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             {run.phase === "complete" ? <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop /> : <Heart />}
             <p className="castle-eyebrow">{run.phase === "complete" ? "Expedition complete" : "Pipplo needs a nap"}</p>
             <h2>{run.phase === "complete" ? "The deck-world grew" : "The castle fell; the learning stayed"}</h2>
+            <p className="castle-result-story">{run.phase === "complete"
+              ? run.contractId === "long"
+                ? "Mallow pins a crescent ribbon beside Pipplo's star. The whole three-region road now remembers this expedition."
+                : "Mallow taps her crescent badge in salute. New discoveries are waiting on the next road."
+              : "Mallow leaves the moon gate glowing for a rematch. Every review from this attempt is already safe."}</p>
             <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · best region {run.bestRegion}</p>
             <div className="castle-result-stats">
               <span><b>{run.introducedThisRun}</b>introduced</span>
               <span><b>{run.upgrades.length}</b>run traits</span>
               <span><b>{profile.unlockedUpgradeIds.length}</b>discoveries</span>
+              <span><b>{profile.unlockedKeepsakeIds.length}</b>keepsakes</span>
             </div>
+            {run.keepsakeId && <p className="castle-result-keepsake"><Sparkles /><b>{CASTLE_KEEPSAKE_DEFS[run.keepsakeId].name}</b><span>keepsake carried through this expedition</span></p>}
             <button onClick={resetRun}><RefreshCcw />Start another run</button>
           </section>
         </aside>
@@ -1378,6 +1423,16 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy so you can choose what to buy.</small></span>
               <span><Castle /><b>Guardian phases</b><small>At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
             </div>
+
+            {run.keepsakeId && (() => {
+              const keepsake = CASTLE_KEEPSAKE_DEFS[run.keepsakeId];
+              return (
+                <div className="castle-guide-keepsake" style={{ "--keepsake-accent": keepsake.accent } as CSSProperties}>
+                  <Sparkles />
+                  <div><b>Equipped: {keepsake.name}</b><span>{keepsake.description}</span></div>
+                </div>
+              );
+            })()}
 
             <h3>Your summons</h3>
             <div className="castle-guide-list">
@@ -1433,7 +1488,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
             <p>Each region has its own enemy mix and colors. Guardian keeps change at 66% and 33% HP; the center banner names the phase before the new squad arrives.</p>
-            <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries remain.</p>
+            <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries and unlocked keepsakes remain.</p>
             <button className="castle-tutorial-replay" onClick={() => { setHelpOpen(false); setTutorialStep(0); setTutorialOpen(true); }}><Play />Replay tutorial</button>
           </section>
         </aside>
