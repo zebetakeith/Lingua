@@ -1,12 +1,19 @@
 import {
   ALL_CASTLE_UPGRADE_IDS,
   ALL_CASTLE_KEEPSAKE_IDS,
+  CASTLE_CONTRACTS,
+  CASTLE_EVENT_DEFS,
   CASTLE_KEEPSAKE_DEFS,
   CASTLE_RUN_VERSION,
+  CASTLE_UNIT_DEFS,
   STARTER_CASTLE_KEEPSAKE_IDS,
   STARTER_CASTLE_UPGRADE_IDS,
+  createInitialCastleRun,
   normalizeCastleRunStudySummary,
+  type CastleContractId,
+  type CastleEventId,
   type CastleKeepsakeId,
+  type CastleRouteChoice,
   type CastleRunState,
   type CastleUnitKind,
   type CastleUpgradeId,
@@ -34,6 +41,74 @@ interface CastleDeckRecord {
 }
 
 type CastleSaveFile = Record<string, CastleDeckRecord>;
+const CASTLE_PHASES: CastleRunState["phase"][] = ["battle", "reward", "route", "event", "retire", "complete", "lost"];
+const CASTLE_ROUTES: CastleRouteChoice[] = ["battle", "rest", "workshop", "event"];
+
+function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunState | null {
+  if (saved.version !== CASTLE_RUN_VERSION || !saved.battle) return null;
+  const contractId: CastleContractId = saved.contractId in CASTLE_CONTRACTS ? saved.contractId : "regular";
+  const rewardCurve = ["current", "quadratic", "steep"].includes(saved.rewardCurve) ? saved.rewardCurve : "quadratic";
+  const recallMode = ["balanced", "deck", "typed"].includes(saved.recallMode) ? saved.recallMode : "balanced";
+  const keepsakeId = saved.keepsakeId && ALL_CASTLE_KEEPSAKE_IDS.includes(saved.keepsakeId) ? saved.keepsakeId : null;
+  const upgrades = Array.isArray(saved.upgrades) ? saved.upgrades.filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id)) : [];
+  const draftPoolIds = Array.isArray(saved.draftPoolIds)
+    ? saved.draftPoolIds.filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id))
+    : STARTER_CASTLE_UPGRADE_IDS;
+  const base = createInitialCastleRun(
+    deckId,
+    contractId,
+    rewardCurve,
+    draftPoolIds,
+    Number.isFinite(saved.rngState) ? saved.rngState : undefined,
+    recallMode,
+    keepsakeId,
+  );
+  const battle = saved.battle;
+  const telemetry = battle.telemetry || base.battle.telemetry;
+  const eventIds = Object.keys(CASTLE_EVENT_DEFS) as CastleEventId[];
+  const nextEnemyKind = battle.nextEnemyKind in CASTLE_UNIT_DEFS ? battle.nextEnemyKind : base.battle.nextEnemyKind;
+  const afterNextEnemyKind = battle.afterNextEnemyKind in CASTLE_UNIT_DEFS ? battle.afterNextEnemyKind : nextEnemyKind;
+  return {
+    ...base,
+    ...saved,
+    version: CASTLE_RUN_VERSION,
+    deckId,
+    contractId,
+    rewardCurve,
+    recallMode,
+    keepsakeId,
+    phase: CASTLE_PHASES.includes(saved.phase) ? saved.phase : "battle",
+    upgrades,
+    draftPoolIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...draftPoolIds])),
+    rewardChoices: Array.isArray(saved.rewardChoices) ? saved.rewardChoices.filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id)) : [],
+    routeChoices: Array.isArray(saved.routeChoices) ? saved.routeChoices.filter(route => CASTLE_ROUTES.includes(route)) : [],
+    pendingEventId: saved.pendingEventId && eventIds.includes(saved.pendingEventId) ? saved.pendingEventId : null,
+    eventHistory: Array.isArray(saved.eventHistory) ? saved.eventHistory.filter(id => eventIds.includes(id)) : [],
+    studySummary: normalizeCastleRunStudySummary(saved.studySummary),
+    battle: {
+      ...base.battle,
+      ...battle,
+      guardianPhase: battle.guardianPhase || (battle.guardian ? 1 : 0),
+      nextEnemyKind,
+      afterNextEnemyKind,
+      recallBoltCharge: battle.recallBoltCharge || 0,
+      missedDirectionKeys: Array.isArray(battle.missedDirectionKeys) ? battle.missedDirectionKeys : [],
+      recalledDirectionKeys: Array.isArray(battle.recalledDirectionKeys) ? battle.recalledDirectionKeys : [],
+      units: Array.isArray(battle.units)
+        ? battle.units.filter(unit => unit && unit.kind in CASTLE_UNIT_DEFS && (unit.side === "player" || unit.side === "enemy"))
+        : [],
+      fxEvents: Array.isArray(battle.fxEvents) ? battle.fxEvents : [],
+      nextFxId: battle.nextFxId || 1,
+      telemetry: {
+        ...base.battle.telemetry,
+        ...telemetry,
+        responseMs: Array.isArray(telemetry.responseMs)
+          ? telemetry.responseMs.filter(value => Number.isFinite(value) && value >= 0).slice(-200)
+          : [],
+      },
+    },
+  };
+}
 
 function loadAll(): CastleSaveFile {
   try {
@@ -89,24 +164,7 @@ export function loadCastleProfile(deckId: string): CastleDeckProfile {
 export function loadCastleRun(deckId: string): CastleRunState | null {
   try {
     const run = loadAll()[deckId]?.run;
-    return run?.version === CASTLE_RUN_VERSION
-      ? {
-          ...run,
-          recallMode: run.recallMode || "balanced",
-          keepsakeId: run.keepsakeId || null,
-          pendingEventId: run.pendingEventId || null,
-          eventHistory: run.eventHistory || [],
-          studySummary: normalizeCastleRunStudySummary(run.studySummary),
-          battle: {
-            ...run.battle,
-            guardianPhase: run.battle.guardianPhase || (run.battle.guardian ? 1 : 0),
-            afterNextEnemyKind: run.battle.afterNextEnemyKind || run.battle.nextEnemyKind,
-            recallBoltCharge: run.battle.recallBoltCharge || 0,
-            fxEvents: run.battle.fxEvents || [],
-            nextFxId: run.battle.nextFxId || 1,
-          },
-        }
-      : null;
+    return run ? normalizeCastleRun(deckId, run) : null;
   } catch {
     return null;
   }

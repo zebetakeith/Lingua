@@ -189,11 +189,28 @@ reviewProgress = saveCastleRun("mechanics", { ...freshRun(), reviews: 3 });
 assert.equal(reviewProgress.totalReviews, startingTotalReviews + 7, "review totals should accumulate across separate runs");
 const legacyStudySave = JSON.parse(localStorage.getItem("lexicon_labyrinth_castle_runs_v1"));
 delete legacyStudySave.mechanics.run.studySummary;
+delete legacyStudySave.mechanics.run.upgrades;
+delete legacyStudySave.mechanics.run.draftPoolIds;
+delete legacyStudySave.mechanics.run.eventHistory;
+delete legacyStudySave.mechanics.run.battle.missedDirectionKeys;
+delete legacyStudySave.mechanics.run.battle.recalledDirectionKeys;
+delete legacyStudySave.mechanics.run.battle.fxEvents;
+delete legacyStudySave.mechanics.run.battle.telemetry.responseMs;
+legacyStudySave.mechanics.run.battle.units.push({ kind: "retired-prototype-enemy", side: "enemy" });
 localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify(legacyStudySave));
+const restoredLegacyRun = loadCastleRun("mechanics");
 assert.deepEqual(
-  loadCastleRun("mechanics").studySummary,
+  restoredLegacyRun.studySummary,
   { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [] },
   "old in-progress runs should migrate with an empty learning report",
+);
+assert.deepEqual(restoredLegacyRun.battle.missedDirectionKeys, [], "old runs should recover a safe missed-direction list");
+assert.deepEqual(restoredLegacyRun.battle.recalledDirectionKeys, [], "old runs should recover a safe recalled-direction list");
+assert.deepEqual(restoredLegacyRun.battle.telemetry.responseMs, [], "old runs should recover a safe response-time list");
+assert.equal(restoredLegacyRun.battle.units.some(unit => unit.kind === "retired-prototype-enemy"), false, "unknown prototype units should be discarded during recovery");
+assert.doesNotThrow(
+  () => applyCastleStudyOutcome(restoredLegacyRun, outcome(99)),
+  "a repaired prototype run should accept the next study outcome without crashing",
 );
 clearCastleRun("mechanics");
 
