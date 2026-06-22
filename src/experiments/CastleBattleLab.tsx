@@ -182,12 +182,17 @@ const ENEMY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/attack/0${index + 1}.png`,
   ),
+  rootLump: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/rootLump/attack/0${index + 1}.png`,
+  ),
 };
 const ENEMY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   shellSlime: 60,
   nibbleImp: 45,
   sporeBud: 65,
   echoMoth: 55,
+  rootLump: 90,
 };
 
 function PipploSprite({
