@@ -130,6 +130,10 @@ const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   bigChonk: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/seed-v1.png`,
 };
 const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
+  piplet: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/piplet/attack/0${index + 1}.png`,
+  ),
   dartlet: Array.from(
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/attack/0${index + 1}.png`,
@@ -148,6 +152,7 @@ const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   ),
 };
 const FRIENDLY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
+  piplet: 50,
   dartlet: 45,
   bubbleBud: 55,
   spitlet: 55,

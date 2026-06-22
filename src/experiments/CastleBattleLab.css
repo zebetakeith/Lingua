@@ -194,6 +194,7 @@
 .castle-unit-face.is-production-art.kind-bubbleBud { width: 39px; height: 39px; }
 .castle-unit-face.is-production-art.kind-spitlet { width: 39px; height: 34px; }
 .castle-unit-face.is-production-art.kind-bigChonk { width: 49px; height: 46px; }
+.castle-unit-face.is-production-art.is-unit-action.kind-piplet { width: 48px; height: 42px; margin: -6px 0 -6px -3px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-dartlet { width: 68px; height: 56px; margin: -13px 0 -9px -7px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-bubbleBud { width: 62px; height: 52px; margin: -7px 0 -6px -8px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-spitlet { width: 68px; height: 46px; margin: -6px 0 -6px -6px; animation: none; }
