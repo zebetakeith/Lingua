@@ -129,6 +129,13 @@ const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   spitlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/seed-v1.png`,
   bigChonk: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/seed-v1.png`,
 };
+const ENEMY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
+  shellSlime: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/shellSlime/seed-v1.png`,
+  nibbleImp: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/nibbleImp/seed-v1.png`,
+  sporeBud: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/sporeBud/seed-v1.png`,
+  echoMoth: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/seed-v1.png`,
+  rootLump: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/rootLump/seed-v1.png`,
+};
 const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   piplet: Array.from(
     { length: 4 },
@@ -200,7 +207,7 @@ function SlimeFace({
   side: "player" | "enemy";
   attacking?: boolean;
 }) {
-  const art = side === "player" ? FRIENDLY_UNIT_ART[kind] : undefined;
+  const art = side === "player" ? FRIENDLY_UNIT_ART[kind] : ENEMY_UNIT_ART[kind];
   const attackFrames = attacking && side === "player" ? FRIENDLY_UNIT_ATTACK_FRAMES[kind] : undefined;
   const attackFrameMs = FRIENDLY_UNIT_ATTACK_FRAME_MS[kind] || 45;
   if (art) {
@@ -719,6 +726,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const preloadedImages = [
       ...Object.values(PIPPLO_ANIMATION_FRAMES).flat(),
       ...Object.values(FRIENDLY_UNIT_ART),
+      ...Object.values(ENEMY_UNIT_ART),
       ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
     ].map(src => {
       const image = new Image();

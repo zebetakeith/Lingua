@@ -189,11 +189,17 @@
 .castle-unit-face.is-production-art > i,
 .castle-unit-face.is-production-art > b { display: none; }
 .castle-unit-face.is-production-art > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; transform-origin: bottom center; filter: drop-shadow(0 2px 0 rgba(28, 82, 78, 0.15)); }
+.castle-unit-face.is-production-art.side-enemy { transform: scaleX(-1); }
 .castle-unit-face.is-production-art.kind-piplet { width: 30px; height: 30px; }
 .castle-unit-face.is-production-art.kind-dartlet { width: 37px; height: 34px; transform: none; }
 .castle-unit-face.is-production-art.kind-bubbleBud { width: 39px; height: 39px; }
 .castle-unit-face.is-production-art.kind-spitlet { width: 39px; height: 34px; }
 .castle-unit-face.is-production-art.kind-bigChonk { width: 49px; height: 46px; }
+.castle-unit-face.is-production-art.kind-shellSlime { width: 42px; height: 38px; }
+.castle-unit-face.is-production-art.kind-nibbleImp { width: 34px; height: 30px; }
+.castle-unit-face.is-production-art.kind-sporeBud { width: 40px; height: 38px; }
+.castle-unit-face.is-production-art.kind-echoMoth { width: 43px; height: 39px; }
+.castle-unit-face.is-production-art.kind-rootLump { width: 54px; height: 50px; }
 .castle-unit-face.is-production-art.is-unit-action.kind-piplet { width: 48px; height: 42px; margin: -6px 0 -6px -3px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-dartlet { width: 68px; height: 56px; margin: -13px 0 -9px -7px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-bubbleBud { width: 62px; height: 52px; margin: -7px 0 -6px -8px; animation: none; }
@@ -206,6 +212,11 @@
 .castle-lane-unit:has(.kind-bubbleBud) { --unit-bob: 820ms; }
 .castle-lane-unit:has(.kind-spitlet) { --unit-bob: 660ms; }
 .castle-lane-unit:has(.kind-bigChonk) { --unit-bob: 980ms; }
+.castle-lane-unit:has(.kind-shellSlime) { --unit-bob: 900ms; }
+.castle-lane-unit:has(.kind-nibbleImp) { --unit-bob: 360ms; }
+.castle-lane-unit:has(.kind-sporeBud) { --unit-bob: 760ms; }
+.castle-lane-unit:has(.kind-echoMoth) { --unit-bob: 460ms; }
+.castle-lane-unit:has(.kind-rootLump) { --unit-bob: 1.1s; }
 .castle-unit-hp { display: block; width: 30px; height: 4px; margin: 2px auto 0; overflow: hidden; background: rgba(34, 78, 81, 0.2); border-radius: 9px; }
 .castle-unit-hp i { display: block; height: 100%; background: #62bd61; }
 .castle-lane-unit.side-enemy .castle-unit-hp i { background: #e96885; }
