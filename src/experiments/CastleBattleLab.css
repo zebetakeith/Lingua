@@ -208,6 +208,7 @@
 .castle-unit-face.is-production-art.is-unit-action.kind-shellSlime { width: 68px; height: 52px; margin: -7px 0 -7px -10px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-nibbleImp { width: 64px; height: 48px; margin: -7px 0 -7px -10px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action.kind-sporeBud { width: 68px; height: 56px; margin: -10px 0 -8px -10px; animation: none; }
+.castle-unit-face.is-production-art.is-unit-action.kind-echoMoth { width: 72px; height: 58px; margin: -11px 0 -8px -11px; animation: none; }
 .castle-unit-face.is-production-art.is-unit-action > img { opacity: 0; animation: castle-unit-art-action-frame var(--unit-art-duration, 45ms) steps(1, end) 1 forwards; animation-delay: var(--unit-art-delay, 0ms); }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art > img { animation: castle-unit-art-walk var(--unit-bob, 700ms) ease-in-out infinite; }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art.is-unit-action > img { animation: castle-unit-art-action-frame var(--unit-art-duration, 45ms) steps(1, end) 1 forwards; animation-delay: var(--unit-art-delay, 0ms); }
