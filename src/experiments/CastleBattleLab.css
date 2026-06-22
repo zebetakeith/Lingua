@@ -541,7 +541,7 @@
 .castle-abandon-confirm button { min-height: 38px; color: #5d5362; background: white; border: 1px solid #dfcbd0; border-radius: 10px; font-weight: 900; }
 .castle-abandon-confirm button.is-danger { color: white; background: #b54c68; border-color: #9e3e58; }
 
-.castle-setup-shell { position: relative; display: grid; place-items: center; min-height: 100dvh; padding: 58px 14px 28px; overflow: hidden; }
+.castle-setup-shell { position: relative; display: grid; place-items: center; min-height: 100dvh; box-sizing: border-box; padding: 58px 14px 28px; overflow-x: hidden; overflow-y: auto; }
 .castle-setup-shell::before { content: ""; position: fixed; inset: auto -10% -22% -10%; height: 55%; background: radial-gradient(ellipse at center, #8ccc76 0 45%, #b9df89 46% 67%, transparent 68%); }
 .castle-setup-exit { position: fixed; z-index: 3; left: 14px; top: max(14px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 7px 11px; color: #17555a; background: rgba(255,255,255,0.8); border: 1px solid rgba(28, 93, 97, 0.15); border-radius: 13px; font-weight: 900; }
 .castle-setup-exit svg { width: 17px; }
@@ -626,6 +626,10 @@
   .castle-profile-metrics { grid-template-columns: 1fr 1fr; }
 }
 
+@media (max-height: 820px) {
+  .castle-setup-shell { place-items: start center; }
+}
+
 @media (max-width: 390px) {
   .castle-lab-header { gap: 5px; }
   .castle-lab-header button { width: 34px; height: 34px; border-radius: 11px; }
@@ -642,6 +646,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .castle-lab-shell *,
+  .castle-setup-shell * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
   .castle-scene *,
   .castle-lane-unit,
   .goo-keeper-sprite img { animation: none !important; transition-duration: 0.01ms !important; }

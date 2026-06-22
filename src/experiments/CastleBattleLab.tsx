@@ -500,7 +500,7 @@ function CommandTray({
         <span><Sparkles />Spend or bank {formatCastleEnergy(run.battle.energy)} energy</span>
         <small>Combat keeps moving; command time never counts as recall time.</small>
       </div>
-      <div className="castle-command-scroll">
+      <div className="castle-command-scroll" role="group" aria-label="Summons and castle powers">
         {getPlayerSummonKinds().map(kind => {
           const unit = CASTLE_UNIT_DEFS[kind];
           return (
@@ -626,7 +626,7 @@ function StudyCard({
       ) : question.questionType === "multiple_choice" ? (
         <>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
-          <div className="castle-answer-grid">
+          <div className="castle-answer-grid" role="group" aria-label="Answer choices">
             {question.options.map((option, index) => <button key={option} onClick={() => onOption(option)}><kbd aria-hidden="true">{index + 1}</kbd><span>{option}</span></button>)}
           </div>
         </>
@@ -724,10 +724,10 @@ function DeckSetup({
             : <p><Sparkles /><span><b>All keepsakes discovered</b>Mallow has no more trinkets to hide.</span></p>}
         </section>
 
-        <label className="castle-setup-label">Study world</label>
-        <div className="castle-deck-grid">
+        <h2 className="castle-setup-label" id="castle-deck-label">Study world</h2>
+        <div className="castle-deck-grid" role="group" aria-labelledby="castle-deck-label">
           {decks.map(deck => (
-            <button key={deck.id} className={selectedDeckId === deck.id ? "is-selected" : ""} onClick={() => onDeck(deck.id)}>
+            <button key={deck.id} aria-pressed={selectedDeckId === deck.id} className={selectedDeckId === deck.id ? "is-selected" : ""} onClick={() => onDeck(deck.id)}>
               <BookOpen />
               <strong>{deck.name}</strong>
               <span>{deck.introducedCount} active · {deck.reviewCount} reviews</span>
@@ -735,12 +735,12 @@ function DeckSetup({
           ))}
         </div>
 
-        <label className="castle-setup-label">Expedition contract</label>
-        <div className="castle-contract-grid">
+        <h2 className="castle-setup-label" id="castle-contract-label">Expedition contract</h2>
+        <div className="castle-contract-grid" role="group" aria-labelledby="castle-contract-label">
           {(Object.keys(CASTLE_CONTRACTS) as CastleContractId[]).map(id => {
             const contract = CASTLE_CONTRACTS[id];
             return (
-              <button key={id} className={contractId === id ? "is-selected" : ""} onClick={() => onContract(id)}>
+              <button key={id} aria-pressed={contractId === id} className={contractId === id ? "is-selected" : ""} onClick={() => onContract(id)}>
                 <strong>{contract.name}</strong>
                 <span>{contract.regions} region{contract.regions === 1 ? "" : "s"} · about {contract.minutes} min</span>
                 <small>Up to {contract.newCards} new cards, introduced gradually</small>
@@ -749,8 +749,8 @@ function DeckSetup({
           })}
         </div>
 
-        <label className="castle-setup-label">Keeper keepsake <small>Choose one persistent starting rule</small></label>
-        <div className="castle-keepsake-grid">
+        <h2 className="castle-setup-label" id="castle-keepsake-label">Keeper keepsake <small>Choose one persistent starting rule</small></h2>
+        <div className="castle-keepsake-grid" role="group" aria-labelledby="castle-keepsake-label">
           {Object.values(CASTLE_KEEPSAKE_DEFS).map(keepsake => {
             const unlocked = profile.unlockedKeepsakeIds.includes(keepsake.id);
             const selected = profile.selectedKeepsakeId === keepsake.id;
@@ -872,7 +872,7 @@ function CastleTutorial({
         <h2 id="castle-tutorial-title">{current.title}</h2>
         <p>{current.copy}</p>
         <div className="castle-tutorial-dots" aria-label={`Tutorial step ${step + 1} of ${CASTLE_TUTORIAL_STEPS.length}`}>
-          {CASTLE_TUTORIAL_STEPS.map((item, index) => <i key={item.title} className={index === step ? "is-active" : ""} />)}
+          {CASTLE_TUTORIAL_STEPS.map((item, index) => <i key={item.title} aria-hidden="true" className={index === step ? "is-active" : ""} />)}
         </div>
         <div className="castle-tutorial-actions">
           <button className="is-quiet" onClick={onComplete}>Skip</button>
