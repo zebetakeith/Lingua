@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:goo-keep": "node scripts/study-safety.mjs && node scripts/castle-mechanics.mjs && node scripts/castle-balance.mjs --quiet && node scripts/goo-keep-assets.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test Goo Keep
+        run: npm run test:goo-keep
+
       - name: Build
         run: npm run build
 

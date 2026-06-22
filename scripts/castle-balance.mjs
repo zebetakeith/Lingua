@@ -202,7 +202,11 @@ const validation = {
   pressureLosses: pressureRuns.filter(row => row.result === "lost").length,
 };
 
-process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, validation }, null, 2)}\n`);
+if (process.argv.includes("--quiet")) {
+  process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs).\n`);
+} else {
+  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, validation }, null, 2)}\n`);
+}
 if (
   validation.unresolvedFirstBattles > 0
   || validation.incompleteFullRuns > 0
