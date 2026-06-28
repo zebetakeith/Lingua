@@ -103,6 +103,27 @@ assert.throws(
   "editing a live card should not apply a stale answer to its new content",
 );
 
+putDeck("disabled-live");
+selectStudyDeck("disabled-live");
+const disabledQuestion = drawStudyQuestion("disabled-live", "quadratic");
+putDeck("disabled-live", { studySettings: { ...settings, askTermToDefinition: false, askDefinitionToTerm: true } });
+assert.throws(
+  () => answerStudyQuestion("disabled-live", disabledQuestion, true),
+  isStudyQuestionUnavailableError,
+  "disabling a direction should safely retire its open prompt",
+);
+
+putDeck("deleted-live");
+selectStudyDeck("deleted-live");
+const deletedQuestion = drawStudyQuestion("deleted-live", "quadratic");
+putDeck("replacement-world");
+assert.equal(tryDrawStudyQuestion("deleted-live", "quadratic"), null, "a deleted deck should not silently draw from another study world");
+assert.throws(
+  () => answerStudyQuestion("deleted-live", deletedQuestion, true),
+  isStudyQuestionUnavailableError,
+  "a deleted deck should not write its open answer into another study world",
+);
+
 putDeck("duplicate", {
   cards: [
     { ...cards[0], id: "reused-id", word: "old-word", definition: "old meaning" },

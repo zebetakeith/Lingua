@@ -321,6 +321,7 @@ export function drawStudyQuestion(
   previousKey?: string,
   recallMode: StudyRecallMode = "deck",
 ): StudyQuestion {
+  if (!loadSave().decks.some(deck => deck.id === deckId)) throw new Error("This study deck is no longer available.");
   const deck = ensureStudyCards(deckId);
   const settings = normalizeStudySettings(deck.studySettings);
   const knownIds = new Set(Object.entries(deck.cardRatings || {})
@@ -386,7 +387,10 @@ export function tryDrawStudyQuestion(
   try {
     return drawStudyQuestion(deckId, rewardCurve, previousKey, recallMode);
   } catch (error) {
-    if (error instanceof Error && error.message === "This deck needs at least one active study card.") return null;
+    if (error instanceof Error && (
+      error.message === "This deck needs at least one active study card."
+      || error.message === "This study deck is no longer available."
+    )) return null;
     throw error;
   }
 }
@@ -435,10 +439,12 @@ export function answerStudyQuestion(
   question: StudyQuestion,
   isCorrect: boolean,
 ): StudyAnswerResult {
+  if (!loadSave().decks.some(deck => deck.id === deckId)) throw new Error("The reviewed card is no longer available.");
   let answerResult: StudyAnswerResult | null = null;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card)) return deck;
+    const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
+    if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card) || !enabledDirections.includes(question.direction)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
     const nextDirection = updateDirectionStudyProgress(currentDirection, isCorrect, question.questionType);
@@ -490,10 +496,12 @@ export function completeStudyExposure(
   deckId: string,
   question: StudyQuestion,
 ): StudyAnswerResult {
+  if (!loadSave().decks.some(deck => deck.id === deckId)) throw new Error("The introduced card is no longer available.");
   let exposureResult: StudyAnswerResult | null = null;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card)) return deck;
+    const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
+    if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card) || !enabledDirections.includes(question.direction)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
     const now = Date.now();
