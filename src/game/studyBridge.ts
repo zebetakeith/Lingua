@@ -237,9 +237,9 @@ function createOptions(card: VocabWord, direction: StudyDirection, deck: StudyDe
     ? generateDistractors(card, deck.cards)
     : [
         card.definition,
-        ...shuffle(deck.cards
+        ...shuffle(Array.from(new Set(deck.cards
           .filter(candidate => candidate.id !== card.id && candidate.definition !== card.definition)
-          .map(candidate => candidate.definition))
+          .map(candidate => candidate.definition))))
           .slice(0, 3),
       ];
   return shouldShuffle ? shuffle(options) : options;

@@ -171,6 +171,23 @@ Math.random = originalRandom;
 assert.equal(fingerprintQuestion.cardId, "new-1", "the fingerprint regression case should select the changed card");
 assert.equal(fingerprintQuestion.seenBefore, false, "changed card content must invalidate stale direction history");
 
+const repeatedMeaningCards = [
+  { id: "same-1", word: "aka", definition: "red", difficulty: 2, options: [] },
+  { id: "same-2", word: "beni", definition: "crimson", difficulty: 2, options: [] },
+  { id: "same-3", word: "kurenai", definition: "crimson", difficulty: 2, options: [] },
+  { id: "same-4", word: "ao", definition: "blue", difficulty: 2, options: [] },
+  { id: "same-5", word: "midori", definition: "green", difficulty: 2, options: [] },
+];
+putDeck("duplicate-meanings", {
+  cards: repeatedMeaningCards,
+  introducedCardIds: repeatedMeaningCards.map(card => card.id),
+});
+selectStudyDeck("duplicate-meanings");
+Math.random = () => 0;
+const uniqueOptionsQuestion = drawStudyQuestion("duplicate-meanings", "quadratic");
+Math.random = originalRandom;
+assert.equal(new Set(uniqueOptionsQuestion.options).size, uniqueOptionsQuestion.options.length, "multiple-choice meanings should never render duplicate buttons");
+
 assert.equal(isTypedStudyAnswerCorrect("The water!", "water", "term_to_definition"), true, "typed meanings should ignore leading articles, case, and punctuation");
 assert.equal(isTypedStudyAnswerCorrect("liquid", "water; liquid", "term_to_definition"), true, "typed recall should accept explicit answer variants");
 assert.equal(isTypedStudyAnswerCorrect("liquid", "water, liquid", "term_to_definition"), true, "comma-separated meaning synonyms should not create false misses");
