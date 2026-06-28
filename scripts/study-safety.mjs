@@ -67,6 +67,19 @@ putDeck("legacy", {
 selectStudyDeck("legacy");
 assert.equal(drawStudyQuestion("legacy", "quadratic").seenBefore, false, "legacy card-level history must not mark an unseen direction as seen");
 
+putDeck("reverse-direction", {
+  cardRatings: { "new-2": "known" },
+  studySettings: { ...settings, askDefinitionToTerm: true },
+  directionProgress: { "new-1::term_to_definition": progress(4) },
+});
+selectStudyDeck("reverse-direction");
+const reverseDirectionRandom = Math.random;
+Math.random = () => 0;
+const reverseDirectionQuestion = drawStudyQuestion("reverse-direction", "quadratic", "new-1::term_to_definition");
+Math.random = reverseDirectionRandom;
+assert.equal(reverseDirectionQuestion.direction, "definition_to_term", "the reverse direction should remain independently selectable");
+assert.equal(reverseDirectionQuestion.seenBefore, false, "history in one direction must not bypass protection in the reverse direction");
+
 putDeck("easy", { cardRatings: { "new-1": "easy", "new-2": "easy" } });
 selectStudyDeck("easy");
 assert.equal(drawStudyQuestion("easy", "quadratic").seenBefore, false, "difficulty ratings must not bypass first-exposure protection");
