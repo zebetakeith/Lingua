@@ -24,13 +24,13 @@ import {
 import {
   answerStudyQuestion,
   completeStudyExposure,
-  drawStudyQuestion,
   getSelectedStudyDeckId,
   getStudyDecks,
   getStudyQuestionKey,
   introduceStudyCards,
   isTypedStudyAnswerCorrect,
   selectStudyDeck,
+  tryDrawStudyQuestion,
   type StudyAnswerResult,
   type StudyDeckSummary,
   type StudyQuestion,
@@ -918,6 +918,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
   const [abandonConfirmOpen, setAbandonConfirmOpen] = useState(false);
+  const [studyBlocked, setStudyBlocked] = useState(false);
   const [pipploAnimation, setPipploAnimation] = useState<PipploAnimationState>({ name: "idle", serial: 0 });
   const [soundEnabled, setSoundEnabled] = useState(() => localStorage.getItem(CASTLE_SOUND_KEY) !== "off");
   const questionStartedAt = useRef(0);
@@ -1152,6 +1153,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setProfile(loadCastleProfile(deckId));
     const restored = loadCastleRun(deckId);
     setRun(restored ? pauseCastleBattle(restored, "Saved run restored. Resume when ready.") : null);
+    setStudyBlocked(false);
     setRewardCurve(restored?.rewardCurve || "quadratic");
     setRecallMode(restored?.recallMode || "balanced");
     setDecks(getStudyDecks());
@@ -1178,10 +1180,19 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       recallMode,
       profile.selectedKeepsakeId,
     ));
-    const nextQuestion = drawStudyQuestion(selectedDeckId, next.rewardCurve, undefined, next.recallMode);
+    const nextQuestion = tryDrawStudyQuestion(selectedDeckId, next.rewardCurve, undefined, next.recallMode);
+    if (!nextQuestion) {
+      clearCastleRun(selectedDeckId);
+      setRun(null);
+      setQuestion(null);
+      setStudyBlocked(false);
+      setDecks(getStudyDecks());
+      return;
+    }
     clearCastleRun(selectedDeckId);
     setQuestion(nextQuestion);
     setFeedback(null);
+    setStudyBlocked(false);
     setReveal(false);
     const showTutorial = !profile.tutorialComplete;
     setTutorialOpen(showTutorial);
@@ -1202,9 +1213,21 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const previousKey = previousKeyOverride === null
       ? undefined
       : previousKeyOverride ?? (question ? getStudyQuestionKey(question) : undefined);
-    const nextQuestion = drawStudyQuestion(selectedDeckId, baseRun.rewardCurve, previousKey, baseRun.recallMode);
+    const nextQuestion = tryDrawStudyQuestion(selectedDeckId, baseRun.rewardCurve, previousKey, baseRun.recallMode);
+    if (!nextQuestion) {
+      setQuestion(null);
+      setFeedback(null);
+      setReveal(false);
+      setInterrupted(false);
+      setStudyBlocked(true);
+      setPanelMode("study");
+      setRun(pauseCastleBattle(baseRun, "No active cards remain. Your reviews are safe; return to setup to choose a study world."));
+      setDecks(getStudyDecks());
+      return;
+    }
     setQuestion(nextQuestion);
     setFeedback(null);
+    setStudyBlocked(false);
     setReveal(false);
     setInterrupted(false);
     setPanelMode("study");
@@ -1261,16 +1284,18 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       setRun(current => current ? resumeCastleBattle(applyCastleStudyOutcome(current, outcome)) : current);
     } else {
       const previousKey = getStudyQuestionKey(question);
-      const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
+      const nextQuestion = tryDrawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
       setQuestion(nextQuestion);
       setFeedback(nextFeedback);
       setReveal(false);
       setInterrupted(false);
       setPanelMode("study");
-      startQuestionTimer();
+      setStudyBlocked(!nextQuestion);
+      if (nextQuestion) startQuestionTimer();
       setRun(current => {
         if (!current) return current;
         const resolved = applyCastleStudyOutcome(current, outcome);
+        if (!nextQuestion) return pauseCastleBattle(resolved, "No active cards remain. Your reviews are safe; return to setup to choose a study world.");
         return nextQuestion.seenBefore
           ? resumeCastleBattle(resolved)
           : pauseCastleBattle(resolved, "First exposure protected: combat remains paused while you learn this direction.");
@@ -1295,16 +1320,18 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       questionType: question.questionType,
       due: true,
     };
-    const nextQuestion = drawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
+    const nextQuestion = tryDrawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
     setQuestion(nextQuestion);
     setFeedback(null);
     setReveal(false);
     setInterrupted(false);
     setPanelMode("study");
-    startQuestionTimer();
+    setStudyBlocked(!nextQuestion);
+    if (nextQuestion) startQuestionTimer();
     setRun(current => {
       if (!current) return current;
       const resolved = applyCastleStudyOutcome(current, outcome);
+      if (!nextQuestion) return pauseCastleBattle(resolved, "No active cards remain. Your reviews are safe; return to setup to choose a study world.");
       return nextQuestion.seenBefore
         ? resumeCastleBattle(resolved)
         : pauseCastleBattle(resolved, "New direction: combat remains paused while you learn both sides.");
@@ -1321,6 +1348,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setRun(null);
     setQuestion(null);
     setFeedback(null);
+    setStudyBlocked(false);
     setPanelMode("study");
     setProfile(loadCastleProfile(selectedDeckId));
   };
@@ -1450,7 +1478,15 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         />
       )}
 
-      {run.phase === "battle" && panelMode === "study" && !question && (
+      {run.phase === "battle" && panelMode === "study" && !question && studyBlocked && (
+        <section className="castle-study-blocked" role="status">
+          <BookOpen />
+          <div><b>No active cards remain</b><span>Every review from this expedition is saved. Return to setup to add cards, change ratings, or choose another study world.</span></div>
+          <button onClick={resetRun}><ArrowLeft />Return to run setup</button>
+        </section>
+      )}
+
+      {run.phase === "battle" && panelMode === "study" && !question && !studyBlocked && (
         <section className="castle-study-launch">
           <div className="castle-ready-copy">
             <BookOpen />
@@ -1469,7 +1505,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <Swords />
             <div>
               <b>{simulationReady ? "The lane is still fighting" : question && !question.seenBefore ? "An unseen direction is protecting the lane" : "Combat is manually paused"}</b>
-              <span>{question ? `Waiting flashcard: ${question.prompt}` : "Start flashcards when your army is ready."}</span>
+              <span>{question ? `Waiting flashcard: ${question.prompt}` : studyBlocked ? "No active cards remain. Return to setup when ready." : "Start flashcards when your army is ready."}</span>
             </div>
             <button className="castle-guide-button" onClick={() => { pauseForInterruption(); setGuideOpen(true); }}><CircleHelp />Field guide<small>safe pause</small></button>
           </div>

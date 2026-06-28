@@ -8,7 +8,7 @@ globalThis.localStorage = {
   clear: () => values.clear(),
 };
 
-const { drawStudyQuestion, getStudyDecks, introduceStudyCards, isTypedStudyAnswerCorrect, selectStudyDeck } = await import("../src/game/studyBridge.ts");
+const { drawStudyQuestion, getStudyDecks, introduceStudyCards, isTypedStudyAnswerCorrect, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
 const { getActiveStudyResponseMs } = await import("../src/game/study.ts");
 
 const cards = [
@@ -73,6 +73,7 @@ assert.equal(drawStudyQuestion("easy", "quadratic").seenBefore, false, "difficul
 putDeck("finished", { cardRatings: { "new-1": "known", "new-2": "known" } });
 assert.equal(getStudyDecks()[0].activeCount, 0, "a fully known deck should report no active cards for a new run");
 assert.equal(getStudyDecks()[0].introducedCount, 0, "known cards should not be mislabeled as introduced active cards");
+assert.equal(tryDrawStudyQuestion("finished", "quadratic"), null, "an active run should recover safely when no study prompts remain");
 
 putDeck("duplicate", {
   cards: [

@@ -358,6 +358,20 @@ export function drawStudyQuestion(
   };
 }
 
+export function tryDrawStudyQuestion(
+  deckId: string,
+  rewardCurve: StudyRewardCurve,
+  previousKey?: string,
+  recallMode: StudyRecallMode = "deck",
+): StudyQuestion | null {
+  try {
+    return drawStudyQuestion(deckId, rewardCurve, previousKey, recallMode);
+  } catch (error) {
+    if (error instanceof Error && error.message === "This deck needs at least one active study card.") return null;
+    throw error;
+  }
+}
+
 function normalizeTypedAnswer(value: string, direction: StudyDirection): string {
   let normalized = value
     .normalize("NFKC")
