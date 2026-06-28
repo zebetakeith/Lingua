@@ -37,7 +37,7 @@ import {
   type StudyDeckSummary,
   type StudyQuestion,
 } from "../game/studyBridge";
-import { getActiveStudyResponseMs, type StudyRecallMode, type StudyRewardCurve } from "../game/study";
+import { getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, type StudyRecallMode, type StudyRewardCurve } from "../game/study";
 import {
   CASTLE_CONTRACTS,
   CASTLE_EVENT_DEFS,
@@ -586,7 +586,7 @@ function StudyCard({
       <div className="castle-study-meta">
         <span>{question.direction === "term_to_definition" ? "Term → definition" : "Definition → term"}</span>
         <span>{question.masteryLabel}</span>
-        <span className="castle-study-pressure"><Clock3 />{status}</span>
+        <span className="castle-study-pressure" title={question.seenBefore ? `Enemy pressure begins rising after ${(question.pressure.graceMs + 3_000) / 1_000} seconds on this prompt.` : undefined}><Clock3 />{status}</span>
       </div>
       <div className="castle-study-reward">
         <Sparkles />{question.seenBefore ? "Worth" : "Learning bonus"} {formatCastleEnergy(question.reward)}
@@ -1004,7 +1004,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     if (!simulationReady) return;
     const calmMultiplier = run?.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 0.75 : 1;
     const timer = window.setInterval(() => {
-      setRun(current => current ? tickCastleRun(current, 100, (question?.pressure.combatSpeed || 1) * calmMultiplier) : current);
+      const pressureSpeed = question
+        ? getEscalatedStudyCombatSpeed(question.pressure, Math.max(0, Date.now() - questionStartedAt.current))
+        : 1;
+      setRun(current => current ? tickCastleRun(current, 100, pressureSpeed * calmMultiplier) : current);
     }, 100);
     return () => window.clearInterval(timer);
   }, [simulationReady, question, run?.upgrades, run?.battle.playerCastleHp, run?.battle.playerCastleMaxHp]);
@@ -1734,7 +1737,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Sparkles /><b>Energy</b><small>Correct recalls fund summons and castle powers.</small></span>
               <span><Zap /><b>Recall Bolt</b><small>Five correct seen recalls deal 8 damage directly to the rival keep.</small></span>
               <span><Swords /><b>Enemy Rally</b><small>A miss pulls the next wave closer and adds a pip. Recall that direction later to clear one; three pips fire a 3-damage Moon Volley and summon a bonus squad.</small></span>
-              <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy so you can choose what to buy.</small></span>
+              <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy. Each seen prompt has a short grace period, then enemy speed rises until you answer.</small></span>
               <span><Castle /><b>Guardian phases</b><small>At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
             </div>
 

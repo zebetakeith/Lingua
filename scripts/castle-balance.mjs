@@ -11,7 +11,9 @@ import {
 } from "../src/experiments/castleBattle.ts";
 import {
   createDirectionStudyProgress,
+  getEscalatedStudyCombatSpeed,
   getCorrectAnswerReward,
+  getStudyPressureProfile,
 } from "../src/game/study.ts";
 
 const curves = ["current", "quadratic", "steep"];
@@ -24,6 +26,14 @@ function rewardFor(curve, mastery) {
     dueAt: 0,
   };
   return getCorrectAnswerReward(progress, "multiple_choice", curve, 10_000);
+}
+
+function pressureFor(mastery) {
+  return getStudyPressureProfile({
+    ...createDirectionStudyProgress(mastery),
+    mastery,
+    dueAt: 0,
+  });
 }
 
 function spendEnergy(run) {
@@ -55,6 +65,7 @@ function spendEnergy(run) {
 function simulate(curve, mastery) {
   let run = createInitialCastleRun(`balance-${curve}-${mastery}`, "quick", curve, undefined, undefined, "balanced", "starBuckle");
   const reward = rewardFor(curve, mastery);
+  const pressure = pressureFor(mastery);
   let reviews = 0;
   let elapsedMs = 0;
   while (run.phase === "battle" && elapsedMs < 180_000 && reviews < 80) {
@@ -70,7 +81,7 @@ function simulate(curve, mastery) {
     run = spendEnergy(run);
     run = resumeCastleBattle(run);
     for (let step = 0; step < 35 && run.phase === "battle"; step += 1) {
-      run = tickCastleRun(run, 100, mastery < 0.22 ? 0.75 : mastery < 0.48 ? 0.9 : 1);
+      run = tickCastleRun(run, 100, getEscalatedStudyCombatSpeed(pressure, step * 100));
       elapsedMs += 100;
     }
     reviews += 1;
@@ -98,6 +109,7 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
   const seed = Math.round((mastery * 10_000) + ({ quick: 100, regular: 200, long: 300 }[contractId] || 0) + (seedOffset * 997));
   let run = createInitialCastleRun(`full-${contractId}-${mastery}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle");
   const reward = rewardFor("quadratic", mastery);
+  const pressure = pressureFor(mastery);
   let reviews = 0;
   let elapsedMs = 0;
   const answerMs = mastery >= 0.85 ? 1_800 : mastery >= 0.5 ? 3_000 : 4_500;
@@ -150,7 +162,7 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
     run = spendEnergy(run);
     run = resumeCastleBattle(run);
     for (let step = 0; step < Math.round(answerMs / 100) && run.phase === "battle"; step += 1) {
-      run = tickCastleRun(run, 100, mastery < 0.22 ? 0.75 : mastery < 0.48 ? 0.9 : 1);
+      run = tickCastleRun(run, 100, getEscalatedStudyCombatSpeed(pressure, step * 100));
       minimumCastleHp = Math.min(minimumCastleHp, run.battle.playerCastleHp);
       elapsedMs += 100;
     }
@@ -177,6 +189,21 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
   };
 }
 
+function simulateIdlePrompt() {
+  let run = resumeCastleBattle(createInitialCastleRun("idle-prompt", "quick", "quadratic", undefined, 1_234, "balanced", "starBuckle"));
+  const pressure = pressureFor(0.15);
+  let elapsedMs = 0;
+  while (run.phase === "battle" && elapsedMs < 180_000) {
+    run = tickCastleRun(run, 100, getEscalatedStudyCombatSpeed(pressure, elapsedMs));
+    elapsedMs += 100;
+  }
+  return {
+    result: run.phase,
+    elapsedMs,
+    damageTaken: run.battle.telemetry.damageTaken,
+  };
+}
+
 const report = curves.flatMap(curve => masteries.map(mastery => simulate(curve, mastery)));
 const curveRanges = curves.map(curve => {
   const rows = report.filter(row => row.curve === curve);
@@ -195,18 +222,20 @@ const fullRuns = ["quick", "regular", "long"].flatMap(contractId => [0, 1, 2].fl
 const pressureRuns = [0.55, 0.65, 0.72].flatMap(correctRate => [0, 1, 2].map(seedOffset => (
   simulateFullRun("quick", 0.35, correctRate, seedOffset)
 )));
+const idlePrompt = simulateIdlePrompt();
 const validation = {
   unresolvedFirstBattles: report.filter(row => row.result === "battle").length,
   incompleteFullRuns: fullRuns.filter(row => row.result !== "complete").length,
   pressureWins: pressureRuns.filter(row => row.result === "complete").length,
   pressureLosses: pressureRuns.filter(row => row.result === "lost").length,
   pressuredMidRuns: pressureRuns.filter(row => row.correctRate === 0.65 && row.result === "complete" && row.damageTaken > 0).length,
+  idlePromptCreatesDanger: idlePrompt.result === "lost" || idlePrompt.damageTaken > 0,
 };
 
 if (process.argv.includes("--quiet")) {
   process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs).\n`);
 } else {
-  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, validation }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, idlePrompt, validation }, null, 2)}\n`);
 }
 if (
   validation.unresolvedFirstBattles > 0
@@ -214,4 +243,5 @@ if (
   || validation.pressureWins === 0
   || validation.pressureLosses === 0
   || validation.pressuredMidRuns === 0
+  || !validation.idlePromptCreatesDanger
 ) process.exitCode = 1;

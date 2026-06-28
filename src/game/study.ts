@@ -232,6 +232,12 @@ export function getStudyPressureProfile(progress: DirectionStudyProgress): Study
   return { label: "Mastered", graceMs: 2_000, combatSpeed: 1 };
 }
 
+export function getEscalatedStudyCombatSpeed(profile: StudyPressureProfile, activePromptMs: number): number {
+  const overdueMs = Math.max(0, activePromptMs - profile.graceMs - 3_000);
+  const escalation = Math.min(0.6, (overdueMs / 40_000) * 0.6);
+  return Math.min(1.5, Math.round((profile.combatSpeed + escalation) * 100) / 100);
+}
+
 export function updateDirectionStudyProgress(
   progress: DirectionStudyProgress,
   isCorrect: boolean,

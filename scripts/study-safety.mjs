@@ -9,7 +9,7 @@ globalThis.localStorage = {
 };
 
 const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, isTypedStudyAnswerCorrect, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
-const { getActiveStudyResponseMs } = await import("../src/game/study.ts");
+const { getActiveStudyResponseMs, getEscalatedStudyCombatSpeed } = await import("../src/game/study.ts");
 
 const cards = [
   { id: "new-1", word: "mizu", definition: "water", difficulty: 2, options: [] },
@@ -125,6 +125,10 @@ assert.equal(isTypedStudyAnswerCorrect("cafe", "café", "definition_to_term"), f
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 3_000), 5_000, "completed command time must be excluded from recall timing");
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 2_000, 7_000), 4_000, "an open command panel must be excluded from recall timing");
 assert.equal(getActiveStudyResponseMs(9_000, 1_000, 0), 0, "clock drift must never create a negative response time");
+const pressureProfile = { label: "Struggling", graceMs: 4_000, combatSpeed: 0.75 };
+assert.equal(getEscalatedStudyCombatSpeed(pressureProfile, 4_000), 0.75, "a seen prompt should preserve its full grace period");
+assert.ok(getEscalatedStudyCombatSpeed(pressureProfile, 24_000) > 0.75, "enemy pressure should rise when a seen prompt is left unanswered");
+assert.equal(getEscalatedStudyCombatSpeed(pressureProfile, 100_000), 1.35, "prompt pressure should cap at a firm but bounded speed");
 
 putDeck("balanced-typing", {
   studySettings: {
