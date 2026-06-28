@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test:goo-keep": "node scripts/study-safety.mjs && node scripts/castle-mechanics.mjs && node scripts/castle-balance.mjs --quiet && node scripts/goo-keep-assets.mjs",
+    "lint:goo-keep": "eslint src/GooKeepRouter.tsx src/main.tsx src/experiments/CastleBattleLab.tsx src/experiments/castleBattle.ts src/experiments/castleStorage.ts src/game/study.ts src/game/studyBridge.ts scripts/castle-balance.mjs scripts/castle-mechanics.mjs scripts/study-safety.mjs scripts/goo-keep-assets.mjs",
+    "test:goo-keep": "npm run lint:goo-keep && node scripts/study-safety.mjs && node scripts/castle-mechanics.mjs && node scripts/castle-balance.mjs --quiet && node scripts/goo-keep-assets.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

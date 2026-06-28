@@ -1,0 +1,28 @@
+html,
+body,
+#root { min-height: 100%; margin: 0; }
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+button,
+input,
+select,
+textarea { font: inherit; }
+
+button:not(:disabled) { cursor: pointer; }
+
+.goo-route-loading { display: grid; place-items: center; min-height: 100dvh; padding: 20px; color: white; background: #07101f; }
+.goo-route-loading.is-goo-keep { color: #225d62; background: #fff9dd; }
+.goo-route-loading-card { display: grid; justify-items: center; gap: 12px; max-width: 360px; padding: 28px 32px; text-align: center; background: rgba(255,255,255,0.12); border-radius: 24px; box-shadow: 0 18px 45px rgba(12,58,61,0.14); }
+.goo-route-loading.is-goo-keep .goo-route-loading-card { background: rgba(255,255,255,0.78); }
+.goo-route-loading-spark { color: #d4a92e; font-size: 36px; line-height: 1; animation: goo-route-pulse 900ms ease-in-out infinite alternate; }
+.goo-route-loading-card b { font-size: 16px; }
+.goo-route-loading-card small { font-size: 11px; opacity: 0.74; }
+
+@keyframes goo-route-pulse { from { opacity: 0.45; transform: scale(0.86); } to { opacity: 1; transform: scale(1.08); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .goo-route-loading-spark { animation: none; }
+}

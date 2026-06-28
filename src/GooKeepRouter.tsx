@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
+import "./GooKeepRouter.css";
 
 
 const CastleBattleLab = lazy(() => import("./experiments/CastleBattleLab"));
@@ -6,11 +7,11 @@ const LegacyApp = lazy(() => import("./App"));
 
 function LoadingScreen({ gooKeep }: { gooKeep: boolean }) {
   return (
-    <main className={`flex min-h-screen items-center justify-center ${gooKeep ? "bg-[#fff9dd] text-[#225d62]" : "bg-[#07101f] text-white"}`}>
-      <div className="grid justify-items-center gap-3 rounded-3xl bg-white/10 px-8 py-7 text-center shadow-lg" role="status" aria-live="polite">
-        <span className="animate-pulse text-4xl text-[#d4a92e] motion-reduce:animate-none" aria-hidden="true">✦</span>
+    <main className={`goo-route-loading ${gooKeep ? "is-goo-keep" : ""}`}>
+      <div className="goo-route-loading-card" role="status" aria-live="polite">
+        <span className="goo-route-loading-spark" aria-hidden="true">✦</span>
         <b>{gooKeep ? "Opening Pipplo's Goo Keep…" : "Opening Lexicon Labyrinth…"}</b>
-        <span className="text-xs opacity-75">{gooKeep ? "Waking the nursery and Mallow's moon gate" : "Preparing your study world"}</span>
+        <small>{gooKeep ? "Waking the nursery and Mallow's moon gate" : "Preparing your study world"}</small>
       </div>
     </main>
   );

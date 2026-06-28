@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import "./index.css";
 import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot, Beaker } from "lucide-react";
 import VOCABULARY, { generateDistractors, type VocabWord } from "./data/vocabulary";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
