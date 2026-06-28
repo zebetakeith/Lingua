@@ -927,6 +927,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const questionCommandMs = useRef(0);
   const questionCommandStartedAt = useRef<number | null>(null);
   const lastSaveAt = useRef(0);
+  const latestRun = useRef<CastleRunState | null>(initial.run);
   const previousPhase = useRef<CastleRunState["phase"] | null>(initial.run?.phase || null);
   const pipploAnimationTimer = useRef<number | null>(null);
   const activeDialogRef = useRef<HTMLElement | null>(null);
@@ -951,6 +952,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     && run.battle.mode === "study",
   );
   const runActive = Boolean(run);
+
+  useEffect(() => {
+    latestRun.current = run;
+  }, [run]);
 
   useEffect(() => {
     const preloadedImages = [
@@ -999,6 +1004,15 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const syncProfile = window.setTimeout(() => setProfile(savedProfile), 0);
     return () => window.clearTimeout(syncProfile);
   }, [run, selectedDeckId]);
+
+  useEffect(() => {
+    const saveBeforePageLeaves = () => {
+      const current = latestRun.current;
+      if (current) saveCastleRun(selectedDeckId, pauseCastleBattle(current, "Run saved safely before leaving Goo Keep."));
+    };
+    window.addEventListener("pagehide", saveBeforePageLeaves);
+    return () => window.removeEventListener("pagehide", saveBeforePageLeaves);
+  }, [selectedDeckId]);
 
   useEffect(() => {
     if (!simulationReady) return;
@@ -1433,6 +1447,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     URL.revokeObjectURL(href);
   };
 
+  const exitToMenu = () => {
+    const current = latestRun.current;
+    if (current) saveCastleRun(selectedDeckId, pauseCastleBattle(current, "Run saved safely. Resume whenever you are ready."));
+    onExit();
+  };
+
   if (!run) {
     return (
       <DeckSetup
@@ -1480,7 +1500,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   return (
     <main className="castle-lab-shell">
       <header className="castle-lab-header">
-        <button onClick={onExit} aria-label="Exit Combat Lab"><ArrowLeft /></button>
+        <button onClick={exitToMenu} aria-label="Save run and return to main menu" title="Save & main menu"><ArrowLeft /></button>
         <div>
           <span>{selectedDeck?.name || "Study world"}</span>
           <b>Pipplo's Goo Keep</b>
