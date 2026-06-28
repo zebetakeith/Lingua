@@ -188,6 +188,13 @@ const uniqueOptionsQuestion = drawStudyQuestion("duplicate-meanings", "quadratic
 Math.random = originalRandom;
 assert.equal(new Set(uniqueOptionsQuestion.options).size, uniqueOptionsQuestion.options.length, "multiple-choice meanings should never render duplicate buttons");
 
+putDeck("one-card-options", { cards: [cards[0]], introducedCardIds: [cards[0].id] });
+selectStudyDeck("one-card-options");
+const oneCardQuestion = drawStudyQuestion("one-card-options", "quadratic");
+assert.equal(oneCardQuestion.options.length, 4, "a one-card deck should still receive a meaningful four-choice recognition prompt");
+assert.equal(new Set(oneCardQuestion.options).size, 4, "fallback recognition choices should remain unique");
+assert.ok(oneCardQuestion.options.includes(oneCardQuestion.answer), "fallback choices must retain the correct answer");
+
 assert.equal(isTypedStudyAnswerCorrect("The water!", "water", "term_to_definition"), true, "typed meanings should ignore leading articles, case, and punctuation");
 assert.equal(isTypedStudyAnswerCorrect("liquid", "water; liquid", "term_to_definition"), true, "typed recall should accept explicit answer variants");
 assert.equal(isTypedStudyAnswerCorrect("liquid", "water, liquid", "term_to_definition"), true, "comma-separated meaning synonyms should not create false misses");
