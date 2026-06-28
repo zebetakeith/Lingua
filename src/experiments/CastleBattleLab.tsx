@@ -989,7 +989,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const important = run.phase !== "battle" || run.battle.mode === "command";
     if (!important && now - lastSaveAt.current < 1_000) return;
     lastSaveAt.current = now;
-    setProfile(saveCastleRun(selectedDeckId, run));
+    const savedProfile = saveCastleRun(selectedDeckId, run);
+    const syncProfile = window.setTimeout(() => setProfile(savedProfile), 0);
+    return () => window.clearTimeout(syncProfile);
   }, [run, selectedDeckId]);
 
   useEffect(() => {
