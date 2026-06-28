@@ -194,6 +194,22 @@ const oneCardQuestion = drawStudyQuestion("one-card-options", "quadratic");
 assert.equal(oneCardQuestion.questionType, "self_grade", "a tiny deck should self-grade instead of mixing in obvious cross-language distractors");
 assert.deepEqual(oneCardQuestion.options, [], "self-graded tiny-deck prompts should not render fake recognition choices");
 
+const japaneseCards = [
+  { id: "jp-1", word: "水", definition: "water", difficulty: 2, options: [] },
+  { id: "jp-2", word: "火", definition: "fire", difficulty: 2, options: [] },
+  { id: "jp-3", word: "土", definition: "earth", difficulty: 2, options: [] },
+  { id: "jp-4", word: "風", definition: "wind", difficulty: 2, options: [] },
+];
+putDeck("japanese-options", {
+  cards: japaneseCards,
+  introducedCardIds: japaneseCards.map(card => card.id),
+  studySettings: { ...settings, askTermToDefinition: false, askDefinitionToTerm: true },
+});
+selectStudyDeck("japanese-options");
+const japaneseQuestion = drawStudyQuestion("japanese-options", "quadratic");
+assert.equal(japaneseQuestion.questionType, "multiple_choice", "four same-deck Japanese terms should support recognition practice");
+assert.ok(japaneseQuestion.options.every(option => japaneseCards.some(card => card.word === option)), "Japanese recognition distractors must come from the deck's term field");
+
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 3_000), 5_000, "completed command time must be excluded from recall timing");
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 2_000, 7_000), 4_000, "an open command panel must be excluded from recall timing");
 assert.equal(getActiveStudyResponseMs(9_000, 1_000, 0), 0, "clock drift must never create a negative response time");
