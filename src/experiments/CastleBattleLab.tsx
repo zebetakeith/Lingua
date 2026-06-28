@@ -1462,6 +1462,20 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const newPermanentDiscoveries = profile.unlockedUpgradeIds
     .filter(id => !run.draftPoolIds.includes(id))
     .map(id => CASTLE_UPGRADE_DEFS[id]);
+  const guardiansThisRun = Math.floor(run.battlesWon / 3);
+  const guardianClearsBeforeRun = Math.max(0, profile.guardianClears - guardiansThisRun);
+  const completedRunsBeforeRun = Math.max(0, profile.runsCompleted - (run.phase === "complete" ? 1 : 0));
+  const newKeepsakeDiscoveries = Object.values(CASTLE_KEEPSAKE_DEFS).filter(keepsake => (
+    profile.unlockedKeepsakeIds.includes(keepsake.id)
+    && (
+      guardianClearsBeforeRun < (keepsake.guardianRequirement || 0)
+      || completedRunsBeforeRun < (keepsake.runRequirement || 0)
+    )
+  ));
+  const permanentDiscoveryNames = [
+    ...newPermanentDiscoveries.map(discovery => discovery.name),
+    ...newKeepsakeDiscoveries.map(keepsake => `${keepsake.name} keepsake`),
+  ];
 
   return (
     <main className="castle-lab-shell">
@@ -1571,10 +1585,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p className="castle-eyebrow">Castle absorbed</p>
             <h2>What should Pipplo digest?</h2>
             <p>Choose one transformation for the rest of this run.</p>
-            {newPermanentDiscoveries.length > 0 && (
+            {permanentDiscoveryNames.length > 0 && (
               <div className="castle-discovery-banner" role="status">
                 <Sparkles />
-                <div><b>Keeper Chronicle discovery</b><span>{newPermanentDiscoveries.map(discovery => discovery.name).join(", ")} {newPermanentDiscoveries.length === 1 ? "has" : "have"} joined future mutation drafts.</span></div>
+                <div><b>Keeper Chronicle discovery</b><span>{permanentDiscoveryNames.join(", ")} {permanentDiscoveryNames.length === 1 ? "has" : "have"} joined future expeditions.</span></div>
               </div>
             )}
             <div className="castle-reward-grid">
@@ -1726,10 +1740,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               )}
               <aside><Sparkles /><div><b>Next expedition</b><span>{studyReport.recommendation}</span></div></aside>
             </section>
-            {newPermanentDiscoveries.length > 0 && (
+            {permanentDiscoveryNames.length > 0 && (
               <div className="castle-discovery-banner is-result">
                 <Sparkles />
-                <div><b>Permanent discoveries earned</b><span>{newPermanentDiscoveries.map(discovery => discovery.name).join(", ")}</span></div>
+                <div><b>Permanent discoveries earned</b><span>{permanentDiscoveryNames.join(", ")}</span></div>
               </div>
             )}
             {run.keepsakeId && <p className="castle-result-keepsake"><Sparkles /><b>{CASTLE_KEEPSAKE_DEFS[run.keepsakeId].name}</b><span>keepsake carried through this expedition</span></p>}
