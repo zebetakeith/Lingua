@@ -1,5 +1,5 @@
 export type StudyDirection = "term_to_definition" | "definition_to_term";
-export type StudyQuestionType = "multiple_choice" | "self_grade" | "typed";
+export type StudyQuestionType = "multiple_choice" | "self_grade";
 export type StudyRewardCurve = "current" | "quadratic" | "steep";
 export type StudyRecallMode = "balanced" | "deck";
 
@@ -194,7 +194,7 @@ export function getCorrectAnswerAp(progress: DirectionStudyProgress, questionTyp
       : normalized.correctToday === 2
         ? 0.45
         : 0.25;
-  const questionReward = questionType === "typed" ? 1.22 : questionType === "self_grade" ? 1.12 : 0.88;
+  const questionReward = questionType === "self_grade" ? 1.12 : 0.88;
   const dueReward = normalized.dueAt <= now ? 1 : 0.82;
   return roundAp(Math.max(0.1, masteryReward * repeatReward * questionReward * dueReward));
 }
@@ -218,7 +218,7 @@ export function getCorrectAnswerReward(
       : normalized.correctToday === 2
         ? 0.45
         : 0.25;
-  const questionReward = questionType === "typed" ? 1.22 : questionType === "self_grade" ? 1.12 : 0.88;
+  const questionReward = questionType === "self_grade" ? 1.12 : 0.88;
   const dueReward = normalized.dueAt <= now ? 1 : 0.82;
   return roundAp(Math.max(0.1, Math.min(3.5, baseReward * repeatReward * questionReward * dueReward)));
 }
@@ -247,7 +247,7 @@ export function updateDirectionStudyProgress(
   const nextCorrectStreak = isCorrect ? current.correctStreak + 1 : 0;
   const nextWrongStreak = isCorrect ? 0 : current.wrongStreak + 1;
   const earlyCorrectReview = isCorrect && current.dueAt > now;
-  const formatStrength = questionType === "typed" ? 1.4 : questionType === "self_grade" ? 1.25 : 0.82;
+  const formatStrength = questionType === "self_grade" ? 1.25 : 0.82;
   const masteryChange = isCorrect
     ? (0.055 + Math.min(0.045, nextCorrectStreak * 0.008)) * formatStrength * (earlyCorrectReview ? 0.35 : 1)
     : -(0.11 + Math.min(0.12, nextWrongStreak * 0.035));

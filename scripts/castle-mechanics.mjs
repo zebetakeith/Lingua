@@ -106,18 +106,18 @@ assert.equal(unseen.studySummary.gradedReviews, 0, "safe first exposures must st
 assert.equal(unseen.studySummary.responseMs.length, 0, "reading time for first exposures must stay out of recall pace");
 assert.equal(unseen.battle.telemetry.responseMs.length, 0, "balance telemetry must not mislabel first-exposure reading time as recall latency");
 
-const typedRecall = applyCastleStudyOutcome(freshRun(), outcome(0, {
+const selfGradedRecall = applyCastleStudyOutcome(freshRun(), outcome(0, {
   reward: 1.8,
   responseMs: 4_200,
-  questionType: "typed",
+  questionType: "self_grade",
 }));
-const typedReport = getCastleStudyReport(typedRecall);
-assert.equal(typedReport.gradedReviews, 1, "graded prompts should enter the learning report");
-assert.equal(typedReport.typedReviews, 1, "typed prompts should be reported separately");
-assert.equal(typedReport.difficultRecalls, 1, "high-value correct recalls should count as difficult wins");
-assert.equal(typedReport.dueReviews, 1, "due prompts should be visible in the learning report");
-assert.equal(typedReport.averageResponseMs, 4_200, "active recall pace should use the recorded study duration");
-assert.equal(typedReport.accuracy, 1, "learning-report accuracy should exclude first exposures");
+const selfGradedReport = getCastleStudyReport(selfGradedRecall);
+assert.equal(selfGradedReport.gradedReviews, 1, "graded prompts should enter the learning report");
+assert.equal(selfGradedReport.typedReviews, 0, "new Goo Keep reviews must never add typed-review history");
+assert.equal(selfGradedReport.difficultRecalls, 1, "high-value correct recalls should count as difficult wins");
+assert.equal(selfGradedReport.dueReviews, 1, "due prompts should be visible in the learning report");
+assert.equal(selfGradedReport.averageResponseMs, 4_200, "active recall pace should use the recorded study duration");
+assert.equal(selfGradedReport.accuracy, 1, "learning-report accuracy should exclude first exposures");
 const reconstructedReport = getCastleStudyReport({
   ...freshRun(),
   reviews: 12,

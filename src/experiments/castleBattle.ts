@@ -1224,7 +1224,7 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     exposures: previousStudySummary.exposures + (outcome.isExposure ? 1 : 0),
     gradedReviews: previousStudySummary.gradedReviews + (graded ? 1 : 0),
     dueReviews: previousStudySummary.dueReviews + (graded && outcome.due ? 1 : 0),
-    typedReviews: previousStudySummary.typedReviews + (graded && outcome.questionType === "typed" ? 1 : 0),
+    typedReviews: previousStudySummary.typedReviews,
     difficultRecalls: previousStudySummary.difficultRecalls + (graded && outcome.isCorrect && outcome.reward >= 1.5 ? 1 : 0),
     responseMs: graded
       ? [...previousStudySummary.responseMs, Math.max(0, outcome.responseMs)].slice(-500)
