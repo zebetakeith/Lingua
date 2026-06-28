@@ -1149,6 +1149,17 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     };
   }, [pauseForInterruption]);
 
+  useEffect(() => {
+    if (activeDialogKey || !question || interrupted) return;
+    const pauseOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      event.preventDefault();
+      pauseForInterruption();
+    };
+    window.addEventListener("keydown", pauseOnEscape);
+    return () => window.removeEventListener("keydown", pauseOnEscape);
+  }, [activeDialogKey, interrupted, pauseForInterruption, question]);
+
   const chooseDeck = (deckId: string) => {
     selectStudyDeck(deckId);
     setSelectedDeckId(deckId);
@@ -1455,6 +1466,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
           <b>Pipplo's Goo Keep</b>
         </div>
         <span className="castle-header-stats"><BookOpen />{run.reviews} <Swords />{run.battlesWon}</span>
+        <button disabled={!question || interrupted} onClick={pauseForInterruption} aria-label="Pause current prompt" title="Pause current prompt (Esc)"><Pause /></button>
         <button onClick={() => { pauseForInterruption(); setHelpOpen(true); }} aria-label="How to play"><CircleHelp /></button>
         <button onClick={() => { pauseForInterruption(); setSettingsOpen(true); }} aria-label="Settings and balance"><Settings /></button>
       </header>
