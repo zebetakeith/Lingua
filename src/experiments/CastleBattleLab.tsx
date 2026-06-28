@@ -594,10 +594,11 @@ function StudyCard({
     : interrupted
       ? "Interrupted · combat paused"
       : `Combat live · ${question.pressure.combatSpeed}× then faster`;
+  const answerField = question.direction === "definition_to_term" ? "Term" : "Meaning";
   return (
     <section className={`castle-study-card ${combatLive ? "is-live" : ""} ${!question.seenBefore ? "is-new" : ""}`}>
       <div className="castle-study-meta">
-        <span>{question.direction === "term_to_definition" ? "Term → definition" : "Definition → term"}</span>
+        <span>{question.direction === "term_to_definition" ? "Term → Meaning" : "Meaning → Term"}</span>
         <span>{question.masteryLabel} · {question.due ? "due now" : "bonus review"}</span>
         <span className="castle-study-pressure" title={question.seenBefore ? `Enemy pressure begins rising after ${(question.pressure.graceMs + 3_000) / 1_000} seconds on this prompt.` : undefined}><Clock3 />{status}</span>
       </div>
@@ -632,7 +633,7 @@ function StudyCard({
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <div className="castle-self-grade" role="status" aria-live="polite">
             <strong>{question.answer}</strong>
-            <span>Did you recall the exact saved {question.direction === "definition_to_term" ? "term" : "meaning"} before revealing?</span>
+            <span>Did you recall what is saved in this card’s {answerField} field before revealing?</span>
             <div>
               <button aria-keyshortcuts="1" onClick={() => onSelfGrade(false)}><kbd aria-hidden="true">1</kbd>Not yet</button>
               <button aria-keyshortcuts="2" className="is-correct" onClick={() => onSelfGrade(true)}><kbd aria-hidden="true">2</kbd>Got it</button>
@@ -642,7 +643,7 @@ function StudyCard({
       ) : (
         <>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
-          <p className="castle-recall-instruction">Recall the exact saved {question.direction === "definition_to_term" ? "term" : "meaning"}. No typing required.</p>
+          <p className="castle-recall-instruction">Recall what is saved in this card’s <b>{answerField}</b> field. A reading only counts when it is saved there. No typing required.</p>
           <button className="castle-flip-card" aria-keyshortcuts="Space Enter" onClick={onReveal}><kbd aria-hidden="true">Space</kbd>Reveal answer</button>
         </>
       )}
