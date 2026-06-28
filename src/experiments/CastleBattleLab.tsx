@@ -1544,7 +1544,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {run.phase === "battle" && panelMode === "study" && question && !feedback?.wasUnseen && !feedback?.requiresCorrection && (
         <StudyCard
-          key={getStudyQuestionKey(question)}
+          key={question.instanceId}
           question={question}
           reveal={reveal}
           combatLive={simulationReady}

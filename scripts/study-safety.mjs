@@ -80,6 +80,13 @@ Math.random = reverseDirectionRandom;
 assert.equal(reverseDirectionQuestion.direction, "definition_to_term", "the reverse direction should remain independently selectable");
 assert.equal(reverseDirectionQuestion.seenBefore, false, "history in one direction must not bypass protection in the reverse direction");
 
+putDeck("single-direction", { cardRatings: { "new-2": "known" } });
+selectStudyDeck("single-direction");
+const singleFirst = drawStudyQuestion("single-direction", "quadratic");
+const singleRepeat = drawStudyQuestion("single-direction", "quadratic");
+assert.equal(singleFirst.cardId, singleRepeat.cardId, "the single-card regression should repeat the same study direction");
+assert.notEqual(singleFirst.instanceId, singleRepeat.instanceId, "repeated prompts need unique render identities so typed answers cannot carry over");
+
 putDeck("easy", { cardRatings: { "new-1": "easy", "new-2": "easy" } });
 selectStudyDeck("easy");
 assert.equal(drawStudyQuestion("easy", "quadratic").seenBefore, false, "difficulty ratings must not bypass first-exposure protection");

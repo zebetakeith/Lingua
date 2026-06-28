@@ -25,6 +25,7 @@ import {
 
 const SAVE_KEY = "lexicon_labyrinth_save";
 const STARTER_DECK_ID = "starter-japanese";
+let nextStudyQuestionInstanceId = 1;
 
 function stableCardHash(value: string): string {
   let hash = 2_166_136_261;
@@ -98,6 +99,7 @@ export interface StudyDeckSummary {
 }
 
 export interface StudyQuestion {
+  instanceId: number;
   cardId: string;
   cardFingerprint: string;
   prompt: string;
@@ -358,6 +360,7 @@ export function drawStudyQuestion(
   const questionType = chooseQuestionType(settings, selected.progress, selected.direction, recallMode);
   const seenBefore = selected.progress.seen > 0;
   return {
+    instanceId: nextStudyQuestionInstanceId++,
     cardId: selected.card.id,
     cardFingerprint: getCardFingerprint(selected.card),
     prompt: selected.direction === "term_to_definition" ? selected.card.word : selected.card.definition,
