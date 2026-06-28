@@ -903,7 +903,7 @@ function resolveBattleStep(
     units: current.units.map(unit => ({
       ...unit,
       attackCooldownMs: Math.max(0, unit.attackCooldownMs - (unit.side === "enemy"
-        ? deltaMs * enemyPressureSpeed * guardianPressure
+        ? deltaMs * enemyPressureSpeed * guardianPressure * (current.enemySlowMs > 0 ? 0 : 1)
         : deltaMs * (current.hasteMs > 0 ? 1.3 : 1))),
       slowMs: Math.max(0, unit.slowMs - deltaMs),
     })),
@@ -943,6 +943,7 @@ function resolveBattleStep(
     const castleDistance = unit.side === "player" ? CASTLE_LANE_LENGTH - unit.position : unit.position;
     const canAttackTarget = target && targetDistance <= stats.range;
     const canAttackCastle = !canAttackTarget && castleDistance <= stats.range + 3;
+    const enemyFrozen = unit.side === "enemy" && battle.enemySlowMs > 0;
     if (unit.side === "player" && unit.kind === "bubbleBud" && unit.attackCooldownMs <= 0) {
       const ally = battle.units
         .filter(candidate => candidate.side === "player" && candidate.id !== unit.id && candidate.hp > 0 && Math.abs(candidate.position - unit.position) <= 10)
@@ -953,7 +954,7 @@ function resolveBattleStep(
         return { ...unit, attackCooldownMs: 1_500 };
       }
     }
-    if ((canAttackTarget || canAttackCastle) && unit.attackCooldownMs <= 0) {
+    if (!enemyFrozen && (canAttackTarget || canAttackCastle) && unit.attackCooldownMs <= 0) {
       let damage = stats.damage;
       if (unit.side === "player" && unit.kind === "bigChonk" && hasUpgrade(upgrades, "rootMouth") && canAttackCastle) damage += 4;
       if (canAttackTarget && target) {

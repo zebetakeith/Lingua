@@ -47,6 +47,24 @@ function keepsakeRun(keepsakeId) {
   return createInitialCastleRun("mechanics", "quick", "quadratic", ALL_CASTLE_UPGRADE_IDS, 42, "balanced", keepsakeId);
 }
 
+function testUnit(kind, side, id, overrides = {}) {
+  const definition = CASTLE_UNIT_DEFS[kind];
+  return {
+    id,
+    side,
+    kind,
+    hp: definition.hp,
+    maxHp: definition.hp,
+    shield: 0,
+    position: side === "player" ? 20 : 80,
+    attackCooldownMs: 500,
+    slowMs: 0,
+    damageBonus: 0,
+    kills: 0,
+    ...overrides,
+  };
+}
+
 assert.equal(keepsakeRun("starBuckle").battle.energy, 1, "Star Buckle should grant one starting energy");
 assert.equal(keepsakeRun("shellButton").battle.playerBarrier, 10, "Shell Button should grant ten starting barrier");
 assert.equal(keepsakeRun("boltBead").battle.recallBoltCharge, 1, "Bolt Bead should grant one Recall Bolt charge");
@@ -153,6 +171,80 @@ assert.equal(live.battle.telemetry.summons, 1, "summoning must work while combat
 assert.equal(live.battle.units.some(unit => unit.kind === "dartlet"), true, "live summon should enter the lane immediately");
 live = activateCastlePower(live, "bubbleGate");
 assert.equal(live.battle.playerBarrier, 24, "castle powers must work while combat is live");
+
+let slingshot = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
+const slingshotCastleHp = slingshot.battle.enemyCastleHp;
+slingshot = activateCastlePower(slingshot, "slingshot");
+assert.equal(slingshot.battle.enemyCastleHp, slingshotCastleHp - 8, "Slingshot should strike the rival keep when the lane is empty");
+assert.equal(slingshot.battle.energy, 9.5, "Slingshot should spend its disclosed energy cost");
+
+const lockedSnack = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
+assert.equal(activateCastlePower(lockedSnack, "snackCannon"), lockedSnack, "locked castle powers must reject activation without spending energy");
+
+let snack = {
+  ...freshRun(),
+  upgrades: ["snackCannon"],
+  battle: {
+    ...freshRun().battle,
+    energy: 12,
+    playerCastleHp: 60,
+    units: [testUnit("dartlet", "player", "snack-ally", { hp: 1 })],
+  },
+};
+snack = activateCastlePower(snack, "snackCannon");
+assert.equal(snack.battle.playerCastleHp, 70, "Snack Cannon should repair ten keep HP");
+assert.equal(snack.battle.units[0].hp, CASTLE_UNIT_DEFS.dartlet.hp, "Snack Cannon should heal allies without exceeding max HP");
+
+let moat = {
+  ...freshRun(),
+  upgrades: ["gooMoat", "puddlePaws"],
+  battle: { ...freshRun().battle, energy: 12, units: [testUnit("nibbleImp", "enemy", "moat-target")] },
+};
+moat = activateCastlePower(moat, "gooMoat");
+assert.equal(moat.battle.units[0].slowMs, 6_000, "Goo Moat plus Puddle Paws should apply the upgraded lane slow");
+
+let timewobble = {
+  ...freshRun(),
+  upgrades: ["timewobbleClock"],
+  battle: { ...freshRun().battle, energy: 12, units: [testUnit("nibbleImp", "enemy", "frozen-attacker", { position: 3, attackCooldownMs: 0 })] },
+};
+timewobble = activateCastlePower(timewobble, "timewobble");
+assert.equal(timewobble.battle.enemySlowMs, 4_000, "Timewobble should freeze enemy movement and attacks for four seconds");
+const frozenCastleHp = timewobble.battle.playerCastleHp;
+timewobble = tickCastleRun(resumeCastleBattle(timewobble), 100, 1);
+assert.equal(timewobble.battle.playerCastleHp, frozenCastleHp, "an enemy already in range must not attack during Timewobble");
+
+const emptySnatch = { ...freshRun(), upgrades: ["tongueCrane"], battle: { ...freshRun().battle, energy: 12 } };
+const refundedSnatch = activateCastlePower(emptySnatch, "tongueSnatch");
+assert.equal(refundedSnatch.battle.energy, 12, "Tongue Snatch should refund all energy when no target qualifies");
+assert.equal(refundedSnatch.battle.telemetry.powersUsed, 0, "a refunded Tongue Snatch should not count as a used power");
+
+let snatch = {
+  ...freshRun(),
+  upgrades: ["tongueCrane", "nibbleTeeth", "digestor"],
+  battle: { ...freshRun().battle, energy: 12, units: [testUnit("nibbleImp", "enemy", "snatch-target", { hp: 4 })] },
+};
+snatch = activateCastlePower(snatch, "tongueSnatch");
+assert.equal(snatch.battle.units.length, 0, "Tongue Snatch should remove a weakened non-guardian enemy");
+assert.equal(snatch.battle.energy, 6.75, "Digestor should return a small energy drip after a successful snatch");
+
+let mortar = {
+  ...freshRun(),
+  upgrades: ["sporeMortar"],
+  battle: {
+    ...freshRun().battle,
+    energy: 12,
+    units: [
+      testUnit("shellSlime", "enemy", "mortar-1", { position: 30 }),
+      testUnit("shellSlime", "enemy", "mortar-2", { position: 40 }),
+      testUnit("shellSlime", "enemy", "mortar-3", { position: 50 }),
+      testUnit("shellSlime", "enemy", "mortar-4", { position: 60 }),
+    ],
+  },
+};
+mortar = activateCastlePower(mortar, "sporeMortar");
+assert.deepEqual(mortar.battle.units.map(unit => unit.hp), [10, 10, 10, 18], "Spore Mortar should damage only the three front enemies");
+assert.equal(mortar.battle.telemetry.powersUsed, 1, "successful castle powers should be represented in telemetry");
 
 let support = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
 support = summonCastleUnit(support, "dartlet");
