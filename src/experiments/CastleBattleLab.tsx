@@ -507,16 +507,29 @@ function CommandTray({
         {getPlayerSummonKinds().map(kind => {
           const unit = CASTLE_UNIT_DEFS[kind];
           return (
-            <button key={kind} disabled={run.battle.energy < unit.cost} onClick={() => onSummon(kind)}>
+            <button
+              key={kind}
+              disabled={run.battle.energy < unit.cost}
+              onClick={() => onSummon(kind)}
+              title={`${unit.name}: ${unit.role}. ${unit.hp} HP, ${unit.damage} attack, costs ${unit.cost} energy.`}
+              aria-label={`Summon ${unit.name}. ${unit.role}. ${unit.hp} HP, ${unit.damage} attack, costs ${unit.cost} energy.`}
+            >
               <SlimeFace kind={kind} side="player" />
               <strong>{unit.name}</strong>
-              <span>{unit.role}</span>
+              <span>{unit.role} · {unit.hp} HP · {unit.damage} ATK</span>
               <b>{unit.cost}</b>
             </button>
           );
         })}
         {powers.map(power => (
-          <button key={power.id} className="is-power" disabled={run.battle.energy < power.cost} onClick={() => onPower(power.id)}>
+          <button
+            key={power.id}
+            className="is-power"
+            disabled={run.battle.energy < power.cost}
+            onClick={() => onPower(power.id)}
+            title={`${power.name}: ${power.description} Costs ${power.cost} energy.`}
+            aria-label={`Use ${power.name}. ${power.description} Costs ${power.cost} energy.`}
+          >
             <Zap />
             <strong>{power.name}</strong>
             <span>{power.description}</span>
