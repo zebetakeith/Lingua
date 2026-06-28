@@ -578,7 +578,6 @@ export function getCastleStudyReport(run: CastleRunState): CastleStudyReport {
   const averageResponseMs = summary.responseMs.length > 0
     ? summary.responseMs.reduce((total, value) => total + value, 0) / summary.responseMs.length
     : 0;
-  const typedShare = gradedReviews > 0 ? summary.typedReviews / gradedReviews : 0;
   const focusDirections = Object.entries(summary.missedDirectionCounts)
     .sort(([, missesA], [, missesB]) => missesB - missesA)
     .slice(0, 3)
@@ -591,9 +590,7 @@ export function getCastleStudyReport(run: CastleRunState): CastleStudyReport {
         ? "Stay with Curved rewards and revisit this deck soon—the recall is forming, but still benefits from extra energy."
         : averageResponseMs > 7_000
           ? "Accuracy is strong. Repeat this deck once more before increasing pressure so recall can become quicker."
-          : typedShare < 0.25
-            ? "Accuracy is strong. Balanced Recall can add more typed prompts on the next expedition."
-            : "This deck handled the pressure well. A longer contract or Steep rewards is a fair next challenge.";
+          : "This deck handled the pressure well. A longer contract or Steep rewards is a fair next challenge.";
   return {
     ...summary,
     accuracy,
@@ -1248,7 +1245,9 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
       correct: run.battle.telemetry.correct + (graded && outcome.isCorrect ? 1 : 0),
       wrong: run.battle.telemetry.wrong + (graded && !outcome.isCorrect ? 1 : 0),
       unseen: run.battle.telemetry.unseen + (outcome.wasUnseen ? 1 : 0),
-      responseMs: [...run.battle.telemetry.responseMs, Math.max(0, outcome.responseMs)].slice(-200),
+      responseMs: graded
+        ? [...run.battle.telemetry.responseMs, Math.max(0, outcome.responseMs)].slice(-200)
+        : run.battle.telemetry.responseMs,
     },
   };
   let notice = "Review recorded.";

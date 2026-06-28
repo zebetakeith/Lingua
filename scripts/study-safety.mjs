@@ -8,7 +8,7 @@ globalThis.localStorage = {
   clear: () => values.clear(),
 };
 
-const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, isTypedStudyAnswerCorrect, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
+const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
 const { createDirectionStudyProgress, getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, updateDirectionStudyProgress } = await import("../src/game/study.ts");
 
 const cards = [
@@ -85,7 +85,7 @@ selectStudyDeck("single-direction");
 const singleFirst = drawStudyQuestion("single-direction", "quadratic");
 const singleRepeat = drawStudyQuestion("single-direction", "quadratic");
 assert.equal(singleFirst.cardId, singleRepeat.cardId, "the single-card regression should repeat the same study direction");
-assert.notEqual(singleFirst.instanceId, singleRepeat.instanceId, "repeated prompts need unique render identities so typed answers cannot carry over");
+assert.notEqual(singleFirst.instanceId, singleRepeat.instanceId, "repeated prompts need unique render identities so local answer state cannot carry over");
 
 putDeck("easy", { cardRatings: { "new-1": "easy", "new-2": "easy" } });
 selectStudyDeck("easy");
@@ -195,11 +195,6 @@ assert.equal(oneCardQuestion.options.length, 4, "a one-card deck should still re
 assert.equal(new Set(oneCardQuestion.options).size, 4, "fallback recognition choices should remain unique");
 assert.ok(oneCardQuestion.options.includes(oneCardQuestion.answer), "fallback choices must retain the correct answer");
 
-assert.equal(isTypedStudyAnswerCorrect("The water!", "water", "term_to_definition"), true, "typed meanings should ignore leading articles, case, and punctuation");
-assert.equal(isTypedStudyAnswerCorrect("liquid", "water; liquid", "term_to_definition"), true, "typed recall should accept explicit answer variants");
-assert.equal(isTypedStudyAnswerCorrect("liquid", "water, liquid", "term_to_definition"), true, "comma-separated meaning synonyms should not create false misses");
-assert.equal(isTypedStudyAnswerCorrect("dont", "don't", "term_to_definition"), true, "apostrophe differences should not create false misses");
-assert.equal(isTypedStudyAnswerCorrect("cafe", "café", "definition_to_term"), false, "meaningful spelling marks should remain part of foreign-term recall");
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 3_000), 5_000, "completed command time must be excluded from recall timing");
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 2_000, 7_000), 4_000, "an open command panel must be excluded from recall timing");
 assert.equal(getActiveStudyResponseMs(9_000, 1_000, 0), 0, "clock drift must never create a negative response time");
@@ -218,7 +213,7 @@ const earlyMiss = updateDirectionStudyProgress(scheduledProgress, false, "multip
 assert.equal(earlyMiss.dueAt, reviewNow, "an early miss should become due immediately");
 assert.ok(earlyMiss.mastery < scheduledProgress.mastery, "an early miss should still provide full forgetting evidence");
 
-putDeck("balanced-typing", {
+putDeck("balanced-production", {
   studySettings: {
     ...settings,
     askTermToDefinition: false,
@@ -226,10 +221,10 @@ putDeck("balanced-typing", {
   },
   directionProgress: { "new-1::definition_to_term": progress(3) },
 });
-selectStudyDeck("balanced-typing");
+selectStudyDeck("balanced-production");
 Math.random = () => 0;
-const typedQuestion = drawStudyQuestion("balanced-typing", "quadratic", undefined, "balanced");
+const productionQuestion = drawStudyQuestion("balanced-production", "quadratic", undefined, "balanced");
 Math.random = originalRandom;
-assert.equal(typedQuestion.questionType, "typed", "balanced recall should type familiar definition-to-term directions");
+assert.equal(productionQuestion.questionType, "self_grade", "balanced production recall should reveal and self-grade without typing");
 
 process.stdout.write("Study safety assertions passed.\n");

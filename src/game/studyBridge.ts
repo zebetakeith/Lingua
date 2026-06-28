@@ -405,41 +405,6 @@ export function isStudyQuestionUnavailableError(error: unknown): boolean {
   );
 }
 
-function normalizeTypedAnswer(value: string, direction: StudyDirection): string {
-  let normalized = value
-    .normalize("NFKC")
-    .toLocaleLowerCase()
-    .replace(/[’']/g, "")
-    .replace(/[\p{P}\p{S}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (direction === "term_to_definition") {
-    normalized = normalized.replace(/^(?:a|an|the|to)\s+/, "");
-  }
-  return normalized;
-}
-
-function getTypedAnswerVariants(answer: string, direction: StudyDirection): string[] {
-  const separator = direction === "term_to_definition"
-    ? /\s*(?:\/|;|\||,|\bor\b)\s*/iu
-    : /\s*(?:\/|;|\||\bor\b)\s*/iu;
-  const pieces = answer.split(separator).filter(Boolean);
-  return Array.from(new Set(pieces.flatMap(piece => {
-    const withoutParenthetical = piece.replace(/\s*\([^)]*\)\s*/g, " ");
-    return [piece, withoutParenthetical].map(value => normalizeTypedAnswer(value, direction)).filter(Boolean);
-  })));
-}
-
-export function isTypedStudyAnswerCorrect(
-  input: string,
-  answer: string,
-  direction: StudyDirection,
-): boolean {
-  const normalizedInput = normalizeTypedAnswer(input, direction);
-  if (!normalizedInput) return false;
-  return getTypedAnswerVariants(answer, direction).includes(normalizedInput);
-}
-
 export function answerStudyQuestion(
   deckId: string,
   question: StudyQuestion,

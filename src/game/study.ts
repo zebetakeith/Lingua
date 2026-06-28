@@ -1,7 +1,7 @@
 export type StudyDirection = "term_to_definition" | "definition_to_term";
 export type StudyQuestionType = "multiple_choice" | "self_grade" | "typed";
 export type StudyRewardCurve = "current" | "quadratic" | "steep";
-export type StudyRecallMode = "balanced" | "deck" | "typed";
+export type StudyRecallMode = "balanced" | "deck";
 
 export interface StudyPressureProfile {
   label: "Struggling" | "Learning" | "Familiar" | "Strong" | "Mastered";
@@ -145,9 +145,8 @@ export function chooseQuestionType(
   direction?: StudyDirection,
   recallMode: StudyRecallMode = "deck",
 ): StudyQuestionType {
-  if (recallMode === "typed") return "typed";
   if (recallMode === "balanced") {
-    if (direction === "definition_to_term" && progress.mastery >= 0.42) return "typed";
+    if (direction === "definition_to_term" && progress.mastery >= 0.42) return "self_grade";
     if (direction === "term_to_definition" && progress.mastery >= 0.76 && settings.useSelfGrade) return "self_grade";
   }
   const enabled = getEnabledQuestionTypes(settings);

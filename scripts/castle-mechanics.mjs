@@ -104,6 +104,7 @@ assert.equal(unseen.battle.energy, 0.25, "a completed first exposure should gran
 assert.equal(unseen.studySummary.exposures, 1, "the learning report should count safe first exposures");
 assert.equal(unseen.studySummary.gradedReviews, 0, "safe first exposures must stay out of graded accuracy");
 assert.equal(unseen.studySummary.responseMs.length, 0, "reading time for first exposures must stay out of recall pace");
+assert.equal(unseen.battle.telemetry.responseMs.length, 0, "balance telemetry must not mislabel first-exposure reading time as recall latency");
 
 const typedRecall = applyCastleStudyOutcome(freshRun(), outcome(0, {
   reward: 1.8,
@@ -212,6 +213,7 @@ reviewProgress = saveCastleRun("mechanics", { ...freshRun(), reviews: 3 });
 assert.equal(reviewProgress.totalReviews, startingTotalReviews + 7, "review totals should accumulate across separate runs");
 const legacyStudySave = JSON.parse(localStorage.getItem("lexicon_labyrinth_castle_runs_v1"));
 delete legacyStudySave.mechanics.run.studySummary;
+legacyStudySave.mechanics.run.recallMode = "typed";
 delete legacyStudySave.mechanics.run.upgrades;
 delete legacyStudySave.mechanics.run.draftPoolIds;
 delete legacyStudySave.mechanics.run.eventHistory;
@@ -222,6 +224,7 @@ delete legacyStudySave.mechanics.run.battle.telemetry.responseMs;
 legacyStudySave.mechanics.run.battle.units.push({ kind: "retired-prototype-enemy", side: "enemy" });
 localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify(legacyStudySave));
 const restoredLegacyRun = loadCastleRun("mechanics");
+assert.equal(restoredLegacyRun.recallMode, "balanced", "legacy typing runs should migrate to non-typing Balanced Recall");
 assert.deepEqual(
   restoredLegacyRun.studySummary,
   { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [], missedDirectionCounts: {} },

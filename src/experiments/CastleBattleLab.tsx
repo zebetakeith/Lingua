@@ -30,7 +30,6 @@ import {
   getStudyQuestionKey,
   introduceStudyCards,
   isStudyQuestionUnavailableError,
-  isTypedStudyAnswerCorrect,
   selectStudyDeck,
   tryDrawStudyQuestion,
   type StudyAnswerResult,
@@ -123,12 +122,10 @@ const REWARD_CURVE_HELP: Record<StudyRewardCurve, string> = {
 const RECALL_MODE_LABELS: Record<StudyRecallMode, string> = {
   balanced: "Balanced recall",
   deck: "Deck default",
-  typed: "Type every answer",
 };
 const RECALL_MODE_HELP: Record<StudyRecallMode, string> = {
-  balanced: "Recommended: recognition first, then typed foreign-term recall as mastery grows.",
+  balanced: "Recommended: recognition first, then reveal and self-grade production recall as mastery grows.",
   deck: "Use the multiple-choice and self-grade rules already saved with this deck.",
-  typed: "Type every seen answer for maximum production practice.",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
 const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
@@ -533,7 +530,6 @@ function StudyCard({
   combatLive,
   interrupted,
   onOption,
-  onTyped,
   onReveal,
   onSelfGrade,
   onExpose,
@@ -544,20 +540,17 @@ function StudyCard({
   combatLive: boolean;
   interrupted: boolean;
   onOption: (option: string) => void;
-  onTyped: (answer: string) => void;
   onReveal: () => void;
   onSelfGrade: (correct: boolean) => void;
   onExpose: () => void;
   onResume: () => void;
 }) {
-  const [typedAnswer, setTypedAnswer] = useState("");
   const promptRef = useRef<HTMLHeadingElement | null>(null);
   const onOptionRef = useRef(onOption);
   useEffect(() => {
     onOptionRef.current = onOption;
   }, [onOption]);
   useEffect(() => {
-    if (question.seenBefore && question.questionType === "typed" && !interrupted) return;
     const focusFrame = window.requestAnimationFrame(() => promptRef.current?.focus({ preventScroll: true }));
     return () => window.cancelAnimationFrame(focusFrame);
   }, [interrupted, question.cardId, question.direction, question.questionType, question.seenBefore, reveal]);
@@ -606,28 +599,6 @@ function StudyCard({
         <>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <button className="castle-resume-card" onClick={onResume}><Play />Resume this prompt</button>
-        </>
-      ) : question.questionType === "typed" ? (
-        <>
-          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
-          <form className="castle-typed-answer" onSubmit={event => {
-            event.preventDefault();
-            if (typedAnswer.trim()) onTyped(typedAnswer);
-          }}>
-            <label htmlFor={`castle-typed-${question.cardId}`}>Type the {question.direction === "definition_to_term" ? "term" : "meaning"}</label>
-            <input
-              id={`castle-typed-${question.cardId}`}
-              value={typedAnswer}
-              onChange={event => setTypedAnswer(event.target.value)}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              enterKeyHint="done"
-              autoFocus
-            />
-            <small>Case and punctuation are ignored. Meaning alternatives separated by /, commas, or ; are accepted.</small>
-            <button type="submit" disabled={!typedAnswer.trim()}><ChevronRight />Check recall</button>
-          </form>
         </>
       ) : question.questionType === "multiple_choice" ? (
         <>
@@ -843,7 +814,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Clock3,
     eyebrow: "Live recall",
     title: "Seen cards keep the battle moving",
-    copy: "Once taught, combat continues while you answer. Each prompt has a short grace window, then enemy speed rises until you answer. Harder cards pay more energy.",
+    copy: "Once taught, combat continues while you answer. Balanced Recall uses choices for recognition and reveal/self-grade for production. Harder cards pay more energy.",
   },
   {
     icon: Swords,
@@ -1550,7 +1521,6 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
           combatLive={simulationReady}
           interrupted={interrupted}
           onOption={option => finishReview(option === question.answer)}
-          onTyped={answer => finishReview(isTypedStudyAnswerCorrect(answer, question.answer, question.direction))}
           onReveal={revealAnswer}
           onSelfGrade={finishReview}
           onExpose={finishExposure}
@@ -1751,7 +1721,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <div className="castle-learning-metrics">
                 <span><b>{Math.round(studyReport.accuracy * 100)}%</b><small>graded accuracy</small></span>
                 <span><b>{studyReport.averageResponseMs > 0 ? `${Math.round(studyReport.averageResponseMs / 100) / 10}s` : "—"}</b><small>active recall pace</small></span>
-                <span><b>{studyReport.typedReviews}</b><small>typed recalls</small></span>
+                <span><b>{studyReport.gradedReviews}</b><small>graded recalls</small></span>
                 <span><b>{studyReport.difficultRecalls}</b><small>difficult wins</small></span>
               </div>
               <p>{studyReport.exposures} safe first exposure{studyReport.exposures === 1 ? "" : "s"} · {studyReport.dueReviews} due prompt{studyReport.dueReviews === 1 ? "" : "s"} practiced</p>
@@ -1856,7 +1826,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. Seen prompts begin with a short grace window, then enemy speed rises until you answer. A miss keeps combat live, pulls the next wave closer, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip. At three pips, Mallow fires a 3-damage Moon Volley and summons a bonus squad.</p>
-            <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; multiple-choice prompts also accept keys 1–4. Deck Default and Type Every Answer remain available in settings.</p>
+            <p>Balanced Recall uses multiple choice for recognition, then reveal and self-grade for production. Recall the exact deck term in your head before revealing it; multiple-choice prompts also accept keys 1–4. Deck Default remains available in settings.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>

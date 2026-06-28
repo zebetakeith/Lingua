@@ -48,7 +48,7 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
   if (saved.version !== CASTLE_RUN_VERSION || !saved.battle) return null;
   const contractId: CastleContractId = saved.contractId in CASTLE_CONTRACTS ? saved.contractId : "regular";
   const rewardCurve = ["current", "quadratic", "steep"].includes(saved.rewardCurve) ? saved.rewardCurve : "quadratic";
-  const recallMode = ["balanced", "deck", "typed"].includes(saved.recallMode) ? saved.recallMode : "balanced";
+  const recallMode = saved.recallMode === "deck" ? "deck" : "balanced";
   const keepsakeId = saved.keepsakeId && ALL_CASTLE_KEEPSAKE_IDS.includes(saved.keepsakeId) ? saved.keepsakeId : null;
   const upgrades = Array.isArray(saved.upgrades) ? saved.upgrades.filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id)) : [];
   const draftPoolIds = Array.isArray(saved.draftPoolIds)
