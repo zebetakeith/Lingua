@@ -124,8 +124,8 @@ const RECALL_MODE_LABELS: Record<StudyRecallMode, string> = {
   deck: "Deck default",
 };
 const RECALL_MODE_HELP: Record<StudyRecallMode, string> = {
-  balanced: "Recommended: recognition first, then reveal and self-grade production recall as mastery grows.",
-  deck: "Use the multiple-choice and self-grade rules already saved with this deck.",
+  balanced: "Recommended: recognition first, then reveal and self-grade the named Term or Meaning field as mastery grows.",
+  deck: "Use the multiple-choice and self-grade rules saved with this deck. Typing stays disabled.",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
 const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
@@ -837,7 +837,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Clock3,
     eyebrow: "Live recall",
     title: "Seen cards keep the battle moving",
-    copy: "Once taught, combat continues while you answer. Balanced Recall uses choices for recognition and reveal/self-grade for production. Harder cards pay more energy.",
+    copy: "Once taught, combat continues while you answer. Balanced Recall uses choices for recognition and reveal/self-grade for production, always naming the expected Term or Meaning field. Harder cards pay more energy.",
   },
   {
     icon: Swords,
@@ -1859,7 +1859,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. Seen prompts begin with a short grace window, then enemy speed rises until you answer. A miss keeps combat live, pulls the next wave closer, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip. At three pips, Mallow fires a 3-damage Moon Volley and summons a bonus squad.</p>
-            <p>Balanced Recall uses multiple choice for recognition, then reveal and self-grade for production. Recall the exact deck term in your head before revealing it. Choices accept 1–4; self-grade accepts Space or Enter to reveal, then 1 for Not yet or 2 for Got it. Deck Default remains available in settings.</p>
+            <p>Balanced Recall uses multiple choice for recognition, then reveal and self-grade for production. Every prompt names whether it expects the saved Term or Meaning field; a reading only counts when it is saved in that field. Choices accept 1–4; self-grade accepts Space or Enter to reveal, then 1 for Not yet or 2 for Got it. Deck Default remains available in settings, and typing stays disabled in both modes.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
