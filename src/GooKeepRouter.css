@@ -20,6 +20,10 @@ button:not(:disabled) { cursor: pointer; }
 .goo-route-loading-spark { color: #d4a92e; font-size: 36px; line-height: 1; animation: goo-route-pulse 900ms ease-in-out infinite alternate; }
 .goo-route-loading-card b { font-size: 16px; }
 .goo-route-loading-card small { font-size: 11px; opacity: 0.74; }
+.goo-route-recovery .goo-route-loading-card > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.goo-route-recovery button { min-height: 42px; padding: 8px 15px; color: white; background: #2d8584; border: 0; border-radius: 12px; font-size: 12px; font-weight: 900; box-shadow: 0 4px 0 #1c6265; }
+.goo-route-recovery button.is-quiet { color: #285f63; background: #eef2df; box-shadow: 0 4px 0 #cbd4ba; }
+.goo-route-recovery button:focus-visible { outline: 3px solid #174f54; outline-offset: 3px; }
 
 @keyframes goo-route-pulse { from { opacity: 0.45; transform: scale(0.86); } to { opacity: 1; transform: scale(1.08); } }
 
