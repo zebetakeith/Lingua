@@ -99,6 +99,7 @@ export interface StudyDeckSummary {
 
 export interface StudyQuestion {
   cardId: string;
+  cardFingerprint: string;
   prompt: string;
   answer: string;
   definition: string;
@@ -357,6 +358,7 @@ export function drawStudyQuestion(
   const seenBefore = selected.progress.seen > 0;
   return {
     cardId: selected.card.id,
+    cardFingerprint: getCardFingerprint(selected.card),
     prompt: selected.direction === "term_to_definition" ? selected.card.word : selected.card.definition,
     answer: selected.direction === "term_to_definition" ? selected.card.definition : selected.card.word,
     definition: selected.card.definition,
@@ -436,7 +438,7 @@ export function answerStudyQuestion(
   let answerResult: StudyAnswerResult | null = null;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    if (!card || deck.cardRatings?.[card.id] === "known") return deck;
+    if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
     const nextDirection = updateDirectionStudyProgress(currentDirection, isCorrect, question.questionType);
@@ -491,7 +493,7 @@ export function completeStudyExposure(
   let exposureResult: StudyAnswerResult | null = null;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    if (!card || deck.cardRatings?.[card.id] === "known") return deck;
+    if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
     const now = Date.now();

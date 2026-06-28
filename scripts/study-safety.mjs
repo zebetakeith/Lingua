@@ -91,6 +91,18 @@ assert.throws(
   "an unseen card marked known outside the game should be skipped instead of completing a stale lesson",
 );
 
+putDeck("edited-live");
+selectStudyDeck("edited-live");
+const staleQuestion = drawStudyQuestion("edited-live", "quadratic");
+putDeck("edited-live", {
+  cards: cards.map(card => card.id === staleQuestion.cardId ? { ...card, definition: `${card.definition} edited` } : card),
+});
+assert.throws(
+  () => answerStudyQuestion("edited-live", staleQuestion, true),
+  isStudyQuestionUnavailableError,
+  "editing a live card should not apply a stale answer to its new content",
+);
+
 putDeck("duplicate", {
   cards: [
     { ...cards[0], id: "reused-id", word: "old-word", definition: "old meaning" },
