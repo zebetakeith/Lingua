@@ -580,7 +580,7 @@ function StudyCard({
     ? "First exposure · combat safely paused"
     : interrupted
       ? "Interrupted · combat paused"
-      : `Combat live · ${question.pressure.combatSpeed}×`;
+      : `Combat live · ${question.pressure.combatSpeed}× then faster`;
   return (
     <section className={`castle-study-card ${combatLive ? "is-live" : ""} ${!question.seenBefore ? "is-new" : ""}`}>
       <div className="castle-study-meta">
@@ -843,7 +843,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Clock3,
     eyebrow: "Live recall",
     title: "Seen cards keep the battle moving",
-    copy: "Once taught, combat continues while you answer. Harder cards pay more energy; each miss pulls the next wave closer. Three Rally pips trigger Mallow's Moon Volley and a bonus squad.",
+    copy: "Once taught, combat continues while you answer. Each prompt has a short grace window, then enemy speed rises until you answer. Harder cards pay more energy.",
   },
   {
     icon: Swords,
@@ -1832,7 +1832,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p className="castle-eyebrow">How Goo Keep works</p>
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
-            <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live, pulls the next wave closer, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip. At three pips, Mallow fires a 3-damage Moon Volley and summons a bonus squad.</p>
+            <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. Seen prompts begin with a short grace window, then enemy speed rises until you answer. A miss keeps combat live, pulls the next wave closer, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip. At three pips, Mallow fires a 3-damage Moon Volley and summons a bonus squad.</p>
             <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; multiple-choice prompts also accept keys 1–4. Deck Default and Type Every Answer remain available in settings.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
