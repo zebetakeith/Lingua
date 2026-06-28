@@ -1297,15 +1297,25 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     if (!ignoresFirst) {
       battle.rally += 1;
       battle.missedDirectionKeys = [...battle.missedDirectionKeys, outcome.progressKey];
+      battle.enemySpawnTimerMs = Math.max(750, battle.enemySpawnTimerMs - (900 + (battle.rally * 300)));
     }
     if (battle.rally >= CASTLE_RALLY_LIMIT) {
       battle.rally = 0;
       battle.missedDirectionKeys = [];
       battle = addUnit(addUnit(battle, "enemy", "nibbleImp", run.upgrades), "enemy", battle.guardian ? "sporeBud" : "shellSlime", run.upgrades);
+      const rallyVolley = 3;
+      const barrierAbsorbed = Math.min(battle.playerBarrier, rallyVolley);
+      const keepDamage = rallyVolley - barrierAbsorbed;
+      battle.playerBarrier -= barrierAbsorbed;
+      battle.playerCastleHp = Math.max(0, battle.playerCastleHp - keepDamage);
+      battle.telemetry.damageTaken += keepDamage;
+      battle = addBattleFx(battle, "projectile", "enemy", 2, keepDamage > 0 ? `${keepDamage}` : "Blocked", 88);
       battle.telemetry.rallyTriggered += 1;
-      notice = "Enemy Rally! A bonus squad joined the next wave.";
+      notice = "Enemy Rally! Mallow's Moon Volley struck and a bonus squad joined the lane.";
     } else {
-      notice = ignoresFirst ? "Rally Lantern softened the first miss." : `Enemy Rally ${battle.rally}/${CASTLE_RALLY_LIMIT}.`;
+      notice = ignoresFirst
+        ? "Rally Lantern softened the first miss."
+        : `Enemy Rally ${battle.rally}/${CASTLE_RALLY_LIMIT}: the next wave moved closer.`;
     }
   }
   battle.notice = notice;

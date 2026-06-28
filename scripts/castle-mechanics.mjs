@@ -129,6 +129,7 @@ assert.equal(reconstructedReport.exposures, 3, "legacy reports should infer the 
 assert.equal(reconstructedReport.accuracy, 7 / 9, "legacy report accuracy must stay within the valid range");
 
 let rally = freshRun();
+const rallyWaveBefore = rally.battle.enemySpawnTimerMs;
 for (let index = 0; index < 3; index += 1) {
   rally = applyCastleStudyOutcome(rally, outcome(index, { isCorrect: false, reward: 0 }));
 }
@@ -136,6 +137,9 @@ assert.equal(rally.battle.rally, 0, "three misses should consume the Rally meter
 assert.equal(rally.battle.telemetry.rallyTriggered, 1, "three misses should trigger one enemy rally");
 assert.equal(rally.battle.units.filter(unit => unit.side === "enemy").length, 2, "enemy rally should add a two-unit squad");
 assert.equal(rally.battle.missedDirectionKeys.length, 0, "a triggered Rally must consume its recovery keys");
+assert.equal(rally.battle.playerCastleHp, 97, "an unshielded Rally should land a small Moon Volley instead of creating an all-or-nothing pressure cliff");
+assert.equal(rally.battle.telemetry.damageTaken, 3, "Moon Volley damage should be represented in battle telemetry");
+assert.ok(rally.battle.enemySpawnTimerMs < rallyWaveBefore, "misses should pull the next regular enemy wave closer before Rally triggers");
 
 let live = resumeCastleBattle({ ...freshRun(), battle: { ...freshRun().battle, energy: 12 } });
 live = summonCastleUnit(live, "dartlet");

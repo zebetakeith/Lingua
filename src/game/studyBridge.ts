@@ -372,6 +372,13 @@ export function tryDrawStudyQuestion(
   }
 }
 
+export function isStudyQuestionUnavailableError(error: unknown): boolean {
+  return error instanceof Error && (
+    error.message === "The reviewed card is no longer available."
+    || error.message === "The introduced card is no longer available."
+  );
+}
+
 function normalizeTypedAnswer(value: string, direction: StudyDirection): string {
   let normalized = value
     .normalize("NFKC")
@@ -412,7 +419,7 @@ export function answerStudyQuestion(
   let answerResult: StudyAnswerResult | null = null;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    if (!card) return deck;
+    if (!card || deck.cardRatings?.[card.id] === "known") return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
     const nextDirection = updateDirectionStudyProgress(currentDirection, isCorrect, question.questionType);
@@ -467,7 +474,7 @@ export function completeStudyExposure(
   let exposureResult: StudyAnswerResult | null = null;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    if (!card) return deck;
+    if (!card || deck.cardRatings?.[card.id] === "known") return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
     const now = Date.now();

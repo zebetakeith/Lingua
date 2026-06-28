@@ -200,6 +200,7 @@ const validation = {
   incompleteFullRuns: fullRuns.filter(row => row.result !== "complete").length,
   pressureWins: pressureRuns.filter(row => row.result === "complete").length,
   pressureLosses: pressureRuns.filter(row => row.result === "lost").length,
+  pressuredMidRuns: pressureRuns.filter(row => row.correctRate === 0.65 && row.result === "complete" && row.damageTaken > 0).length,
 };
 
 if (process.argv.includes("--quiet")) {
@@ -212,4 +213,5 @@ if (
   || validation.incompleteFullRuns > 0
   || validation.pressureWins === 0
   || validation.pressureLosses === 0
+  || validation.pressuredMidRuns === 0
 ) process.exitCode = 1;

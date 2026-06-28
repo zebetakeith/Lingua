@@ -28,6 +28,7 @@ import {
   getStudyDecks,
   getStudyQuestionKey,
   introduceStudyCards,
+  isStudyQuestionUnavailableError,
   isTypedStudyAnswerCorrect,
   selectStudyDeck,
   tryDrawStudyQuestion,
@@ -841,7 +842,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Clock3,
     eyebrow: "Live recall",
     title: "Seen cards keep the battle moving",
-    copy: "Once taught, combat continues while you answer. Balanced recall asks familiar foreign terms by typing; harder cards pay more energy and misses advance Enemy Rally.",
+    copy: "Once taught, combat continues while you answer. Harder cards pay more energy; each miss pulls the next wave closer. Three Rally pips trigger Mallow's Moon Volley and a bonus squad.",
   },
   {
     icon: Swords,
@@ -1253,7 +1254,18 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const firesRecallBolt = correct && question.seenBefore && run.battle.recallBoltCharge === CASTLE_RECALL_BOLT_LIMIT - 1;
     playCastleSound(firesRecallBolt ? "bolt" : correct ? "correct" : "wrong", soundEnabled);
     if (correct && question.seenBefore) triggerPipploAnimation("cast");
-    const result: StudyAnswerResult = answerStudyQuestion(selectedDeckId, question, correct);
+    let result: StudyAnswerResult;
+    try {
+      result = answerStudyQuestion(selectedDeckId, question, correct);
+    } catch (error) {
+      if (!isStudyQuestionUnavailableError(error)) throw error;
+      beginQuestion(
+        pauseCastleBattle(run, "That card changed outside Goo Keep, so the prompt was safely skipped."),
+        getStudyQuestionKey(question),
+      );
+      setDecks(getStudyDecks());
+      return;
+    }
     const responseMs = getQuestionResponseMs();
     const outcome = {
       isCorrect: correct,
@@ -1307,7 +1319,18 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const finishExposure = () => {
     if (!question || !run || question.seenBefore) return;
     playCastleSound("correct", soundEnabled);
-    const result = completeStudyExposure(selectedDeckId, question);
+    let result: StudyAnswerResult;
+    try {
+      result = completeStudyExposure(selectedDeckId, question);
+    } catch (error) {
+      if (!isStudyQuestionUnavailableError(error)) throw error;
+      beginQuestion(
+        pauseCastleBattle(run, "That card changed outside Goo Keep, so the lesson was safely skipped."),
+        getStudyQuestionKey(question),
+      );
+      setDecks(getStudyDecks());
+      return;
+    }
     const previousKey = getStudyQuestionKey(question);
     const outcome = {
       isCorrect: true,
@@ -1687,7 +1710,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <div className="castle-guide-meter-grid">
               <span><Sparkles /><b>Energy</b><small>Correct recalls fund summons and castle powers.</small></span>
               <span><Zap /><b>Recall Bolt</b><small>Five correct seen recalls deal 8 damage directly to the rival keep.</small></span>
-              <span><Swords /><b>Enemy Rally</b><small>A miss adds a pip. Recall that direction later to clear one; three uncleared pips summon a bonus squad.</small></span>
+              <span><Swords /><b>Enemy Rally</b><small>A miss pulls the next wave closer and adds a pip. Recall that direction later to clear one; three pips fire a 3-damage Moon Volley and summon a bonus squad.</small></span>
               <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy so you can choose what to buy.</small></span>
               <span><Castle /><b>Guardian phases</b><small>At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
             </div>
@@ -1754,7 +1777,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p className="castle-eyebrow">How Goo Keep works</p>
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
-            <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip before it triggers.</p>
+            <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. A miss keeps combat live, pulls the next wave closer, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip. At three pips, Mallow fires a 3-damage Moon Volley and summons a bonus squad.</p>
             <p>Balanced Recall uses recognition while a direction is fragile, then asks you to type familiar foreign terms. Case and punctuation are ignored; multiple-choice prompts also accept keys 1–4. Deck Default and Type Every Answer remain available in settings.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
