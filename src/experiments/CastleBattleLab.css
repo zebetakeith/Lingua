@@ -333,6 +333,7 @@
 .castle-self-grade { display: grid; gap: 10px; padding: 16px; text-align: center; background: #e7f4df; border: 2px solid #b9dbad; border-radius: 18px; }
 .castle-self-grade strong { font-size: 20px; overflow-wrap: anywhere; }
 .castle-self-grade span { font-size: 12px; }
+.castle-self-grade small { color: #52706c; font-size: 10px; font-weight: 800; }
 .castle-self-grade > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .castle-self-grade button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; color: #164f54; background: white; border: 0; border-radius: 13px; font-weight: 900; }
 .castle-self-grade button:not(.is-correct) kbd { background: #e8f1dc; border-color: #cadcb8; }

@@ -634,6 +634,7 @@ function StudyCard({
           <div className="castle-self-grade" role="status" aria-live="polite">
             <strong>{question.answer}</strong>
             <span>Did you recall what is saved in this card’s {answerField} field before revealing?</span>
+            <small>Recall time stopped when you revealed. Combat keeps moving while you grade honestly.</small>
             <div>
               <button aria-keyshortcuts="1" onClick={() => onSelfGrade(false)}><kbd aria-hidden="true">1</kbd>Not yet</button>
               <button aria-keyshortcuts="2" className="is-correct" onClick={() => onSelfGrade(true)}><kbd aria-hidden="true">2</kbd>Got it</button>
@@ -919,6 +920,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const questionStartedAt = useRef(0);
   const questionCommandMs = useRef(0);
   const questionCommandStartedAt = useRef<number | null>(null);
+  const questionRevealedAt = useRef<number | null>(null);
+  const questionResponseAtRevealMs = useRef<number | null>(null);
   const lastSaveAt = useRef(0);
   const latestRun = useRef<CastleRunState | null>(initial.run);
   const previousPhase = useRef<CastleRunState["phase"] | null>(initial.run?.phase || null);
@@ -1012,7 +1015,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const calmMultiplier = run?.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 0.75 : 1;
     const timer = window.setInterval(() => {
       const pressureSpeed = question
-        ? getEscalatedStudyCombatSpeed(question.pressure, Math.max(0, Date.now() - questionStartedAt.current))
+        ? getEscalatedStudyCombatSpeed(question.pressure, Math.max(0, (questionRevealedAt.current ?? Date.now()) - questionStartedAt.current))
         : 1;
       setRun(current => current ? tickCastleRun(current, 100, pressureSpeed * calmMultiplier) : current);
     }, 100);
@@ -1124,6 +1127,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     questionStartedAt.current = Date.now();
     questionCommandMs.current = 0;
     questionCommandStartedAt.current = null;
+    questionRevealedAt.current = null;
+    questionResponseAtRevealMs.current = null;
   }, []);
 
   const getQuestionResponseMs = useCallback(() => {
@@ -1288,7 +1293,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       setDecks(getStudyDecks());
       return;
     }
-    const responseMs = getQuestionResponseMs();
+    const responseMs = question.questionType === "self_grade" && questionResponseAtRevealMs.current !== null
+      ? questionResponseAtRevealMs.current
+      : getQuestionResponseMs();
     const outcome = {
       isCorrect: correct,
       wasUnseen: result.wasUnseen,
@@ -1385,6 +1392,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   };
 
   const revealAnswer = () => {
+    if (questionRevealedAt.current === null) {
+      questionRevealedAt.current = Date.now();
+      questionResponseAtRevealMs.current = getQuestionResponseMs();
+    }
     setReveal(true);
   };
 
