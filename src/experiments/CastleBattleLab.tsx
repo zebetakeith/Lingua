@@ -1561,8 +1561,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       {run.phase === "battle" && panelMode === "study" && !question && studyBlocked && (
         <section className="castle-study-blocked" role="status">
           <BookOpen />
-          <div><b>No active cards remain</b><span>Every review from this expedition is saved. Return to setup to add cards, change ratings, or choose another study world.</span></div>
-          <button onClick={resetRun}><ArrowLeft />Return to run setup</button>
+          <div><b>No active cards remain</b><span>Every review and permanent discovery is saved. You can keep this run while managing the deck, or end its temporary build and return to setup.</span></div>
+          <div className="castle-study-blocked-actions">
+            <button onClick={exitToMenu}><BookOpen />Save run &amp; manage deck</button>
+            <button className="is-quiet" onClick={resetRun}><ArrowLeft />End run &amp; return to setup</button>
+          </div>
         </section>
       )}
 
