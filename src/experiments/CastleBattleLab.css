@@ -437,6 +437,12 @@
 .castle-reward-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
 .castle-reward-grid button { position: relative; display: grid; gap: 6px; min-height: 145px; padding: 14px; color: var(--castle-ink); background: white; border: 3px solid color-mix(in srgb, var(--reward-accent), white 42%); border-radius: 18px; text-align: left; box-shadow: 0 5px 0 color-mix(in srgb, var(--reward-accent), transparent 75%); }
 .castle-reward-grid button span { color: var(--reward-accent); font-size: 8px; font-weight: 1000; text-transform: uppercase; }
+.castle-discovery-banner { display: grid; grid-template-columns: 30px 1fr; gap: 8px; align-items: center; margin: 9px 0; padding: 10px; color: #594f1c; background: linear-gradient(135deg, #fff2ae, #fff9d8); border: 2px solid rgba(208, 165, 44, 0.28); border-radius: 14px; text-align: left; }
+.castle-discovery-banner > svg { width: 25px; color: #d2a323; }
+.castle-discovery-banner > div { display: grid; gap: 2px; }
+.castle-discovery-banner b { font-size: 10px; }
+.castle-discovery-banner span { font-size: 8px; line-height: 1.35; }
+.castle-discovery-banner.is-result { margin: 8px 0 12px; }
 .castle-reward-grid button strong { font-size: 14px; }
 .castle-reward-grid button small { font-size: 10px; line-height: 1.35; }
 .castle-route-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 16px; }

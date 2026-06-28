@@ -1459,6 +1459,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const label = getStudyDirectionLabel(selectedDeckId, item.key);
     return label ? [{ ...item, ...label }] : [];
   });
+  const newPermanentDiscoveries = profile.unlockedUpgradeIds
+    .filter(id => !run.draftPoolIds.includes(id))
+    .map(id => CASTLE_UPGRADE_DEFS[id]);
 
   return (
     <main className="castle-lab-shell">
@@ -1568,6 +1571,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p className="castle-eyebrow">Castle absorbed</p>
             <h2>What should Pipplo digest?</h2>
             <p>Choose one transformation for the rest of this run.</p>
+            {newPermanentDiscoveries.length > 0 && (
+              <div className="castle-discovery-banner" role="status">
+                <Sparkles />
+                <div><b>Keeper Chronicle discovery</b><span>{newPermanentDiscoveries.map(discovery => discovery.name).join(", ")} {newPermanentDiscoveries.length === 1 ? "has" : "have"} joined future mutation drafts.</span></div>
+              </div>
+            )}
             <div className="castle-reward-grid">
               {run.rewardChoices.map(id => {
                 const reward = CASTLE_UPGRADE_DEFS[id];
@@ -1717,6 +1726,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               )}
               <aside><Sparkles /><div><b>Next expedition</b><span>{studyReport.recommendation}</span></div></aside>
             </section>
+            {newPermanentDiscoveries.length > 0 && (
+              <div className="castle-discovery-banner is-result">
+                <Sparkles />
+                <div><b>Permanent discoveries earned</b><span>{newPermanentDiscoveries.map(discovery => discovery.name).join(", ")}</span></div>
+              </div>
+            )}
             {run.keepsakeId && <p className="castle-result-keepsake"><Sparkles /><b>{CASTLE_KEEPSAKE_DEFS[run.keepsakeId].name}</b><span>keepsake carried through this expedition</span></p>}
             <button onClick={resetRun}><RefreshCcw />Start another run</button>
           </section>
