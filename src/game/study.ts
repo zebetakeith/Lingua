@@ -247,9 +247,10 @@ export function updateDirectionStudyProgress(
   const current = normalizeForToday(progress, now);
   const nextCorrectStreak = isCorrect ? current.correctStreak + 1 : 0;
   const nextWrongStreak = isCorrect ? 0 : current.wrongStreak + 1;
+  const earlyCorrectReview = isCorrect && current.dueAt > now;
   const formatStrength = questionType === "typed" ? 1.4 : questionType === "self_grade" ? 1.25 : 0.82;
   const masteryChange = isCorrect
-    ? (0.055 + Math.min(0.045, nextCorrectStreak * 0.008)) * formatStrength
+    ? (0.055 + Math.min(0.045, nextCorrectStreak * 0.008)) * formatStrength * (earlyCorrectReview ? 0.35 : 1)
     : -(0.11 + Math.min(0.12, nextWrongStreak * 0.035));
   const mastery = clampMastery(current.mastery + masteryChange);
   const intervalIndex = mastery < 0.2
@@ -278,7 +279,7 @@ export function updateDirectionStudyProgress(
     seen: current.seen + 1,
     correct: current.correct + (isCorrect ? 1 : 0),
     wrong: current.wrong + (isCorrect ? 0 : 1),
-    dueAt: isCorrect ? now + MASTERY_INTERVALS_MS[intervalIndex] : now,
+    dueAt: isCorrect ? earlyCorrectReview ? current.dueAt : now + MASTERY_INTERVALS_MS[intervalIndex] : now,
     reviewsToday: current.reviewsToday + 1,
     correctToday: current.correctToday + (isCorrect ? 1 : 0),
     reviewDay: getReviewDay(now),

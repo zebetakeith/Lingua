@@ -585,7 +585,7 @@ function StudyCard({
     <section className={`castle-study-card ${combatLive ? "is-live" : ""} ${!question.seenBefore ? "is-new" : ""}`}>
       <div className="castle-study-meta">
         <span>{question.direction === "term_to_definition" ? "Term → definition" : "Definition → term"}</span>
-        <span>{question.masteryLabel}</span>
+        <span>{question.masteryLabel} · {question.due ? "due now" : "bonus review"}</span>
         <span className="castle-study-pressure" title={question.seenBefore ? `Enemy pressure begins rising after ${(question.pressure.graceMs + 3_000) / 1_000} seconds on this prompt.` : undefined}><Clock3 />{status}</span>
       </div>
       <div className="castle-study-reward">

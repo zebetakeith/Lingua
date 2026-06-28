@@ -9,7 +9,7 @@ globalThis.localStorage = {
 };
 
 const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, isTypedStudyAnswerCorrect, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
-const { getActiveStudyResponseMs, getEscalatedStudyCombatSpeed } = await import("../src/game/study.ts");
+const { createDirectionStudyProgress, getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, updateDirectionStudyProgress } = await import("../src/game/study.ts");
 
 const cards = [
   { id: "new-1", word: "mizu", definition: "water", difficulty: 2, options: [] },
@@ -176,6 +176,16 @@ const pressureProfile = { label: "Struggling", graceMs: 4_000, combatSpeed: 0.75
 assert.equal(getEscalatedStudyCombatSpeed(pressureProfile, 4_000), 0.75, "a seen prompt should preserve its full grace period");
 assert.ok(getEscalatedStudyCombatSpeed(pressureProfile, 24_000) > 0.75, "enemy pressure should rise when a seen prompt is left unanswered");
 assert.equal(getEscalatedStudyCombatSpeed(pressureProfile, 100_000), 1.35, "prompt pressure should cap at a firm but bounded speed");
+const reviewNow = Date.now();
+const scheduledProgress = { ...createDirectionStudyProgress(0.6), mastery: 0.6, correctStreak: 2, dueAt: reviewNow + 86_400_000 };
+const dueProgress = { ...scheduledProgress, dueAt: reviewNow - 1 };
+const earlyCorrect = updateDirectionStudyProgress(scheduledProgress, true, "multiple_choice", reviewNow);
+const dueCorrect = updateDirectionStudyProgress(dueProgress, true, "multiple_choice", reviewNow);
+assert.ok(earlyCorrect.mastery - scheduledProgress.mastery < dueCorrect.mastery - dueProgress.mastery, "bonus reviews should grant less mastery than due recalls");
+assert.equal(earlyCorrect.dueAt, scheduledProgress.dueAt, "a correct bonus review should preserve the scheduled due date");
+const earlyMiss = updateDirectionStudyProgress(scheduledProgress, false, "multiple_choice", reviewNow);
+assert.equal(earlyMiss.dueAt, reviewNow, "an early miss should become due immediately");
+assert.ok(earlyMiss.mastery < scheduledProgress.mastery, "an early miss should still provide full forgetting evidence");
 
 putDeck("balanced-typing", {
   studySettings: {
