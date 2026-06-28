@@ -604,6 +604,11 @@
 .castle-setup-bottom > div span { font-size: 8px; }
 .castle-start-run { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 52px; color: white; background: linear-gradient(135deg, #3e9e98, #226e75); border: 0; border-radius: 17px; font-size: 15px; font-weight: 1000; box-shadow: 0 7px 0 #185b61; }
 .castle-start-run svg { width: 20px; }
+.castle-start-run:disabled { cursor: not-allowed; filter: grayscale(0.55); opacity: 0.48; box-shadow: 0 3px 0 #617779; }
+.castle-setup-warning { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 9px 11px; color: #884057; background: #fff0f2; border: 1px solid #edc2cc; border-radius: 12px; }
+.castle-setup-warning svg { flex: 0 0 auto; width: 20px; }
+.castle-setup-warning span { display: grid; gap: 1px; font-size: 8px; }
+.castle-setup-warning b { font-size: 10px; }
 
 @media (max-width: 620px) {
   .castle-lab-shell { grid-template-rows: auto minmax(270px, 38dvh) auto auto 1fr; }

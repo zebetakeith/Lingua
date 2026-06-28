@@ -700,6 +700,8 @@ function DeckSetup({
   onExit: () => void;
 }) {
   const nextKeepsake = Object.values(CASTLE_KEEPSAKE_DEFS).find(keepsake => !profile.unlockedKeepsakeIds.includes(keepsake.id));
+  const selectedDeck = decks.find(deck => deck.id === selectedDeckId);
+  const canStart = Boolean(selectedDeck && selectedDeck.activeCount > 0);
   return (
     <main className="castle-setup-shell">
       <button className="castle-setup-exit" onClick={onExit}><ArrowLeft />Main menu</button>
@@ -734,7 +736,7 @@ function DeckSetup({
             <button key={deck.id} aria-pressed={selectedDeckId === deck.id} className={selectedDeckId === deck.id ? "is-selected" : ""} onClick={() => onDeck(deck.id)}>
               <BookOpen />
               <strong>{deck.name}</strong>
-              <span>{deck.introducedCount} active · {deck.reviewCount} reviews</span>
+              <span>{deck.introducedCount} introduced · {deck.activeCount} available · {deck.reviewCount} reviews</span>
             </button>
           ))}
         </div>
@@ -793,7 +795,8 @@ function DeckSetup({
           </label>
           <div><Sparkles /><b>{profile.unlockedKeepsakeIds.length}/{Object.keys(CASTLE_KEEPSAKE_DEFS).length}</b><span>keepsakes / {profile.unlockedUpgradeIds.length} discoveries</span></div>
         </div>
-        <button className="castle-start-run" onClick={onStart}><Castle />Begin castle run<ChevronRight /></button>
+        {!canStart && <div className="castle-setup-warning" role="alert"><BookOpen /><span><b>This study world has no active cards.</b>Add a card or change at least one “known” rating before beginning a run.</span></div>}
+        <button className="castle-start-run" disabled={!canStart} onClick={onStart}><Castle />Begin castle run<ChevronRight /></button>
       </section>
     </main>
   );
@@ -1164,6 +1167,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   };
 
   const startRun = () => {
+    if (!selectedDeck || selectedDeck.activeCount <= 0) return;
     selectStudyDeck(selectedDeckId);
     const next = introduceForBattle(createInitialCastleRun(
       selectedDeckId,

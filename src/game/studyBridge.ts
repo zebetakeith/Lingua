@@ -92,6 +92,7 @@ export interface StudyDeckSummary {
   id: string;
   name: string;
   cardCount: number;
+  activeCount: number;
   introducedCount: number;
   reviewCount: number;
 }
@@ -242,13 +243,19 @@ function createOptions(card: VocabWord, direction: StudyDirection, deck: StudyDe
 }
 
 export function getStudyDecks(): StudyDeckSummary[] {
-  return loadSave().decks.map(deck => ({
-    id: deck.id,
-    name: deck.name,
-    cardCount: deck.cards.length,
-    introducedCount: new Set(deck.introducedCardIds || []).size,
-    reviewCount: Object.values(deck.directionProgress || {}).reduce((sum, progress) => sum + (progress.seen || 0), 0),
-  }));
+  return loadSave().decks.map(deck => {
+    const activeIds = new Set(deck.cards
+      .filter(card => deck.cardRatings?.[card.id] !== "known")
+      .map(card => card.id));
+    return {
+      id: deck.id,
+      name: deck.name,
+      cardCount: deck.cards.length,
+      activeCount: activeIds.size,
+      introducedCount: new Set((deck.introducedCardIds || []).filter(cardId => activeIds.has(cardId))).size,
+      reviewCount: Object.values(deck.directionProgress || {}).reduce((sum, progress) => sum + (progress.seen || 0), 0),
+    };
+  });
 }
 
 export function getSelectedStudyDeckId(): string {
