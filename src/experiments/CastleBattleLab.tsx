@@ -612,7 +612,7 @@ function StudyCard({
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <div className="castle-self-grade">
             <strong>{question.answer}</strong>
-            <span>Did you recall it before revealing?</span>
+            <span>Did you recall the exact saved {question.direction === "definition_to_term" ? "term" : "meaning"} before revealing?</span>
             <div>
               <button onClick={() => onSelfGrade(false)}>Not yet</button>
               <button className="is-correct" onClick={() => onSelfGrade(true)}>Got it</button>
@@ -622,6 +622,7 @@ function StudyCard({
       ) : (
         <>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
+          <p className="castle-recall-instruction">Recall the exact saved {question.direction === "definition_to_term" ? "term" : "meaning"}. No typing required.</p>
           <button className="castle-flip-card" onClick={onReveal}>Reveal answer</button>
         </>
       )}

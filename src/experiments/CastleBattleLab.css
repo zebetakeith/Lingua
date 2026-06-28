@@ -322,6 +322,7 @@
 .castle-answer-grid button span { overflow-wrap: anywhere; }
 .castle-flip-card,
 .castle-resume-card { width: 100%; color: white; background: linear-gradient(135deg, #3e9f9c, #24777d); border-color: transparent; }
+.castle-recall-instruction { margin: 4px 0 0; color: #527477; font-size: 9px; font-weight: 850; text-align: center; }
 .castle-resume-card { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .castle-self-grade { display: grid; gap: 10px; padding: 16px; text-align: center; background: #e7f4df; border: 2px solid #b9dbad; border-radius: 18px; }
 .castle-self-grade strong { font-size: 20px; }
