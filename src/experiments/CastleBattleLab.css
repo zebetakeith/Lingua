@@ -322,13 +322,17 @@
 .castle-answer-grid button span { overflow-wrap: anywhere; }
 .castle-flip-card,
 .castle-resume-card { width: 100%; color: white; background: linear-gradient(135deg, #3e9f9c, #24777d); border-color: transparent; }
+.castle-flip-card { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.castle-flip-card kbd,
+.castle-self-grade button kbd { padding: 2px 5px; color: inherit; background: rgba(255,255,255,0.28); border: 1px solid rgba(255,255,255,0.38); border-radius: 6px; font: inherit; font-size: 8px; }
 .castle-recall-instruction { margin: 4px 0 0; color: #527477; font-size: 9px; font-weight: 850; text-align: center; }
 .castle-resume-card { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .castle-self-grade { display: grid; gap: 10px; padding: 16px; text-align: center; background: #e7f4df; border: 2px solid #b9dbad; border-radius: 18px; }
-.castle-self-grade strong { font-size: 20px; }
+.castle-self-grade strong { font-size: 20px; overflow-wrap: anywhere; }
 .castle-self-grade span { font-size: 12px; }
 .castle-self-grade > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.castle-self-grade button { min-height: 48px; color: #164f54; background: white; border: 0; border-radius: 13px; font-weight: 900; }
+.castle-self-grade button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; color: #164f54; background: white; border: 0; border-radius: 13px; font-weight: 900; }
+.castle-self-grade button:not(.is-correct) kbd { background: #e8f1dc; border-color: #cadcb8; }
 .castle-self-grade button.is-correct { color: white; background: #4aa46f; }
 .castle-first-exposure { display: grid; justify-items: center; gap: 6px; padding: 14px; text-align: center; background: linear-gradient(180deg, #e6f7ff, #f5fbdf); border: 2px solid #91d4e8; border-radius: 22px; box-shadow: 0 8px 0 rgba(72, 153, 175, 0.12); }
 .castle-first-exposure > span { padding: 4px 9px; color: white; background: #3c92a9; border-radius: 999px; font-size: 9px; font-weight: 1000; letter-spacing: 0.08em; text-transform: uppercase; }

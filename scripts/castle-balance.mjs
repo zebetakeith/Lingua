@@ -19,13 +19,13 @@ import {
 const curves = ["current", "quadratic", "steep"];
 const masteries = [0.15, 0.35, 0.6, 0.9];
 
-function rewardFor(curve, mastery) {
+function rewardFor(curve, mastery, questionType = "multiple_choice") {
   const progress = {
     ...createDirectionStudyProgress(mastery),
     mastery,
     dueAt: 0,
   };
-  return getCorrectAnswerReward(progress, "multiple_choice", curve, 10_000);
+  return getCorrectAnswerReward(progress, questionType, curve, 10_000);
 }
 
 function pressureFor(mastery) {
@@ -108,7 +108,8 @@ function simulate(curve, mastery) {
 function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0) {
   const seed = Math.round((mastery * 10_000) + ({ quick: 100, regular: 200, long: 300 }[contractId] || 0) + (seedOffset * 997));
   let run = createInitialCastleRun(`full-${contractId}-${mastery}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle");
-  const reward = rewardFor("quadratic", mastery);
+  const multipleChoiceReward = rewardFor("quadratic", mastery, "multiple_choice");
+  const selfGradeReward = rewardFor("quadratic", mastery, "self_grade");
   const pressure = pressureFor(mastery);
   let reviews = 0;
   let elapsedMs = 0;
@@ -150,13 +151,14 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
     if (run.phase !== "battle") break;
     const cycle = Math.max(2, Math.round(1 / Math.max(0.01, 1 - correctRate)));
     const isCorrect = reviews % cycle !== cycle - 1;
+    const selfGraded = mastery >= 0.76 || (mastery >= 0.42 && reviews % 2 === 0);
     run = applyCastleStudyOutcome(run, {
       isCorrect,
       wasUnseen: false,
-      reward: isCorrect ? reward : 0,
+      reward: isCorrect ? selfGraded ? selfGradeReward : multipleChoiceReward : 0,
       progressKey: `full-card-${reviews % 12}::term_to_definition`,
       responseMs: answerMs,
-      selfGraded: false,
+      selfGraded,
       due: true,
     });
     run = spendEnergy(run);

@@ -547,28 +547,44 @@ function StudyCard({
 }) {
   const promptRef = useRef<HTMLHeadingElement | null>(null);
   const onOptionRef = useRef(onOption);
+  const onRevealRef = useRef(onReveal);
+  const onSelfGradeRef = useRef(onSelfGrade);
   useEffect(() => {
     onOptionRef.current = onOption;
-  }, [onOption]);
+    onRevealRef.current = onReveal;
+    onSelfGradeRef.current = onSelfGrade;
+  }, [onOption, onReveal, onSelfGrade]);
   useEffect(() => {
     const focusFrame = window.requestAnimationFrame(() => promptRef.current?.focus({ preventScroll: true }));
     return () => window.cancelAnimationFrame(focusFrame);
   }, [interrupted, question.cardId, question.direction, question.questionType, question.seenBefore, reveal]);
   useEffect(() => {
-    if (!question.seenBefore || interrupted || question.questionType !== "multiple_choice") return;
-    const answerByNumber = (event: KeyboardEvent) => {
+    if (!question.seenBefore || interrupted) return;
+    const answerByKeyboard = (event: KeyboardEvent) => {
       if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target;
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
-      const answerIndex = Number(event.key) - 1;
-      const option = question.options[answerIndex];
-      if (!option || answerIndex < 0 || answerIndex > 3) return;
-      event.preventDefault();
-      onOptionRef.current(option);
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target instanceof HTMLButtonElement || target instanceof HTMLAnchorElement) return;
+      if (question.questionType === "multiple_choice") {
+        const answerIndex = Number(event.key) - 1;
+        const option = question.options[answerIndex];
+        if (!option || answerIndex < 0 || answerIndex > 3) return;
+        event.preventDefault();
+        onOptionRef.current(option);
+        return;
+      }
+      if (!reveal && (event.key === " " || event.key === "Enter")) {
+        event.preventDefault();
+        onRevealRef.current();
+        return;
+      }
+      if (reveal && (event.key === "1" || event.key === "2")) {
+        event.preventDefault();
+        onSelfGradeRef.current(event.key === "2");
+      }
     };
-    window.addEventListener("keydown", answerByNumber);
-    return () => window.removeEventListener("keydown", answerByNumber);
-  }, [interrupted, question.options, question.questionType, question.seenBefore]);
+    window.addEventListener("keydown", answerByKeyboard);
+    return () => window.removeEventListener("keydown", answerByKeyboard);
+  }, [interrupted, question.options, question.questionType, question.seenBefore, reveal]);
   const status = !question.seenBefore
     ? "First exposure · combat safely paused"
     : interrupted
@@ -610,12 +626,12 @@ function StudyCard({
       ) : reveal ? (
         <>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
-          <div className="castle-self-grade">
+          <div className="castle-self-grade" role="status" aria-live="polite">
             <strong>{question.answer}</strong>
             <span>Did you recall the exact saved {question.direction === "definition_to_term" ? "term" : "meaning"} before revealing?</span>
             <div>
-              <button onClick={() => onSelfGrade(false)}>Not yet</button>
-              <button className="is-correct" onClick={() => onSelfGrade(true)}>Got it</button>
+              <button aria-keyshortcuts="1" onClick={() => onSelfGrade(false)}><kbd aria-hidden="true">1</kbd>Not yet</button>
+              <button aria-keyshortcuts="2" className="is-correct" onClick={() => onSelfGrade(true)}><kbd aria-hidden="true">2</kbd>Got it</button>
             </div>
           </div>
         </>
@@ -623,7 +639,7 @@ function StudyCard({
         <>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <p className="castle-recall-instruction">Recall the exact saved {question.direction === "definition_to_term" ? "term" : "meaning"}. No typing required.</p>
-          <button className="castle-flip-card" onClick={onReveal}>Reveal answer</button>
+          <button className="castle-flip-card" aria-keyshortcuts="Space Enter" onClick={onReveal}><kbd aria-hidden="true">Space</kbd>Reveal answer</button>
         </>
       )}
     </section>
@@ -1827,7 +1843,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. Seen prompts begin with a short grace window, then enemy speed rises until you answer. A miss keeps combat live, pulls the next wave closer, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip. At three pips, Mallow fires a 3-damage Moon Volley and summons a bonus squad.</p>
-            <p>Balanced Recall uses multiple choice for recognition, then reveal and self-grade for production. Recall the exact deck term in your head before revealing it; multiple-choice prompts also accept keys 1–4. Deck Default remains available in settings.</p>
+            <p>Balanced Recall uses multiple choice for recognition, then reveal and self-grade for production. Recall the exact deck term in your head before revealing it. Choices accept 1–4; self-grade accepts Space or Enter to reveal, then 1 for Not yet or 2 for Got it. Deck Default remains available in settings.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
