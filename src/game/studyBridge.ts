@@ -417,7 +417,10 @@ function normalizeTypedAnswer(value: string, direction: StudyDirection): string 
 }
 
 function getTypedAnswerVariants(answer: string, direction: StudyDirection): string[] {
-  const pieces = answer.split(/\s*(?:\/|;|\||\bor\b)\s*/iu).filter(Boolean);
+  const separator = direction === "term_to_definition"
+    ? /\s*(?:\/|;|\||,|\bor\b)\s*/iu
+    : /\s*(?:\/|;|\||\bor\b)\s*/iu;
+  const pieces = answer.split(separator).filter(Boolean);
   return Array.from(new Set(pieces.flatMap(piece => {
     const withoutParenthetical = piece.replace(/\s*\([^)]*\)\s*/g, " ");
     return [piece, withoutParenthetical].map(value => normalizeTypedAnswer(value, direction)).filter(Boolean);

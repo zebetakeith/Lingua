@@ -625,7 +625,7 @@ function StudyCard({
               enterKeyHint="done"
               autoFocus
             />
-            <small>Case and punctuation are ignored. Answers separated by / or ; are accepted.</small>
+            <small>Case and punctuation are ignored. Meaning alternatives separated by /, commas, or ; are accepted.</small>
             <button type="submit" disabled={!typedAnswer.trim()}><ChevronRight />Check recall</button>
           </form>
         </>

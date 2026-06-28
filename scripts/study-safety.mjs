@@ -166,6 +166,7 @@ assert.equal(fingerprintQuestion.seenBefore, false, "changed card content must i
 
 assert.equal(isTypedStudyAnswerCorrect("The water!", "water", "term_to_definition"), true, "typed meanings should ignore leading articles, case, and punctuation");
 assert.equal(isTypedStudyAnswerCorrect("liquid", "water; liquid", "term_to_definition"), true, "typed recall should accept explicit answer variants");
+assert.equal(isTypedStudyAnswerCorrect("liquid", "water, liquid", "term_to_definition"), true, "comma-separated meaning synonyms should not create false misses");
 assert.equal(isTypedStudyAnswerCorrect("dont", "don't", "term_to_definition"), true, "apostrophe differences should not create false misses");
 assert.equal(isTypedStudyAnswerCorrect("cafe", "café", "definition_to_term"), false, "meaningful spelling marks should remain part of foreign-term recall");
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 3_000), 5_000, "completed command time must be excluded from recall timing");
