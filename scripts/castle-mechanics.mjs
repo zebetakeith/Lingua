@@ -122,7 +122,7 @@ const reconstructedReport = getCastleStudyReport({
   reviews: 12,
   correct: 7,
   wrong: 2,
-  studySummary: { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [] },
+  studySummary: { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [], missedDirectionCounts: {} },
 });
 assert.equal(reconstructedReport.gradedReviews, 9, "legacy reports should reconstruct graded reviews from correct and wrong totals");
 assert.equal(reconstructedReport.exposures, 3, "legacy reports should infer the remaining reviews as safe exposures");
@@ -137,6 +137,11 @@ assert.equal(rally.battle.rally, 0, "three misses should consume the Rally meter
 assert.equal(rally.battle.telemetry.rallyTriggered, 1, "three misses should trigger one enemy rally");
 assert.equal(rally.battle.units.filter(unit => unit.side === "enemy").length, 2, "enemy rally should add a two-unit squad");
 assert.equal(rally.battle.missedDirectionKeys.length, 0, "a triggered Rally must consume its recovery keys");
+assert.deepEqual(getCastleStudyReport(rally).focusDirections, [
+  { key: "mechanic-card-0::term_to_definition", misses: 1 },
+  { key: "mechanic-card-1::term_to_definition", misses: 1 },
+  { key: "mechanic-card-2::term_to_definition", misses: 1 },
+], "the learning report should preserve troublesome directions after Rally consumes its battle keys");
 assert.equal(rally.battle.playerCastleHp, 97, "an unshielded Rally should land a small Moon Volley instead of creating an all-or-nothing pressure cliff");
 assert.equal(rally.battle.telemetry.damageTaken, 3, "Moon Volley damage should be represented in battle telemetry");
 assert.ok(rally.battle.enemySpawnTimerMs < rallyWaveBefore, "misses should pull the next regular enemy wave closer before Rally triggers");
@@ -219,7 +224,7 @@ localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify(legacySt
 const restoredLegacyRun = loadCastleRun("mechanics");
 assert.deepEqual(
   restoredLegacyRun.studySummary,
-  { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [] },
+  { exposures: 0, gradedReviews: 0, dueReviews: 0, typedReviews: 0, difficultRecalls: 0, responseMs: [], missedDirectionCounts: {} },
   "old in-progress runs should migrate with an empty learning report",
 );
 assert.deepEqual(restoredLegacyRun.battle.missedDirectionKeys, [], "old runs should recover a safe missed-direction list");

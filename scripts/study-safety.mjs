@@ -8,7 +8,7 @@ globalThis.localStorage = {
   clear: () => values.clear(),
 };
 
-const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, introduceStudyCards, isStudyQuestionUnavailableError, isTypedStudyAnswerCorrect, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
+const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, isTypedStudyAnswerCorrect, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
 const { getActiveStudyResponseMs } = await import("../src/game/study.ts");
 
 const cards = [
@@ -59,6 +59,7 @@ function putDeck(id, overrides = {}) {
 putDeck("pristine");
 selectStudyDeck("pristine");
 assert.equal(drawStudyQuestion("pristine", "quadratic").seenBefore, false, "a pristine direction must be protected");
+assert.deepEqual(getStudyDirectionLabel("pristine", "new-1::term_to_definition"), { prompt: "mizu", answer: "water" }, "learning reports should resolve a missed direction back to readable card text");
 
 putDeck("legacy", {
   cardProgress: { "new-1": { box: 4, correctStreak: 4, wrongStreak: 0, seen: 8, correct: 8, wrong: 0, dueAt: 0 } },

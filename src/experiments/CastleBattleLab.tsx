@@ -26,6 +26,7 @@ import {
   completeStudyExposure,
   getSelectedStudyDeckId,
   getStudyDecks,
+  getStudyDirectionLabel,
   getStudyQuestionKey,
   introduceStudyCards,
   isStudyQuestionUnavailableError,
@@ -1440,6 +1441,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
   const activeEvent = run.pendingEventId ? CASTLE_EVENT_DEFS[run.pendingEventId] : null;
   const studyReport = getCastleStudyReport(run);
+  const studyFocus = studyReport.focusDirections.flatMap(item => {
+    const label = getStudyDirectionLabel(selectedDeckId, item.key);
+    return label ? [{ ...item, ...label }] : [];
+  });
 
   return (
     <main className="castle-lab-shell">
@@ -1689,6 +1694,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                 <span><b>{studyReport.difficultRecalls}</b><small>difficult wins</small></span>
               </div>
               <p>{studyReport.exposures} safe first exposure{studyReport.exposures === 1 ? "" : "s"} · {studyReport.dueReviews} due prompt{studyReport.dueReviews === 1 ? "" : "s"} practiced</p>
+              {studyFocus.length > 0 && (
+                <div className="castle-learning-focus">
+                  <b>Practice next</b>
+                  {studyFocus.map(item => <span key={item.key}><strong>{item.prompt}</strong><i>→</i>{item.answer}<small>{item.misses} miss{item.misses === 1 ? "" : "es"}</small></span>)}
+                </div>
+              )}
               <aside><Sparkles /><div><b>Next expedition</b><span>{studyReport.recommendation}</span></div></aside>
             </section>
             {run.keepsakeId && <p className="castle-result-keepsake"><Sparkles /><b>{CASTLE_KEEPSAKE_DEFS[run.keepsakeId].name}</b><span>keepsake carried through this expedition</span></p>}

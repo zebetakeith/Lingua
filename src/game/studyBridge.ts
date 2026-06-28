@@ -297,6 +297,23 @@ export function getStudyQuestionKey(question: Pick<StudyQuestion, "cardId" | "di
   return getStudyDirectionKey(question.cardId, question.direction);
 }
 
+export function getStudyDirectionLabel(
+  deckId: string,
+  progressKey: string,
+): { prompt: string; answer: string } | null {
+  const separator = progressKey.lastIndexOf("::");
+  if (separator <= 0) return null;
+  const cardId = progressKey.slice(0, separator);
+  const direction = progressKey.slice(separator + 2) as StudyDirection;
+  if (direction !== "term_to_definition" && direction !== "definition_to_term") return null;
+  const deck = loadSave().decks.find(candidate => candidate.id === deckId);
+  const card = deck?.cards.find(candidate => candidate.id === cardId);
+  if (!card) return null;
+  return direction === "term_to_definition"
+    ? { prompt: card.word, answer: card.definition }
+    : { prompt: card.definition, answer: card.word };
+}
+
 export function drawStudyQuestion(
   deckId: string,
   rewardCurve: StudyRewardCurve,

@@ -157,12 +157,14 @@ export interface CastleRunStudySummary {
   typedReviews: number;
   difficultRecalls: number;
   responseMs: number[];
+  missedDirectionCounts: Record<string, number>;
 }
 
 export interface CastleStudyReport extends CastleRunStudySummary {
   accuracy: number;
   averageResponseMs: number;
   recommendation: string;
+  focusDirections: Array<{ key: string; misses: number }>;
 }
 
 export interface CastleRunState {
@@ -547,6 +549,10 @@ function createTelemetry(): CastleBattleTelemetry {
 export function normalizeCastleRunStudySummary(
   summary?: Partial<CastleRunStudySummary> | null,
 ): CastleRunStudySummary {
+  const missedDirectionCounts = Object.fromEntries(Object.entries(summary?.missedDirectionCounts || {})
+    .filter(([key, value]) => typeof key === "string" && key.length > 0 && Number.isFinite(value) && Number(value) > 0)
+    .slice(-200)
+    .map(([key, value]) => [key, Math.max(1, Math.floor(Number(value)))]));
   return {
     exposures: Math.max(0, Math.floor(Number(summary?.exposures) || 0)),
     gradedReviews: Math.max(0, Math.floor(Number(summary?.gradedReviews) || 0)),
@@ -556,6 +562,7 @@ export function normalizeCastleRunStudySummary(
     responseMs: Array.isArray(summary?.responseMs)
       ? summary.responseMs.filter(value => Number.isFinite(value) && value >= 0).slice(-500)
       : [],
+    missedDirectionCounts,
   };
 }
 
@@ -572,6 +579,10 @@ export function getCastleStudyReport(run: CastleRunState): CastleStudyReport {
     ? summary.responseMs.reduce((total, value) => total + value, 0) / summary.responseMs.length
     : 0;
   const typedShare = gradedReviews > 0 ? summary.typedReviews / gradedReviews : 0;
+  const focusDirections = Object.entries(summary.missedDirectionCounts)
+    .sort(([, missesA], [, missesB]) => missesB - missesA)
+    .slice(0, 3)
+    .map(([key, misses]) => ({ key, misses }));
   const recommendation = gradedReviews === 0
     ? "Keep the next expedition short while these new directions settle in."
     : accuracy < 0.65
@@ -588,6 +599,7 @@ export function getCastleStudyReport(run: CastleRunState): CastleStudyReport {
     accuracy,
     averageResponseMs,
     recommendation,
+    focusDirections,
   };
 }
 
@@ -1220,6 +1232,12 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     responseMs: graded
       ? [...previousStudySummary.responseMs, Math.max(0, outcome.responseMs)].slice(-500)
       : previousStudySummary.responseMs,
+    missedDirectionCounts: graded && !outcome.isCorrect
+      ? {
+          ...previousStudySummary.missedDirectionCounts,
+          [outcome.progressKey]: (previousStudySummary.missedDirectionCounts[outcome.progressKey] || 0) + 1,
+        }
+      : previousStudySummary.missedDirectionCounts,
   };
   let battle: CastleBattleState = {
     ...run.battle,

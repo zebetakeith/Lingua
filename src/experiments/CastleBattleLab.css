@@ -478,6 +478,12 @@
 .castle-learning-metrics b { font-size: 16px; }
 .castle-learning-metrics small { font-size: 7px; line-height: 1.25; }
 .castle-learning-report > p { margin: 0; font-size: 8px; font-weight: 850; opacity: 0.7; }
+.castle-learning-focus { display: grid; gap: 5px; padding: 9px; background: #eef6df; border-radius: 12px; }
+.castle-learning-focus > b { color: #397b68; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; }
+.castle-learning-focus > span { display: grid; grid-template-columns: minmax(0, auto) 12px minmax(0, 1fr) auto; gap: 5px; align-items: baseline; font-size: 9px; overflow-wrap: anywhere; }
+.castle-learning-focus strong { color: #205c5d; }
+.castle-learning-focus i { color: #75a16b; font-style: normal; text-align: center; }
+.castle-learning-focus small { padding: 2px 5px; color: #8c4961; background: #ffe4ea; border-radius: 7px; font-size: 7px; font-weight: 900; white-space: nowrap; }
 .castle-learning-report > aside { display: grid; grid-template-columns: 24px 1fr; gap: 7px; align-items: center; padding: 9px; color: #594f1c; background: #fff3b5; border-radius: 12px; }
 .castle-learning-report > aside svg { width: 21px; color: #c79c18; }
 .castle-learning-report > aside div { display: grid; gap: 2px; }
