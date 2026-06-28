@@ -282,6 +282,85 @@ assert.equal(projectile.fromPosition, 36, "a projectile should begin at its atta
 assert.equal(projectile.position, 48, "a projectile should end at its target");
 assert.equal(projectile.side, "player", "projectile direction should preserve the attacking side");
 
+let echoMoth = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    energy: 1,
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [testUnit("echoMoth", "enemy", "echo-siphon", { position: 10, attackCooldownMs: 0 })],
+  },
+};
+echoMoth = tickCastleRun(echoMoth, 100, 1);
+assert.equal(echoMoth.battle.playerCastleHp, 97, "Echo Moth should damage the player keep from range");
+assert.equal(echoMoth.battle.energy, 0.85, "Echo Moth keep attacks should siphon a visible sliver of energy");
+assert.equal(echoMoth.battle.fxEvents.some(event => event.label?.includes("siphon")), true, "Echo Moth energy theft should be named in the battlefield feedback");
+
+let sporeBud = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [
+      testUnit("sporeBud", "enemy", "spore-slow", { position: 40, attackCooldownMs: 0 }),
+      testUnit("dartlet", "player", "spore-target", { position: 49, attackCooldownMs: 999_999 }),
+    ],
+  },
+};
+sporeBud = tickCastleRun(sporeBud, 100, 1);
+const sporeTarget = sporeBud.battle.units.find(unit => unit.id === "spore-target");
+assert.equal(sporeTarget.hp, CASTLE_UNIT_DEFS.dartlet.hp - CASTLE_UNIT_DEFS.sporeBud.damage, "Spore Bud should damage its ranged target");
+assert.equal(sporeTarget.slowMs, 1_600, "Spore Bud attacks should slow their target for 1.6 seconds");
+assert.equal(sporeBud.battle.fxEvents.some(event => event.label?.includes("slowed")), true, "Spore Bud slow should be named in the battlefield feedback");
+
+for (const [kind, label] of [["shellSlime", "Shell Slime"], ["rootLump", "Root Lump"]]) {
+  let armoredSpawn = {
+    ...freshRun(),
+    battle: {
+      ...freshRun().battle,
+      mode: "study",
+      autoSpawnTimerMs: 999_999,
+      enemySpawnTimerMs: 0,
+      nextEnemyKind: kind,
+      playerTurretTimerMs: 999_999,
+      enemyTurretTimerMs: 999_999,
+      units: [],
+    },
+  };
+  armoredSpawn = tickCastleRun(armoredSpawn, 100, 1);
+  const spawned = armoredSpawn.battle.units.find(unit => unit.kind === kind);
+  assert.ok(spawned, `${label} should enter through the regular enemy spawn path`);
+  assert.equal(spawned.shield, 6, `${label} should arrive with its six-point armor shell`);
+}
+
+let hornSplash = {
+  ...freshRun(),
+  upgrades: ["impHorns"],
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 0,
+    enemyTurretTimerMs: 999_999,
+    units: [
+      testUnit("shellSlime", "enemy", "horn-primary", { position: 20 }),
+      testUnit("shellSlime", "enemy", "horn-splash", { position: 30 }),
+    ],
+  },
+};
+hornSplash = tickCastleRun(hornSplash, 100, 1);
+assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-primary").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 4, "Imp Horns should preserve the turret's full primary hit");
+assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-splash").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 2, "Imp Horns should splash a second enemy for half turret damage");
+
 let hasted = { ...freshRun(), upgrades: ["cleanStreak"], battle: { ...freshRun().battle, energy: 12 } };
 for (let index = 0; index < 5; index += 1) hasted = applyCastleStudyOutcome(hasted, outcome(index));
 hasted = summonCastleUnit(hasted, "dartlet");

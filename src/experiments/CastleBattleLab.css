@@ -167,6 +167,7 @@
 .castle-lane-unit.is-attacking { z-index: 8; }
 .castle-lane-unit.is-attacking.side-player .castle-unit-face { animation: castle-unit-lunge-player 180ms ease-out; }
 .castle-lane-unit.is-attacking.side-enemy .castle-unit-face { animation: castle-unit-lunge-enemy 180ms ease-out; }
+.castle-lane-unit.is-slowed::after { content: ""; position: absolute; z-index: -1; left: 2px; bottom: 1px; width: 30px; height: 9px; border-radius: 50%; background: rgba(158, 104, 203, 0.48); box-shadow: 0 0 8px rgba(123, 87, 184, 0.62); animation: castle-slow-puddle 900ms ease-in-out infinite alternate; }
 .castle-unit-face { position: relative; display: inline-block; width: 31px; height: 25px; background: var(--unit-accent, #d8e84f); border: 3px solid #285e63; border-radius: 55% 55% 38% 38%; box-shadow: inset -4px -3px 0 rgba(39, 82, 84, 0.15), 0 3px 0 rgba(34, 85, 83, 0.12); }
 .castle-unit-face.side-enemy { transform: scaleX(-1); border-color: #71485e; }
 .castle-unit-face i { position: absolute; top: 8px; width: 3px; height: 5px; background: #183f44; border-radius: 50%; }
@@ -225,6 +226,7 @@
 .castle-unit-hp i { display: block; height: 100%; background: #62bd61; }
 .castle-lane-unit.side-enemy .castle-unit-hp i { background: #e96885; }
 .castle-unit-shield { position: absolute; z-index: 2; left: -4px; top: -5px; width: 39px; height: 35px; border: 2px solid rgba(89, 194, 235, 0.8); border-radius: 50%; box-shadow: inset 0 0 8px rgba(91, 200, 235, 0.35); }
+.castle-unit-shield b { position: absolute; right: -4px; top: -7px; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 8px; background: #e5f8ff; color: #24728e; font: 800 9px/15px Nunito, sans-serif; text-align: center; box-shadow: 0 1px 3px rgba(34, 78, 81, 0.22); }
 
 .castle-battle-fx { position: absolute; z-index: 12; left: var(--fx-x); bottom: 49px; width: 0; height: 0; pointer-events: none; }
 .castle-battle-fx i { position: absolute; left: 50%; top: 50%; display: block; width: 22px; height: 22px; transform: translate(-50%, -50%); border: 4px solid #fff3a0; border-radius: 50%; box-shadow: 0 0 12px rgba(255, 226, 89, 0.82); }
@@ -268,6 +270,7 @@
 @keyframes castle-fx-spawn { from { opacity: 0; transform: scale(.3); } 45% { opacity: 1; } to { opacity: 0; transform: scale(1.6); } }
 @keyframes castle-fx-rise { from { opacity: 1; transform: translateY(4px) scale(.55); } to { opacity: 0; transform: translateY(-19px) scale(1.2); } }
 @keyframes castle-fx-power { from { opacity: 1; transform: scale(.3) rotate(0); } to { opacity: 0; transform: scale(1.8) rotate(100deg); } }
+@keyframes castle-slow-puddle { from { transform: scaleX(.82); opacity: .58; } to { transform: scaleX(1.08); opacity: .9; } }
 
 .castle-battle-strip { position: absolute; z-index: 10; left: 8px; right: 8px; bottom: 5px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 7px; color: white; background: rgba(16, 71, 75, 0.82); border-radius: 13px; backdrop-filter: blur(7px); }
 .castle-battle-strip > span { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 9px; font-weight: 900; }

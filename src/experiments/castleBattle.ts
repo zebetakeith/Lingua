@@ -961,7 +961,7 @@ function resolveBattleStep(
         if (unit.kind === "spitlet" && target.shield > 0) damage += 3;
         damageById.set(target.id, (damageById.get(target.id) || 0) + damage);
         generatedFx.push(stats.range >= 10
-          ? { kind: "projectile", side: unit.side, position: target.position, fromPosition: unit.position, label: `${damage}` }
+          ? { kind: "projectile", side: unit.side, position: target.position, fromPosition: unit.position, label: unit.kind === "sporeBud" ? `${damage} · slowed` : `${damage}` }
           : { kind: "hit", side: unit.side, position: target.position, label: `${damage}` });
         if (unit.side === "player" && hasUpgrade(upgrades, "gooSoles")) {
           slowById.set(target.id, hasUpgrade(upgrades, "puddlePaws") ? 2_600 : 1_500);
@@ -977,7 +977,7 @@ function resolveBattleStep(
           playerCastleDamage += damage;
           if (unit.kind === "echoMoth") energyDrain += 0.15;
           generatedFx.push(stats.range >= 10
-            ? { kind: "projectile", side: "enemy", position: 2, fromPosition: unit.position, label: `${damage}` }
+            ? { kind: "projectile", side: "enemy", position: 2, fromPosition: unit.position, label: unit.kind === "echoMoth" ? `${damage} · siphon` : `${damage}` }
             : { kind: "hit", side: "enemy", position: 2, label: `${damage}` });
         }
       }

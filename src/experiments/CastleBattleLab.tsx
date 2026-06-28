@@ -407,14 +407,18 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
               : ENEMY_UNIT_ATTACK_FRAME_MS[unit.kind];
             const attackAnimationMs = productionAttackFrameMs ? productionAttackFrameMs * 4 : 180;
             const attacking = unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - attackAnimationMs;
+            const statusText = [
+              unit.shield > 0 ? `${Math.ceil(unit.shield)} shield` : "",
+              unit.slowMs > 0 ? "slowed to half speed" : "",
+            ].filter(Boolean).join(", ");
             return (
             <div
               key={unit.id}
-              className={`castle-lane-unit side-${unit.side} ${attacking ? "is-attacking" : ""}`}
+              className={`castle-lane-unit side-${unit.side} ${attacking ? "is-attacking" : ""} ${unit.slowMs > 0 ? "is-slowed" : ""}`}
               style={{ "--unit-x": `${unit.position}%`, "--unit-accent": CASTLE_UNIT_DEFS[unit.kind].accent } as CSSProperties}
-              title={`${CASTLE_UNIT_DEFS[unit.kind].name}: ${Math.ceil(unit.hp)}/${unit.maxHp} HP`}
+              title={`${CASTLE_UNIT_DEFS[unit.kind].name}: ${Math.ceil(unit.hp)}/${unit.maxHp} HP${statusText ? ` · ${statusText}` : ""} · ${CASTLE_UNIT_DEFS[unit.kind].role}`}
             >
-              {unit.shield > 0 && <span className="castle-unit-shield" />}
+              {unit.shield > 0 && <span className="castle-unit-shield" aria-hidden="true"><b>{Math.ceil(unit.shield)}</b></span>}
               <SlimeFace kind={unit.kind} side={unit.side} attacking={attacking} />
               <span className="castle-unit-hp"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
             </div>
