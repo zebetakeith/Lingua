@@ -1,4 +1,4 @@
-import VOCABULARY, { generateDistractors, type VocabWord } from "../data/vocabulary.ts";
+import VOCABULARY, { type VocabWord } from "../data/vocabulary.ts";
 import {
   DEFAULT_STUDY_SETTINGS,
   chooseQuestionType,
@@ -233,15 +233,12 @@ function ensureStudyCards(deckId: string): StudyDeck {
 }
 
 function createOptions(card: VocabWord, direction: StudyDirection, deck: StudyDeck, shouldShuffle: boolean): string[] {
-  const options = direction === "definition_to_term"
-    ? generateDistractors(card, deck.cards)
-    : [
-        card.definition,
-        ...shuffle(Array.from(new Set([...deck.cards, ...VOCABULARY]
-          .filter(candidate => candidate.id !== card.id && candidate.definition !== card.definition)
-          .map(candidate => candidate.definition))))
-          .slice(0, 3),
-      ];
+  const answer = direction === "definition_to_term" ? card.word : card.definition;
+  const distractors = Array.from(new Set(deck.cards
+    .filter(candidate => candidate.id !== card.id)
+    .map(candidate => direction === "definition_to_term" ? candidate.word : candidate.definition)
+    .filter(candidate => candidate !== answer)));
+  const options = [answer, ...shuffle(distractors).slice(0, 3)];
   return shouldShuffle ? shuffle(options) : options;
 }
 
@@ -358,6 +355,12 @@ export function drawStudyQuestion(
     }
   }
   const questionType = chooseQuestionType(settings, selected.progress, selected.direction, recallMode);
+  const candidateOptions = questionType === "multiple_choice"
+    ? createOptions(selected.card, selected.direction, deck, settings.shuffleAnswers)
+    : [];
+  const effectiveQuestionType = questionType === "multiple_choice" && candidateOptions.length < 4
+    ? "self_grade"
+    : questionType;
   const seenBefore = selected.progress.seen > 0;
   return {
     instanceId: nextStudyQuestionInstanceId++,
@@ -367,13 +370,11 @@ export function drawStudyQuestion(
     answer: selected.direction === "term_to_definition" ? selected.card.definition : selected.card.word,
     definition: selected.card.definition,
     direction: selected.direction,
-    questionType,
-    options: questionType === "multiple_choice"
-      ? createOptions(selected.card, selected.direction, deck, settings.shuffleAnswers)
-      : [],
+    questionType: effectiveQuestionType,
+    options: effectiveQuestionType === "multiple_choice" ? candidateOptions : [],
     masteryBefore: selected.progress.mastery,
     masteryLabel: getMasteryLabel(selected.progress.mastery),
-    reward: seenBefore ? getCorrectAnswerReward(selected.progress, questionType, rewardCurve, now) : 0.25,
+    reward: seenBefore ? getCorrectAnswerReward(selected.progress, effectiveQuestionType, rewardCurve, now) : 0.25,
     due: selected.progress.dueAt <= now,
     seenBefore,
     pressure: getStudyPressureProfile(selected.progress),

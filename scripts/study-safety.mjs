@@ -191,9 +191,8 @@ assert.equal(new Set(uniqueOptionsQuestion.options).size, uniqueOptionsQuestion.
 putDeck("one-card-options", { cards: [cards[0]], introducedCardIds: [cards[0].id] });
 selectStudyDeck("one-card-options");
 const oneCardQuestion = drawStudyQuestion("one-card-options", "quadratic");
-assert.equal(oneCardQuestion.options.length, 4, "a one-card deck should still receive a meaningful four-choice recognition prompt");
-assert.equal(new Set(oneCardQuestion.options).size, 4, "fallback recognition choices should remain unique");
-assert.ok(oneCardQuestion.options.includes(oneCardQuestion.answer), "fallback choices must retain the correct answer");
+assert.equal(oneCardQuestion.questionType, "self_grade", "a tiny deck should self-grade instead of mixing in obvious cross-language distractors");
+assert.deepEqual(oneCardQuestion.options, [], "self-graded tiny-deck prompts should not render fake recognition choices");
 
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 3_000), 5_000, "completed command time must be excluded from recall timing");
 assert.equal(getActiveStudyResponseMs(1_000, 9_000, 2_000, 7_000), 4_000, "an open command panel must be excluded from recall timing");
