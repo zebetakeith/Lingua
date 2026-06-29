@@ -159,14 +159,14 @@ const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   dartlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/seed-v1.png`,
   bubbleBud: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bubbleBud/seed-v1.png`,
   spitlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/seed-v1.png`,
-  bigChonk: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/seed-v1.png`,
+  bigChonk: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/seed-v2.png`,
 };
 const ENEMY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   shellSlime: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/shellSlime/seed-v1.png`,
   nibbleImp: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/nibbleImp/seed-v1.png`,
   sporeBud: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/sporeBud/seed-v2.png`,
   echoMoth: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/seed-v2.png`,
-  rootLump: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/rootLump/seed-v1.png`,
+  rootLump: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/rootLump/seed-v2.png`,
 };
 const FRIENDLY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   piplet: Array.from(
@@ -185,12 +185,17 @@ const FRIENDLY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/walk/0${index + 1}.png`,
   ),
+  bigChonk: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/walk/0${index + 1}.png`,
+  ),
 };
 const FRIENDLY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   piplet: 140,
   dartlet: 95,
   bubbleBud: 180,
   spitlet: 155,
+  bigChonk: 240,
 };
 const ENEMY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   shellSlime: Array.from(
@@ -209,12 +214,17 @@ const ENEMY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/walk/0${index + 1}.png`,
   ),
+  rootLump: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/rootLump/walk/0${index + 1}.png`,
+  ),
 };
 const ENEMY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   shellSlime: 210,
   nibbleImp: 90,
   sporeBud: 190,
   echoMoth: 115,
+  rootLump: 260,
 };
 const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   piplet: Array.from(
