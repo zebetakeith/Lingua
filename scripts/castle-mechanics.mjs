@@ -465,6 +465,16 @@ assert.equal(progressionProfile.unlockedUpgradeIds.length, STARTER_CASTLE_UPGRAD
 assert.equal(progressionProfile.unlockedKeepsakeIds.includes("boltBead"), true, "the second guardian should unlock Bolt Bead");
 assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "reward", battlesWon: 3 }), ["boltBead"], "a later guardian reward must not re-announce previously earned keepsakes");
 
+for (let guardianIndex = 0; guardianIndex < 2; guardianIndex += 1) {
+  clearCastleRun("mechanics");
+  progressionRun = freshRun();
+  saveCastleRun("mechanics", progressionRun);
+  progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
+}
+assert.equal(progressionProfile.guardianClears, 4, "guardian progression should continue across four separate expeditions");
+assert.equal(progressionProfile.unlockedKeepsakeIds.includes("nurseryBell"), true, "the fourth guardian should unlock Nursery Bell");
+assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "reward", battlesWon: 3 }), ["nurseryBell"], "the fourth guardian should celebrate only Nursery Bell");
+
 clearCastleRun("mechanics");
 progressionRun = freshRun();
 saveCastleRun("mechanics", progressionRun);
@@ -474,6 +484,17 @@ assert.equal(progressionProfile.unlockedKeepsakeIds.includes("mossPatch"), true,
 assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "complete" }), ["mossPatch"], "a completed expedition should celebrate only its newly unlocked keepsake");
 assert.equal(selectCastleKeepsake("mechanics", "mossPatch").selectedKeepsakeId, "mossPatch", "an unlocked keepsake should be selectable");
 assert.equal(selectCastleKeepsake("mechanics", "moonTreaty").selectedKeepsakeId, "mossPatch", "a locked keepsake must not be selectable");
+
+for (let runIndex = 0; runIndex < 2; runIndex += 1) {
+  clearCastleRun("mechanics");
+  progressionRun = freshRun();
+  saveCastleRun("mechanics", progressionRun);
+  progressionProfile = saveCastleRun("mechanics", { ...progressionRun, phase: "complete" });
+}
+assert.equal(progressionProfile.runsCompleted, 3, "expedition progression should continue across three completed runs");
+assert.equal(progressionProfile.unlockedKeepsakeIds.includes("moonTreaty"), true, "the third completed expedition should unlock Moon Treaty");
+assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "complete" }), ["moonTreaty"], "the third expedition should celebrate only Moon Treaty");
+assert.equal(selectCastleKeepsake("mechanics", "moonTreaty").selectedKeepsakeId, "moonTreaty", "the final keepsake should become selectable at its advertised milestone");
 
 let routeDraft = {
   ...freshRun(),

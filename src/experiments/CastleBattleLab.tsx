@@ -710,7 +710,13 @@ function DeckSetup({
   onStart: () => void;
   onExit: () => void;
 }) {
-  const nextKeepsake = Object.values(CASTLE_KEEPSAKE_DEFS).find(keepsake => !profile.unlockedKeepsakeIds.includes(keepsake.id));
+  const lockedKeepsakes = Object.values(CASTLE_KEEPSAKE_DEFS).filter(keepsake => !profile.unlockedKeepsakeIds.includes(keepsake.id));
+  const nextGuardianKeepsake = lockedKeepsakes
+    .filter(keepsake => keepsake.guardianRequirement)
+    .sort((a, b) => a.guardianRequirement! - b.guardianRequirement!)[0];
+  const nextRunKeepsake = lockedKeepsakes
+    .filter(keepsake => keepsake.runRequirement)
+    .sort((a, b) => a.runRequirement! - b.runRequirement!)[0];
   const selectedDeck = decks.find(deck => deck.id === selectedDeckId);
   const canStart = Boolean(selectedDeck && selectedDeck.activeCount > 0);
   return (
@@ -736,9 +742,13 @@ function DeckSetup({
             <span><b>{profile.totalReviews}</b><small>reviews recorded</small></span>
             <span><b>{profile.bestRegion}</b><small>deepest region</small></span>
           </div>
-          {nextKeepsake
-            ? <p><Sparkles /><span><b>Next keepsake: {nextKeepsake.name}</b>{nextKeepsake.unlockHint}</span></p>
-            : <p><Sparkles /><span><b>All keepsakes discovered</b>Mallow has no more trinkets to hide.</span></p>}
+          {nextGuardianKeepsake && (
+            <p><Shield /><span><b>Guardian trail: {nextGuardianKeepsake.name}</b>Clear {Math.max(0, nextGuardianKeepsake.guardianRequirement! - profile.guardianClears)} more guardian{nextGuardianKeepsake.guardianRequirement! - profile.guardianClears === 1 ? "" : "s"} · {profile.guardianClears}/{nextGuardianKeepsake.guardianRequirement}</span></p>
+          )}
+          {nextRunKeepsake && (
+            <p><Route /><span><b>Expedition trail: {nextRunKeepsake.name}</b>Complete {Math.max(0, nextRunKeepsake.runRequirement! - profile.runsCompleted)} more expedition{nextRunKeepsake.runRequirement! - profile.runsCompleted === 1 ? "" : "s"} · {profile.runsCompleted}/{nextRunKeepsake.runRequirement}</span></p>
+          )}
+          {!nextGuardianKeepsake && !nextRunKeepsake && <p><Sparkles /><span><b>All keepsakes discovered</b>Mallow has no more trinkets to hide.</span></p>}
         </section>
 
         <h2 className="castle-setup-label" id="castle-deck-label">Study world</h2>
