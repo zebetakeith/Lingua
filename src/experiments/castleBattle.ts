@@ -601,6 +601,36 @@ export function getCastleStudyReport(run: CastleRunState): CastleStudyReport {
   };
 }
 
+export function getCastleBattleLesson(run: CastleRunState): string {
+  const telemetry = run.battle.telemetry;
+  const spentShare = telemetry.energyEarned > 0 ? telemetry.energySpent / telemetry.energyEarned : 1;
+  if (run.phase === "lost") {
+    if (run.battle.energy >= 4 || (telemetry.energyEarned >= 6 && spentShare < 0.45)) {
+      return "The final keep fell with summon energy still banked. Spend earlier on a frontline, then save only for a specific power.";
+    }
+    if (telemetry.rallyTriggered >= 2) {
+      return "Enemy Rally decided the final siege. Correct the missed directions soon, then recover those same directions to clear Rally pips.";
+    }
+    if (telemetry.summons < 2 && telemetry.activeCombatMs >= 20_000) {
+      return "The last lane needed more bodies. Mix cheap units into the march instead of waiting only for a premium summon.";
+    }
+    if (telemetry.damageTaken >= 28) {
+      return "The frontline formed too late in the final siege. Summon before enemies reach Pipplo's turret range and keep one defensive power ready.";
+    }
+    return "The final keep was close. A Quick expedition with the same deck is the cleanest rematch before changing the reward curve.";
+  }
+  if (telemetry.damageTaken === 0 && telemetry.rallyTriggered === 0) {
+    return "The final siege was controlled cleanly: no keep damage and no Enemy Rally. A longer contract is a fair next challenge.";
+  }
+  if (telemetry.rallyTriggered > 0) {
+    return "The road was cleared despite Enemy Rally. Recalling the missed directions earlier next time will make the same build safer.";
+  }
+  if (telemetry.powersUsed >= 2) {
+    return "Castle powers carried real weight in the final siege. Keep pairing a defensive cast with steady low-cost summons.";
+  }
+  return "The army held together. Next time, spend energy a little earlier to shorten the final siege and reduce pressure on the keep.";
+}
+
 function getEnemyWaveKind(region: number, battleInRegion: number, wave: number, guardian: boolean): CastleUnitKind {
   if (guardian && wave % 7 === 6) return "rootLump";
   const regionPool: CastleUnitKind[] = region <= 1

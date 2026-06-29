@@ -9,6 +9,7 @@ import {
   chooseCastleRoute,
   claimCastleUpgrade,
   createInitialCastleRun,
+  getCastleBattleLesson,
   getCastleEventChoiceEffect,
   getCastleStudyReport,
   resolveCastleEvent,
@@ -147,6 +148,25 @@ const reconstructedReport = getCastleStudyReport({
 assert.equal(reconstructedReport.gradedReviews, 9, "legacy reports should reconstruct graded reviews from correct and wrong totals");
 assert.equal(reconstructedReport.exposures, 3, "legacy reports should infer the remaining reviews as safe exposures");
 assert.equal(reconstructedReport.accuracy, 7 / 9, "legacy report accuracy must stay within the valid range");
+
+const bankedEnergyLesson = getCastleBattleLesson({
+  ...freshRun(),
+  phase: "lost",
+  battle: { ...freshRun().battle, energy: 5, telemetry: { ...freshRun().battle.telemetry, energyEarned: 8, energySpent: 2 } },
+});
+assert.match(bankedEnergyLesson, /energy still banked/i, "a loss with hoarded energy should produce actionable spending guidance");
+const rallyLesson = getCastleBattleLesson({
+  ...freshRun(),
+  phase: "lost",
+  battle: { ...freshRun().battle, telemetry: { ...freshRun().battle.telemetry, rallyTriggered: 3, energyEarned: 6, energySpent: 6 } },
+});
+assert.match(rallyLesson, /Enemy Rally decided/i, "a rally-heavy loss should explain the recovery mechanic");
+const cleanWinLesson = getCastleBattleLesson({
+  ...freshRun(),
+  phase: "complete",
+  battle: { ...freshRun().battle, telemetry: { ...freshRun().battle.telemetry, damageTaken: 0, rallyTriggered: 0 } },
+});
+assert.match(cleanWinLesson, /controlled cleanly/i, "a clean win should recommend an appropriate next challenge");
 
 let rally = freshRun();
 const rallyWaveBefore = rally.battle.enemySpawnTimerMs;

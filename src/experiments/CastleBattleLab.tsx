@@ -56,6 +56,7 @@ import {
   formatCastleEnergy,
   getAvailableCastlePowers,
   getCastleBattleProgress,
+  getCastleBattleLesson,
   getCastleEventChoiceEffect,
   getCastleRegionDef,
   getCastleStudyReport,
@@ -1508,6 +1509,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
   const activeEvent = run.pendingEventId ? CASTLE_EVENT_DEFS[run.pendingEventId] : null;
   const studyReport = getCastleStudyReport(run);
+  const battleLesson = getCastleBattleLesson(run);
   const studyFocus = studyReport.focusDirections.flatMap(item => {
     const label = getStudyDirectionLabel(selectedDeckId, item.key);
     return label ? [{ ...item, ...label }] : [];
@@ -1785,6 +1787,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                 </div>
               )}
               <aside><Sparkles /><div><b>Next expedition</b><span>{studyReport.recommendation}</span></div></aside>
+              <aside className="is-battle-lesson"><Swords /><div><b>Battle lesson</b><span>{battleLesson}</span></div></aside>
             </section>
             {permanentDiscoveryNames.length > 0 && (
               <div className="castle-discovery-banner is-result">

@@ -499,6 +499,8 @@
 .castle-learning-report > aside div { display: grid; gap: 2px; }
 .castle-learning-report > aside b { font-size: 9px; }
 .castle-learning-report > aside span { font-size: 8px; line-height: 1.35; }
+.castle-learning-report > aside.is-battle-lesson { color: #31556d; background: #e4f2fb; }
+.castle-learning-report > aside.is-battle-lesson svg { color: #4f8fb3; }
 
 .castle-tutorial-overlay { z-index: 130; place-items: center; }
 .castle-tutorial-sheet { width: min(520px, 100%); padding: 24px; text-align: center; background: linear-gradient(180deg, #fffdf0, #eef7d9); border: 3px solid rgba(37, 104, 105, 0.22); border-radius: 28px; box-shadow: 0 24px 70px rgba(13, 65, 68, 0.3); }
