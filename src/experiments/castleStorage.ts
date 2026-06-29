@@ -68,6 +68,10 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
   const eventIds = Object.keys(CASTLE_EVENT_DEFS) as CastleEventId[];
   const nextEnemyKind = battle.nextEnemyKind in CASTLE_UNIT_DEFS ? battle.nextEnemyKind : base.battle.nextEnemyKind;
   const afterNextEnemyKind = battle.afterNextEnemyKind in CASTLE_UNIT_DEFS ? battle.afterNextEnemyKind : nextEnemyKind;
+  const encounteredEnemyKinds = Array.from(new Set([
+    ...(Array.isArray(battle.encounteredEnemyKinds) ? battle.encounteredEnemyKinds : []),
+    ...(Array.isArray(battle.units) ? battle.units.filter(unit => unit?.side === "enemy").map(unit => unit.kind) : []),
+  ].filter(kind => kind in CASTLE_UNIT_DEFS))) as CastleUnitKind[];
   return {
     ...base,
     ...saved,
@@ -94,6 +98,7 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
       recallBoltCharge: battle.recallBoltCharge || 0,
       missedDirectionKeys: Array.isArray(battle.missedDirectionKeys) ? battle.missedDirectionKeys : [],
       recalledDirectionKeys: Array.isArray(battle.recalledDirectionKeys) ? battle.recalledDirectionKeys : [],
+      encounteredEnemyKinds,
       units: Array.isArray(battle.units)
         ? battle.units.filter(unit => unit && unit.kind in CASTLE_UNIT_DEFS && (unit.side === "player" || unit.side === "enemy"))
         : [],
@@ -216,6 +221,7 @@ export function saveCastleRun(deckId: string, run: CastleRunState): CastleDeckPr
     ])),
     discoveredEnemyKinds: Array.from(new Set([
       ...previousProfile.discoveredEnemyKinds,
+      ...run.battle.encounteredEnemyKinds,
       ...run.battle.units.filter(unit => unit.side === "enemy").map(unit => unit.kind),
     ])),
   };

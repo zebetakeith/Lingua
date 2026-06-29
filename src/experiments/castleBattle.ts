@@ -141,6 +141,7 @@ export interface CastleBattleState {
   enemyTurretTimerMs: number;
   enemySlowMs: number;
   units: CastleUnitState[];
+  encounteredEnemyKinds: CastleUnitKind[];
   nextUnitId: number;
   fxEvents: CastleFxEvent[];
   nextFxId: number;
@@ -648,6 +649,7 @@ function createBattle(
     enemyTurretTimerMs: 2_500,
     enemySlowMs: 0,
     units: [],
+    encounteredEnemyKinds: [],
     nextUnitId: 1,
     fxEvents: [],
     nextFxId: 1,
@@ -760,6 +762,9 @@ function addUnit(
   return {
     ...battle,
     units: [...battle.units, unit],
+    encounteredEnemyKinds: side === "enemy"
+      ? Array.from(new Set([...battle.encounteredEnemyKinds, kind]))
+      : battle.encounteredEnemyKinds,
     nextUnitId: battle.nextUnitId + 1,
     fxEvents: [...battle.fxEvents, { id: battle.nextFxId, kind: "spawn" as const, side, position: unit.position, ttlMs: 450 }].slice(-14),
     nextFxId: battle.nextFxId + 1,

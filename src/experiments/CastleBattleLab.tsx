@@ -944,6 +944,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const dialogReturnFocus = useRef<HTMLElement | null>(null);
 
   const selectedDeck = useMemo(() => decks.find(deck => deck.id === selectedDeckId), [decks, selectedDeckId]);
+  const discoveredEnemyKinds = useMemo(() => new Set([
+    ...profile.discoveredEnemyKinds,
+    ...(run?.battle.encounteredEnemyKinds || []),
+  ]), [profile.discoveredEnemyKinds, run?.battle.encounteredEnemyKinds]);
   const activeDialogKey = tutorialOpen
     ? "tutorial"
     : guideOpen
@@ -1836,10 +1840,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               })}
             </div>
 
-            <h3>Enemy families <small>{ENEMY_GUIDE_KINDS.filter(kind => profile.discoveredEnemyKinds.includes(kind)).length}/{ENEMY_GUIDE_KINDS.length} discovered</small></h3>
+            <h3>Enemy families <small>{ENEMY_GUIDE_KINDS.filter(kind => discoveredEnemyKinds.has(kind)).length}/{ENEMY_GUIDE_KINDS.length} discovered</small></h3>
             <div className="castle-guide-list">
               {ENEMY_GUIDE_KINDS.map(kind => {
-                const discovered = profile.discoveredEnemyKinds.includes(kind) || run.battle.units.some(unit => unit.side === "enemy" && unit.kind === kind);
+                const discovered = discoveredEnemyKinds.has(kind);
                 if (!discovered) {
                   return <article key={kind} className="is-undiscovered"><span className="castle-unit-unknown" aria-hidden="true">?</span><div><b>Unknown rival</b><span>Meet this family in the lane to reveal its role and battle stats.</span><small>Undiscovered</small></div></article>;
                 }

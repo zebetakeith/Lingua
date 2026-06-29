@@ -378,6 +378,25 @@ hornSplash = tickCastleRun(hornSplash, 100, 1);
 assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-primary").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 4, "Imp Horns should preserve the turret's full primary hit");
 assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-splash").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 2, "Imp Horns should splash a second enemy for half turret damage");
 
+let encounterRun = createInitialCastleRun("encounter-memory", "quick", "quadratic", ALL_CASTLE_UPGRADE_IDS, 7);
+encounterRun = {
+  ...encounterRun,
+  battle: {
+    ...encounterRun.battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 0,
+    nextEnemyKind: "echoMoth",
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+  },
+};
+encounterRun = tickCastleRun(encounterRun, 100, 1);
+assert.equal(encounterRun.battle.encounteredEnemyKinds.includes("echoMoth"), true, "enemy families should be recorded at spawn time");
+encounterRun = { ...encounterRun, battle: { ...encounterRun.battle, units: [] } };
+const encounterProfile = saveCastleRun("encounter-memory", encounterRun);
+assert.equal(encounterProfile.discoveredEnemyKinds.includes("echoMoth"), true, "a defeated enemy should remain discovered even when no longer alive at autosave");
+
 let hasted = { ...freshRun(), upgrades: ["cleanStreak"], battle: { ...freshRun().battle, energy: 12 } };
 for (let index = 0; index < 5; index += 1) hasted = applyCastleStudyOutcome(hasted, outcome(index));
 hasted = summonCastleUnit(hasted, "dartlet");
