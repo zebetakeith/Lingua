@@ -29,6 +29,7 @@ for (const kind of ["shellSlime", "nibbleImp", "sporeBud", "echoMoth", "rootLump
   expected.set(path.join("units", "enemy", kind, "seed-v1.png"), 160);
   expectFrames(path.join("units", "enemy", kind), ["attack"], 160);
 }
+expectFrames(path.join("units", "enemy", "nibbleImp"), ["walk"], 160);
 
 async function collectPngs(directory, relative = "") {
   const files = [];

@@ -181,6 +181,15 @@ const FRIENDLY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   piplet: 140,
   dartlet: 95,
 };
+const ENEMY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
+  nibbleImp: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/nibbleImp/walk/0${index + 1}.png`,
+  ),
+};
+const ENEMY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
+  nibbleImp: 90,
+};
 const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   piplet: Array.from(
     { length: 4 },
@@ -322,12 +331,14 @@ function SlimeFace({
       ? FRIENDLY_UNIT_ATTACK_FRAMES[kind]
       : ENEMY_UNIT_ATTACK_FRAMES[kind]
     : undefined;
-  const walkFrames = walking && side === "player" ? FRIENDLY_UNIT_WALK_FRAMES[kind] : undefined;
+  const walkFrames = walking
+    ? side === "player" ? FRIENDLY_UNIT_WALK_FRAMES[kind] : ENEMY_UNIT_WALK_FRAMES[kind]
+    : undefined;
   const animationFrames = attackFrames || walkFrames;
   const animationName = attackFrames ? "attack" : walkFrames ? "walk" : "idle";
   const animationFrameMs = attackFrames
     ? (side === "player" ? FRIENDLY_UNIT_ATTACK_FRAME_MS[kind] : ENEMY_UNIT_ATTACK_FRAME_MS[kind]) || 45
-    : FRIENDLY_UNIT_WALK_FRAME_MS[kind] || 140;
+    : (side === "player" ? FRIENDLY_UNIT_WALK_FRAME_MS[kind] : ENEMY_UNIT_WALK_FRAME_MS[kind]) || 140;
   if (art) {
     return (
       <span
@@ -1034,6 +1045,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
       ...Object.values(ENEMY_UNIT_ATTACK_FRAMES).flat(),
       ...Object.values(FRIENDLY_UNIT_WALK_FRAMES).flat(),
+      ...Object.values(ENEMY_UNIT_WALK_FRAMES).flat(),
       ].forEach(src => {
         const image = new Image();
         image.decoding = "async";
