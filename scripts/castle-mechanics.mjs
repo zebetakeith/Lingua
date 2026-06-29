@@ -10,8 +10,10 @@ import {
   canChooseCastleEvent,
   chooseCastleRoute,
   claimCastleUpgrade,
+  continueCastleRun,
   createInitialCastleRun,
   getCastleBattleLesson,
+  getCastleEndlessThreat,
   getCastleEventChoiceEffect,
   getCastleStudyReport,
   resolveCastleEvent,
@@ -691,5 +693,76 @@ guardian = tickCastleRun({ ...guardian, battle: { ...guardian.battle, enemyCastl
 assert.equal(guardian.battle.guardianPhase, 3, "a guardian should telegraph its final phase below 33% HP");
 assert.equal(guardian.battle.units.some(unit => unit.kind === "rootLump"), true, "guardian phase three should add a siege beast");
 assert.ok(guardian.battle.enemySpawnTimerMs <= 2_800, "guardian phase three should accelerate the next wave");
+
+const endlessStart = continueCastleRun({
+  ...freshRun(),
+  phase: "retire",
+  region: 3,
+  battleInRegion: 3,
+  targetRegions: 3,
+  carriedCastleHp: 100,
+  carriedEnergy: 0,
+});
+assert.equal(endlessStart.phase, "battle", "continuing after a contract should begin the endless road");
+assert.equal(endlessStart.region, 4, "the first endless battle should begin in region four");
+assert.equal(endlessStart.battle.enemyThreatTier, 1, "region four should begin Moon Ascension 1");
+assert.equal(getCastleEndlessThreat(6).tier, 3, "each region after the core three should add one ascension tier");
+
+let scaledWave = {
+  ...endlessStart,
+  battle: {
+    ...endlessStart.battle,
+    mode: "study",
+    enemySpawnTimerMs: 0,
+    nextEnemyKind: "shellSlime",
+    afterNextEnemyKind: "shellSlime",
+    autoSpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+  },
+};
+scaledWave = tickCastleRun(scaledWave, 100, 1);
+const ascendedShell = scaledWave.battle.units.find(unit => unit.side === "enemy" && unit.kind === "shellSlime");
+assert.ok(ascendedShell, "an endless wave should still spawn its announced unit");
+assert.equal(ascendedShell.maxHp, 20, "Moon Ascension 1 should add ten percent enemy health");
+assert.equal(ascendedShell.damageBonus, 1, "Moon Ascension 1 should add its first attack bonus");
+assert.equal(ascendedShell.shield, 8, "ascended armored enemies should gain two barrier per early tier");
+
+function guardianAtThreat(tier, phase, enemyCastleHp, playerBarrier = 0) {
+  const base = freshRun();
+  return {
+    ...base,
+    region: 3 + tier,
+    battleInRegion: 3,
+    battle: {
+      ...base.battle,
+      guardian: true,
+      guardianPhase: phase,
+      enemyThreatTier: tier,
+      mode: "study",
+      enemyCastleMaxHp: 100,
+      enemyCastleHp,
+      playerCastleHp: 100,
+      playerBarrier,
+      autoSpawnTimerMs: 999_999,
+      enemySpawnTimerMs: 999_999,
+      playerTurretTimerMs: 999_999,
+      enemyTurretTimerMs: 999_999,
+      units: [],
+    },
+  };
+}
+
+const ascensionOneGuardian = tickCastleRun(guardianAtThreat(1, 1, 60), 100, 1);
+assert.equal(ascensionOneGuardian.battle.units.some(unit => unit.kind === "echoMoth"), true, "Ascension 1 phase two should add an Echo Moth escort");
+const ascensionTwoGuardian = tickCastleRun(guardianAtThreat(2, 2, 30), 100, 1);
+assert.equal(ascensionTwoGuardian.battle.units.some(unit => unit.kind === "sporeBud"), true, "Ascension 2 phase three should add Spore support");
+const ascendedRoot = ascensionTwoGuardian.battle.units.find(unit => unit.kind === "rootLump");
+assert.ok(ascendedRoot.maxHp > 30, "endless guardian siege beasts should retain their ascension scaling");
+const ascensionThreeGuardian = tickCastleRun(guardianAtThreat(3, 2, 30, 3), 100, 1);
+assert.equal(ascensionThreeGuardian.battle.playerBarrier, 0, "Moon Pulse should consume keep barrier first");
+assert.equal(ascensionThreeGuardian.battle.playerCastleHp, 98, "Ascension 3 Moon Pulse should deal only its unblocked two damage");
+assert.equal(ascensionThreeGuardian.battle.telemetry.damageTaken, 2, "Moon Pulse damage should appear in battle telemetry");
+assert.match(ascensionThreeGuardian.battle.notice, /Moon Pulse dealt 2/, "the guardian notice should explain Moon Pulse's actual damage");
 
 process.stdout.write("Castle mechanics assertions passed.\n");

@@ -3,6 +3,7 @@ import {
   activateCastlePower,
   chooseCastleRoute,
   claimCastleUpgrade,
+  continueCastleRun,
   createInitialCastleRun,
   retireCastleRun,
   resumeCastleBattle,
@@ -105,7 +106,7 @@ function simulate(curve, mastery) {
   };
 }
 
-function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0) {
+function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0, targetEndlessRegion = 0) {
   const seed = Math.round((mastery * 10_000) + ({ quick: 100, regular: 200, long: 300 }[contractId] || 0) + (seedOffset * 997));
   let run = createInitialCastleRun(`full-${contractId}-${mastery}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle");
   const multipleChoiceReward = rewardFor("quadratic", mastery, "multiple_choice");
@@ -145,7 +146,9 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
       continue;
     }
     if (run.phase === "retire") {
-      run = retireCastleRun(run);
+      run = targetEndlessRegion > 0 && run.region < targetEndlessRegion
+        ? continueCastleRun(run)
+        : retireCastleRun(run);
       continue;
     }
     if (run.phase !== "battle") break;
@@ -188,6 +191,7 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0)
     rallies,
     enemyCastleHp: Math.round(run.battle.enemyCastleHp),
     battleReviews,
+    peakAscension: Math.max(0, run.bestRegion - 3),
   };
 }
 
@@ -224,6 +228,7 @@ const fullRuns = ["quick", "regular", "long"].flatMap(contractId => [0, 1, 2].fl
 const pressureRuns = [0.55, 0.65, 0.72].flatMap(correctRate => [0, 1, 2].map(seedOffset => (
   simulateFullRun("quick", 0.35, correctRate, seedOffset)
 )));
+const endlessRuns = [0, 1, 2].map(seedOffset => simulateFullRun("long", 0.9, 0.96, seedOffset, 6));
 const idlePrompt = simulateIdlePrompt();
 const validation = {
   unresolvedFirstBattles: report.filter(row => row.result === "battle").length,
@@ -231,13 +236,15 @@ const validation = {
   pressureWins: pressureRuns.filter(row => row.result === "complete").length,
   pressureLosses: pressureRuns.filter(row => row.result === "lost").length,
   pressuredMidRuns: pressureRuns.filter(row => row.correctRate === 0.65 && row.result === "complete" && row.damageTaken > 0).length,
+  endlessEntries: endlessRuns.filter(row => row.peakAscension >= 1).length,
+  endlessDeepRuns: endlessRuns.filter(row => row.peakAscension >= 2).length,
   idlePromptCreatesDanger: idlePrompt.result === "lost" || idlePrompt.damageTaken > 0,
 };
 
 if (process.argv.includes("--quiet")) {
-  process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs).\n`);
+  process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs, ${endlessRuns.length} endless runs).\n`);
 } else {
-  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, idlePrompt, validation }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, endlessRuns, idlePrompt, validation }, null, 2)}\n`);
 }
 if (
   validation.unresolvedFirstBattles > 0
@@ -245,5 +252,7 @@ if (
   || validation.pressureWins === 0
   || validation.pressureLosses === 0
   || validation.pressuredMidRuns === 0
+  || validation.endlessEntries !== endlessRuns.length
+  || validation.endlessDeepRuns === 0
   || !validation.idlePromptCreatesDanger
 ) process.exitCode = 1;

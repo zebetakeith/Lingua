@@ -98,6 +98,9 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
       recallBoltCharge: battle.recallBoltCharge || 0,
       missedDirectionKeys: Array.isArray(battle.missedDirectionKeys) ? battle.missedDirectionKeys : [],
       recalledDirectionKeys: Array.isArray(battle.recalledDirectionKeys) ? battle.recalledDirectionKeys : [],
+      enemyThreatTier: Number.isFinite(battle.enemyThreatTier)
+        ? Math.max(0, Math.floor(battle.enemyThreatTier))
+        : base.battle.enemyThreatTier,
       encounteredEnemyKinds,
       units: Array.isArray(battle.units)
         ? battle.units.filter(unit => unit && unit.kind in CASTLE_UNIT_DEFS && (unit.side === "player" || unit.side === "enemy"))

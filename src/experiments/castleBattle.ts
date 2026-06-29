@@ -142,6 +142,7 @@ export interface CastleBattleState {
   playerTurretTimerMs: number;
   enemyTurretTimerMs: number;
   enemySlowMs: number;
+  enemyThreatTier: number;
   units: CastleUnitState[];
   encounteredEnemyKinds: CastleUnitKind[];
   nextUnitId: number;
@@ -409,6 +410,19 @@ export function getCastleRegionDef(region: number): CastleRegionDef {
   return CASTLE_REGION_DEFS[(Math.max(1, region) - 1) % CASTLE_REGION_DEFS.length] || CASTLE_REGION_DEFS[0];
 }
 
+export function getCastleEndlessThreat(region: number) {
+  const tier = Math.max(0, Math.floor(region) - CASTLE_REGION_DEFS.length);
+  return {
+    tier,
+    label: tier > 0 ? `Moon Ascension ${tier}` : "Contract road",
+    enemyHpMultiplier: Math.round((1 + (tier * 0.1)) * 100) / 100,
+    enemyDamageBonus: Math.ceil(tier / 2),
+    description: tier > 0
+      ? `Enemies gain ${tier * 10}% health and +${Math.ceil(tier / 2)} attack. Guardian phases add ascension powers.`
+      : "Standard region pressure before endless ascension begins.",
+  };
+}
+
 export const CASTLE_UNIT_DEFS: Record<CastleUnitKind, CastleUnitDef> = {
   piplet: { kind: "piplet", name: "Piplet", cost: 0, hp: 12, damage: 2, speed: 4.5, range: 2.4, attackMs: 1_000, accent: "#f4d84a", role: "Free frontline wobble" },
   dartlet: { kind: "dartlet", name: "Dartlet", cost: 1, hp: 8, damage: 3, speed: 8, range: 2.2, attackMs: 800, accent: "#ff8a72", role: "Fast pressure" },
@@ -651,6 +665,7 @@ function createBattle(
   upgrades: CastleUpgradeId[],
 ): CastleBattleState {
   const guardian = battleInRegion === 3;
+  const endlessThreat = getCastleEndlessThreat(region);
   const playerCastleMaxHp = 100 + (hasUpgrade(upgrades, "crabClaws") ? 20 : 0);
   const enemyCastleMaxHp = 72 + (region * 18) + (battleInRegion * 10) + (guardian ? 42 : 0);
   return {
@@ -680,6 +695,7 @@ function createBattle(
     playerTurretTimerMs: 1_500,
     enemyTurretTimerMs: 2_500,
     enemySlowMs: 0,
+    enemyThreatTier: endlessThreat.tier,
     units: [],
     encounteredEnemyKinds: [],
     nextUnitId: 1,
@@ -749,6 +765,7 @@ function createUnit(
   paid: boolean,
   friendlyCount: number,
   playerSpawnCount: number,
+  enemyThreatTier: number,
 ): CastleUnitState {
   const def = CASTLE_UNIT_DEFS[kind];
   let hpMultiplier = 1;
@@ -765,6 +782,11 @@ function createUnit(
   } else {
     if (kind === "shellSlime") shield += 6;
     if (kind === "rootLump") shield += 6;
+    if (enemyThreatTier > 0) {
+      hpMultiplier += enemyThreatTier * 0.1;
+      damageBonus += Math.ceil(enemyThreatTier / 2);
+      if (kind === "shellSlime" || kind === "rootLump") shield += Math.min(10, enemyThreatTier * 2);
+    }
   }
   const hp = Math.round(def.hp * hpMultiplier);
   return {
@@ -790,7 +812,7 @@ function addUnit(
   paid = false,
 ): CastleBattleState {
   const friendlyCount = battle.units.filter(unit => unit.side === side).length;
-  const unit = createUnit(side, kind, battle.nextUnitId, upgrades, paid, friendlyCount, battle.playerSpawnCount);
+  const unit = createUnit(side, kind, battle.nextUnitId, upgrades, paid, friendlyCount, battle.playerSpawnCount, battle.enemyThreatTier);
   return {
     ...battle,
     units: [...battle.units, unit],
@@ -858,17 +880,37 @@ function advanceGuardianPhase(battle: CastleBattleState, upgrades: CastleUpgrade
   for (let phase = battle.guardianPhase + 1; phase <= targetPhase; phase += 1) {
     if (phase === 2) {
       next = addUnit(next, "enemy", "shellSlime", upgrades);
+      if (next.enemyThreatTier >= 1) next = addUnit(next, "enemy", "echoMoth", upgrades);
       next = addBattleFx(next, "power", "enemy", 88, "Phase 2: Rootwall!");
-      next.notice = "Guardian phase 2: a Rootwall defender arrived and enemy pressure is rising.";
+      next.notice = next.enemyThreatTier >= 1
+        ? "Guardian phase 2: Rootwall rose with an Echo Moth escort."
+        : "Guardian phase 2: a Rootwall defender arrived and enemy pressure is rising.";
     } else if (phase === 3) {
       next = addUnit(next, "enemy", "rootLump", upgrades);
       const rootId = next.units[next.units.length - 1]?.id;
-      next.units = next.units.map(unit => unit.id === rootId
-        ? { ...unit, hp: 30, maxHp: 30, damageBonus: -2 }
-        : unit);
+      if (next.enemyThreatTier === 0) {
+        next.units = next.units.map(unit => unit.id === rootId
+          ? { ...unit, hp: 30, maxHp: 30, damageBonus: -2 }
+          : unit);
+      }
+      if (next.enemyThreatTier >= 2) next = addUnit(next, "enemy", "sporeBud", upgrades);
+      let pulseDamage = 0;
+      if (next.enemyThreatTier >= 3) {
+        const moonPulse = Math.min(8, 2 + next.enemyThreatTier);
+        const barrierAbsorbed = Math.min(next.playerBarrier, moonPulse);
+        pulseDamage = moonPulse - barrierAbsorbed;
+        next.playerBarrier -= barrierAbsorbed;
+        next.playerCastleHp = Math.max(0, next.playerCastleHp - pulseDamage);
+        next.telemetry.damageTaken += pulseDamage;
+        next = addBattleFx(next, "projectile", "enemy", 2, pulseDamage > 0 ? `Moon Pulse ${pulseDamage}` : "Moon Pulse blocked", 90);
+      }
       next.enemySpawnTimerMs = Math.min(next.enemySpawnTimerMs, 2_800);
       next = addBattleFx(next, "power", "enemy", 90, "Phase 3: Last roots!");
-      next.notice = "Guardian phase 3: the last roots attack faster behind a siege beast.";
+      next.notice = next.enemyThreatTier >= 3
+        ? `Guardian phase 3: Moon Pulse dealt ${pulseDamage} keep damage; the final siege squad arrived.`
+        : next.enemyThreatTier >= 2
+          ? "Guardian phase 3: a Spore Bud joined the final siege beast."
+          : "Guardian phase 3: the last roots attack faster behind a siege beast.";
     }
     next.guardianPhase = phase;
   }
@@ -1104,7 +1146,7 @@ function resolveBattleStep(
   if (battle.enemyTurretTimerMs <= 0) {
     const target = battle.units.filter(unit => unit.side === "player" && unit.position >= 68 && unit.hp > 0).sort((a, b) => b.position - a.position)[0];
     if (target) {
-      const turretDamage = battle.guardian ? battle.guardianPhase >= 3 ? 5 : 4 : 3;
+      const turretDamage = (battle.guardian ? battle.guardianPhase >= 3 ? 5 : 4 : 3) + Math.floor(battle.enemyThreatTier / 2);
       battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, turretDamage).unit : unit);
       generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${turretDamage}` });
     }

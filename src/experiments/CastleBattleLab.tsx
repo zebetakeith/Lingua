@@ -60,6 +60,7 @@ import {
   getCastleBattleProgress,
   getCastleBattleLesson,
   getCastleEventChoiceEffect,
+  getCastleEndlessThreat,
   getCastleRegionDef,
   getCastleStudyReport,
   getPlayerSummonKinds,
@@ -354,6 +355,7 @@ function SlimeFace({
 function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnimation: PipploAnimationState }) {
   const battle = run.battle;
   const region = getCastleRegionDef(run.region);
+  const endlessThreat = getCastleEndlessThreat(run.region);
   const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => (event.kind === "hit" || event.kind === "projectile") && event.position <= 3);
   const playerCastleHit = Boolean(playerCastleHitEvent);
   const enemyCastleHitEvent = battle.fxEvents.slice().reverse().find(event => (event.kind === "hit" || event.kind === "projectile") && event.position >= 97);
@@ -400,9 +402,9 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
       <div className="castle-sky-orb" />
       <div className="castle-scene-status">
         <CastleHealth current={battle.playerCastleHp} max={battle.playerCastleMaxHp} />
-        <div className="castle-region-chip" title={region.enemyTheme}>
+        <div className="castle-region-chip" title={`${region.enemyTheme}. ${endlessThreat.description}`}>
           <span>{getCastleBattleProgress(run)}</span>
-          <b>{region.shortName}</b>
+          <b>{region.shortName}{endlessThreat.tier > 0 ? ` · A${endlessThreat.tier}` : ""}</b>
           <small>{battle.guardian ? `Guardian phase ${battle.guardianPhase}/3` : "Lane battle"}</small>
         </div>
         <CastleHealth current={battle.enemyCastleHp} max={battle.enemyCastleMaxHp} enemy />
@@ -1754,6 +1756,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2>Pipplo can head home—or wobble deeper</h2>
             <p className="castle-result-story">Mallow lowers her wand and rolls the moon gate open. The promised study road is clear, but she is already grinning about a rematch.</p>
             <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · {run.battlesWon} castles defeated</p>
+            <p><b>Next road:</b> {getCastleEndlessThreat(run.region + 1).tier > 0
+              ? `${getCastleEndlessThreat(run.region + 1).label}. ${getCastleEndlessThreat(run.region + 1).description}`
+              : `${getCastleRegionDef(run.region + 1).name}. Clear the remaining named regions before Moon Ascensions begin.`} A new retire checkpoint waits after its guardian.</p>
             <div>
               <button onClick={() => setRun(current => current ? retireCastleRun(current) : current)}>Retire successfully</button>
               <button onClick={() => {
@@ -1765,7 +1770,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                 const nextRun = continuedRun.phase === "battle" ? introduceForBattle(continuedRun) : continuedRun;
                 if (nextRun.phase === "battle") beginQuestion(nextRun, null);
                 else setRun(nextRun);
-              }}>Continue endlessly</button>
+              }}>Continue deeper · {getCastleEndlessThreat(run.region + 1).tier > 0
+                ? getCastleEndlessThreat(run.region + 1).label
+                : getCastleRegionDef(run.region + 1).shortName}</button>
             </div>
           </section>
         </aside>
@@ -1836,6 +1843,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy. Each seen prompt has a short grace period, then enemy speed rises until you answer.</small></span>
               <span><Route /><b>Formation lanes</b><small>Up to {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged units strike one target at once. Extra units queue as reserves.</small></span>
               <span><Castle /><b>Guardian phases</b><small>At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
+              <span><Sparkles /><b>Moon Ascension</b><small>After the three named regions, each deeper region adds 10% enemy HP and +1 attack every two tiers. Guardians gain Echo escorts, Spore support, then Moon Pulse.</small></span>
             </div>
 
             {run.keepsakeId && (() => {
@@ -1907,6 +1915,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
             <p>Each region has its own enemy mix and colors. Guardian keeps change at 66% and 33% HP; the center banner names the phase before the new squad arrives.</p>
+            <p>After the three named regions, endless Moon Ascensions add 10% enemy HP per tier and +1 attack every two tiers. Ascension guardians add an Echo Moth in phase 2, a Spore Bud from tier 2, and a barrier-aware Moon Pulse from tier 3.</p>
             <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries and unlocked keepsakes remain.</p>
             <button className="castle-tutorial-replay" onClick={() => { setHelpOpen(false); setTutorialStep(0); setTutorialOpen(true); }}><Play />Replay tutorial</button>
           </section>
