@@ -13,6 +13,7 @@ export type CastleContractId = "quick" | "regular" | "long";
 export type CastleRunPhase = "battle" | "reward" | "route" | "event" | "retire" | "complete" | "lost";
 export type CastleBattleMode = "study" | "command";
 export type CastleRouteChoice = "battle" | "rest" | "workshop" | "event";
+export type CastleGuardianPowerId = "shellReprisal" | "sporeWeather" | "moonTax";
 export type CastleKeepsakeId = "starBuckle" | "shellButton" | "boltBead" | "nurseryBell" | "mossPatch" | "moonTreaty";
 export type CastleEventId = "starwell" | "hatchling" | "wobbleMarket" | "rootOracle";
 export type CastleEventChoiceId =
@@ -62,6 +63,13 @@ export interface CastleUpgradeDef {
   description: string;
   category: CastleUpgradeCategory;
   rarity: "common" | "uncommon" | "rare";
+  accent: string;
+}
+
+export interface CastleGuardianPowerDef {
+  id: CastleGuardianPowerId;
+  name: string;
+  description: string;
   accent: string;
 }
 
@@ -119,6 +127,7 @@ export interface CastleBattleState {
   battleNumber: number;
   guardian: boolean;
   guardianPhase: number;
+  guardianPowerId: CastleGuardianPowerId | null;
   mode: CastleBattleMode;
   activeTimeMs: number;
   playerCastleHp: number;
@@ -260,6 +269,34 @@ export const CASTLE_CONTRACTS: Record<CastleContractId, CastleContractDef> = {
   regular: { id: "regular", name: "Regular", regions: 2, minutes: 25, newCards: 15, description: "Two regions with a deeper build." },
   long: { id: "long", name: "Long", regions: 3, minutes: 50, newCards: 35, description: "Three regions and the fullest run arc." },
 };
+
+export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGuardianPowerDef> = {
+  shellReprisal: {
+    id: "shellReprisal",
+    name: "Shell Reprisal",
+    description: "At each phase change, every enemy in the lane gains 5 barrier.",
+    accent: "#8dcbe0",
+  },
+  sporeWeather: {
+    id: "sporeWeather",
+    name: "Spore Weather",
+    description: "At each phase change, friendly units are slowed for 3 seconds.",
+    accent: "#d77bb7",
+  },
+  moonTax: {
+    id: "moonTax",
+    name: "Moon Tax",
+    description: "At each phase change, Mallow drains up to 1 stored energy.",
+    accent: "#9d83dc",
+  },
+};
+
+export const ALL_CASTLE_GUARDIAN_POWER_IDS = Object.keys(CASTLE_GUARDIAN_POWER_DEFS) as CastleGuardianPowerId[];
+
+export function getCastleGuardianPower(region: number): CastleGuardianPowerDef {
+  const id = ALL_CASTLE_GUARDIAN_POWER_IDS[(Math.max(1, Math.floor(region)) - 1) % ALL_CASTLE_GUARDIAN_POWER_IDS.length];
+  return CASTLE_GUARDIAN_POWER_DEFS[id] || CASTLE_GUARDIAN_POWER_DEFS.shellReprisal;
+}
 
 export const CASTLE_KEEPSAKE_DEFS: Record<CastleKeepsakeId, CastleKeepsakeDef> = {
   starBuckle: {
@@ -672,6 +709,7 @@ function createBattle(
     battleNumber: ((region - 1) * 3) + battleInRegion,
     guardian,
     guardianPhase: guardian ? 1 : 0,
+    guardianPowerId: guardian ? getCastleGuardianPower(region).id : null,
     mode: "command",
     activeTimeMs: 0,
     playerCastleHp: clamp(carriedCastleHp || playerCastleMaxHp, 1, playerCastleMaxHp),
@@ -701,7 +739,9 @@ function createBattle(
     nextUnitId: 1,
     fxEvents: [],
     nextFxId: 1,
-    notice: guardian ? "A guardian castle blocks the region gate." : "Pipplo's nursery is ready. Begin the next review.",
+    notice: guardian
+      ? `A guardian castle blocks the region gate. ${getCastleGuardianPower(region).name}: ${getCastleGuardianPower(region).description}`
+      : "Pipplo's nursery is ready. Begin the next review.",
     nextEnemyKind: getEnemyWaveKind(region, battleInRegion, 0, guardian),
     afterNextEnemyKind: getEnemyWaveKind(region, battleInRegion, 1, guardian),
     telemetry: createTelemetry(),
@@ -911,6 +951,20 @@ function advanceGuardianPhase(battle: CastleBattleState, upgrades: CastleUpgrade
         : next.enemyThreatTier >= 2
           ? "Guardian phase 3: a Spore Bud joined the final siege beast."
           : "Guardian phase 3: the last roots attack faster behind a siege beast.";
+    }
+    if (next.guardianPowerId === "shellReprisal") {
+      next.units = next.units.map(unit => unit.side === "enemy" ? { ...unit, shield: unit.shield + 5 } : unit);
+      next = addBattleFx(next, "shield", "enemy", 88, "Shell Reprisal +5");
+      next.notice += " Shell Reprisal gave every enemy 5 barrier.";
+    } else if (next.guardianPowerId === "sporeWeather") {
+      next.units = next.units.map(unit => unit.side === "player" ? { ...unit, slowMs: Math.max(unit.slowMs, 3_000) } : unit);
+      next = addBattleFx(next, "power", "enemy", 72, "Spore Weather");
+      next.notice += " Spore Weather slowed the friendly formation for 3 seconds.";
+    } else if (next.guardianPowerId === "moonTax") {
+      const drained = Math.min(1, next.energy);
+      next.energy = roundEnergy(next.energy - drained);
+      next = addBattleFx(next, "power", "enemy", 88, drained > 0 ? `Moon Tax -${formatCastleEnergy(drained)}` : "Moon Tax: empty");
+      next.notice += drained > 0 ? ` Moon Tax drained ${formatCastleEnergy(drained)} energy.` : " Moon Tax found no stored energy.";
     }
     next.guardianPhase = phase;
   }

@@ -40,6 +40,7 @@ import { getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, type StudyRecal
 import {
   CASTLE_CONTRACTS,
   CASTLE_EVENT_DEFS,
+  CASTLE_GUARDIAN_POWER_DEFS,
   CASTLE_KEEPSAKE_DEFS,
   CASTLE_MELEE_ENGAGEMENT_SLOTS,
   CASTLE_POWER_DEFS,
@@ -356,6 +357,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
   const battle = run.battle;
   const region = getCastleRegionDef(run.region);
   const endlessThreat = getCastleEndlessThreat(run.region);
+  const guardianPower = battle.guardianPowerId ? CASTLE_GUARDIAN_POWER_DEFS[battle.guardianPowerId] : null;
   const playerCastleHitEvent = battle.fxEvents.slice().reverse().find(event => (event.kind === "hit" || event.kind === "projectile") && event.position <= 3);
   const playerCastleHit = Boolean(playerCastleHitEvent);
   const enemyCastleHitEvent = battle.fxEvents.slice().reverse().find(event => (event.kind === "hit" || event.kind === "projectile") && event.position >= 97);
@@ -402,10 +404,10 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
       <div className="castle-sky-orb" />
       <div className="castle-scene-status">
         <CastleHealth current={battle.playerCastleHp} max={battle.playerCastleMaxHp} />
-        <div className="castle-region-chip" title={`${region.enemyTheme}. ${endlessThreat.description}`}>
+        <div className="castle-region-chip" title={`${region.enemyTheme}. ${endlessThreat.description}${guardianPower ? ` ${guardianPower.name}: ${guardianPower.description}` : ""}`}>
           <span>{getCastleBattleProgress(run)}</span>
           <b>{region.shortName}{endlessThreat.tier > 0 ? ` · A${endlessThreat.tier}` : ""}</b>
-          <small>{battle.guardian ? `Guardian phase ${battle.guardianPhase}/3` : "Lane battle"}</small>
+          <small>{battle.guardian ? `Phase ${battle.guardianPhase}/3 · ${guardianPower?.name || "Guardian"}` : "Lane battle"}</small>
         </div>
         <CastleHealth current={battle.enemyCastleHp} max={battle.enemyCastleMaxHp} enemy />
       </div>
@@ -1846,6 +1848,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Sparkles /><b>Moon Ascension</b><small>After the three named regions, each deeper region adds 10% enemy HP and +1 attack every two tiers. Guardians gain Echo escorts, Spore support, then Moon Pulse.</small></span>
             </div>
 
+            <h3>Guardian stances</h3>
+            <div className="castle-guide-list is-powers">
+              {Object.values(CASTLE_GUARDIAN_POWER_DEFS).map(power => (
+                <article key={power.id}><Castle /><div><b>{power.name}</b><span>{power.description}</span><small>{run.battle.guardianPowerId === power.id ? "Current guardian rule" : "Rotates by region"}</small></div></article>
+              ))}
+            </div>
+
             {run.keepsakeId && (() => {
               const keepsake = CASTLE_KEEPSAKE_DEFS[run.keepsakeId];
               return (
@@ -1914,7 +1923,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p>Army size is not capped, but each target has formation space for {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged attackers. Extra units queue behind the front rank, so a mixed army gains more active attack lanes than one-unit spam.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
-            <p>Each region has its own enemy mix and colors. Guardian keeps change at 66% and 33% HP; the center banner names the phase before the new squad arrives.</p>
+            <p>Each region has its own enemy mix and colors. Guardian keeps change at 66% and 33% HP and rotate a visible stance: Shell Reprisal grants enemy barrier, Spore Weather slows your formation, and Moon Tax drains stored energy. The center banner shows the active rule before either phase change.</p>
             <p>After the three named regions, endless Moon Ascensions add 10% enemy HP per tier and +1 attack every two tiers. Ascension guardians add an Echo Moth in phase 2, a Spore Bud from tier 2, and a barrier-aware Moon Pulse from tier 3.</p>
             <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries and unlocked keepsakes remain.</p>
             <button className="castle-tutorial-replay" onClick={() => { setHelpOpen(false); setTutorialStep(0); setTutorialOpen(true); }}><Play />Replay tutorial</button>

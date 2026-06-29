@@ -1,6 +1,7 @@
 import {
   ALL_CASTLE_UPGRADE_IDS,
   ALL_CASTLE_KEEPSAKE_IDS,
+  ALL_CASTLE_GUARDIAN_POWER_IDS,
   CASTLE_CONTRACTS,
   CASTLE_EVENT_DEFS,
   CASTLE_KEEPSAKE_DEFS,
@@ -93,6 +94,11 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
       ...base.battle,
       ...battle,
       guardianPhase: battle.guardianPhase || (battle.guardian ? 1 : 0),
+      guardianPowerId: battle.guardian
+        ? battle.guardianPowerId && ALL_CASTLE_GUARDIAN_POWER_IDS.includes(battle.guardianPowerId)
+          ? battle.guardianPowerId
+          : base.battle.guardianPowerId
+        : null,
       nextEnemyKind,
       afterNextEnemyKind,
       recallBoltCharge: battle.recallBoltCharge || 0,

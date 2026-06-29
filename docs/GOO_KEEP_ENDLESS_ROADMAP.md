@@ -8,13 +8,14 @@ This document keeps the intended long-run shape visible while Goo Keep grows bey
 - Each ascension adds 10% enemy health and grants +1 attack every two tiers.
 - Armored enemy families gain extra barrier.
 - Ascension guardians add an Echo Moth escort in phase 2, Spore support from tier 2, and a barrier-aware Moon Pulse from tier 3.
+- Guardian regions rotate three disclosed stances: Shell Reprisal, Spore Weather, and Moon Tax.
 - Armies have no hard population cap. Three melee and two ranged units can engage one target at once; reserves replace defeated frontliners.
 
 ## Next content layers
 
 1. **Guardian identities and affixes**
-   - Build multiple named guardians instead of repeating one stat curve.
-   - Draft two visible powers per guardian, such as Nursery Lock, Spore Weather, Shell Reprisal, or Moon Tax.
+   - Grow the three initial stances into multiple named guardians instead of repeating one character and stat curve.
+   - Give each guardian a visible combination of stance powers, such as Nursery Lock alongside the shipped Shell Reprisal, Spore Weather, and Moon Tax rules.
    - Telegraph every power before it resolves and record it in the field guide after discovery.
 
 2. **Regional enemy families**

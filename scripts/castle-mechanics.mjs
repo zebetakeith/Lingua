@@ -765,4 +765,31 @@ assert.equal(ascensionThreeGuardian.battle.playerCastleHp, 98, "Ascension 3 Moon
 assert.equal(ascensionThreeGuardian.battle.telemetry.damageTaken, 2, "Moon Pulse damage should appear in battle telemetry");
 assert.match(ascensionThreeGuardian.battle.notice, /Moon Pulse dealt 2/, "the guardian notice should explain Moon Pulse's actual damage");
 
+const shellStance = tickCastleRun({
+  ...guardianAtThreat(0, 1, 60),
+  battle: { ...guardianAtThreat(0, 1, 60).battle, guardianPowerId: "shellReprisal" },
+}, 100, 1);
+const reprisalShell = shellStance.battle.units.find(unit => unit.kind === "shellSlime");
+assert.equal(reprisalShell.shield, 11, "Shell Reprisal should add five visible barrier to the phase-two defender");
+assert.match(shellStance.battle.notice, /Shell Reprisal gave every enemy 5 barrier/, "Shell Reprisal should explain its phase effect");
+
+const sporeStanceBase = guardianAtThreat(0, 1, 60);
+const sporeStance = tickCastleRun({
+  ...sporeStanceBase,
+  battle: {
+    ...sporeStanceBase.battle,
+    guardianPowerId: "sporeWeather",
+    units: [testUnit("piplet", "player", "stance-piplet", { slowMs: 0 })],
+  },
+}, 100, 1);
+assert.equal(sporeStance.battle.units.find(unit => unit.id === "stance-piplet").slowMs, 3_000, "Spore Weather should visibly slow the friendly formation for three seconds");
+
+const moonStanceBase = guardianAtThreat(0, 1, 60);
+const moonStance = tickCastleRun({
+  ...moonStanceBase,
+  battle: { ...moonStanceBase.battle, guardianPowerId: "moonTax", energy: 2 },
+}, 100, 1);
+assert.equal(moonStance.battle.energy, 1, "Moon Tax should drain one stored energy at a phase change");
+assert.match(moonStance.battle.notice, /Moon Tax drained 1 energy/, "Moon Tax should explain the exact energy loss");
+
 process.stdout.write("Castle mechanics assertions passed.\n");
