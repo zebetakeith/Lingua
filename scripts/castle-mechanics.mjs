@@ -16,7 +16,7 @@ import {
   summonCastleUnit,
   tickCastleRun,
 } from "../src/experiments/castleBattle.ts";
-import { clearCastleRun, loadCastleProfile, loadCastleRun, saveCastleRun, selectCastleKeepsake } from "../src/experiments/castleStorage.ts";
+import { clearCastleRun, getNewCastleKeepsakeIds, loadCastleProfile, loadCastleRun, saveCastleRun, selectCastleKeepsake } from "../src/experiments/castleStorage.ts";
 
 const localValues = new Map();
 globalThis.localStorage = {
@@ -452,6 +452,7 @@ saveCastleRun("mechanics", { ...progressionRun, battlesWon: 2 });
 let progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
 assert.equal(progressionProfile.guardianClears, 1, "first guardian clear should advance permanent progression");
 assert.equal(progressionProfile.unlockedKeepsakeIds.includes("shellButton"), true, "the first guardian should unlock Shell Button");
+assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "reward", battlesWon: 3 }), ["shellButton"], "the first guardian reward should celebrate only Shell Button");
 progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
 assert.equal(progressionProfile.guardianClears, 1, "saving the same guardian clear twice must not duplicate progression");
 clearCastleRun("mechanics");
@@ -462,6 +463,7 @@ progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon:
 assert.equal(progressionProfile.guardianClears, 2, "guardian clears should accumulate across separate runs");
 assert.equal(progressionProfile.unlockedUpgradeIds.length, STARTER_CASTLE_UPGRADE_IDS.length + 2, "each accumulated guardian clear should unlock one discovery");
 assert.equal(progressionProfile.unlockedKeepsakeIds.includes("boltBead"), true, "the second guardian should unlock Bolt Bead");
+assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "reward", battlesWon: 3 }), ["boltBead"], "a later guardian reward must not re-announce previously earned keepsakes");
 
 clearCastleRun("mechanics");
 progressionRun = freshRun();
@@ -469,6 +471,7 @@ saveCastleRun("mechanics", progressionRun);
 progressionProfile = saveCastleRun("mechanics", { ...progressionRun, phase: "complete" });
 assert.equal(progressionProfile.runsCompleted, 1, "a finished expedition should advance permanent run progression once");
 assert.equal(progressionProfile.unlockedKeepsakeIds.includes("mossPatch"), true, "the first finished expedition should unlock Moss Patch");
+assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "complete" }), ["mossPatch"], "a completed expedition should celebrate only its newly unlocked keepsake");
 assert.equal(selectCastleKeepsake("mechanics", "mossPatch").selectedKeepsakeId, "mossPatch", "an unlocked keepsake should be selectable");
 assert.equal(selectCastleKeepsake("mechanics", "moonTreaty").selectedKeepsakeId, "mossPatch", "a locked keepsake must not be selectable");
 

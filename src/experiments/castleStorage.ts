@@ -251,6 +251,25 @@ export function selectCastleKeepsake(deckId: string, keepsakeId: CastleKeepsakeI
   return next;
 }
 
+export function getNewCastleKeepsakeIds(profile: CastleDeckProfile, run: CastleRunState): CastleKeepsakeId[] {
+  const justClearedGuardian = run.phase === "reward" && run.battlesWon > 0 && run.battlesWon % 3 === 0;
+  const justCompletedRun = run.phase === "complete";
+  const previousGuardianClears = Math.max(0, profile.guardianClears - (justClearedGuardian ? 1 : 0));
+  const previousRunsCompleted = Math.max(0, profile.runsCompleted - (justCompletedRun ? 1 : 0));
+  return profile.unlockedKeepsakeIds.filter(id => {
+    const keepsake = CASTLE_KEEPSAKE_DEFS[id];
+    const crossedGuardianMilestone = justClearedGuardian
+      && Boolean(keepsake.guardianRequirement)
+      && previousGuardianClears < keepsake.guardianRequirement!
+      && profile.guardianClears >= keepsake.guardianRequirement!;
+    const crossedRunMilestone = justCompletedRun
+      && Boolean(keepsake.runRequirement)
+      && previousRunsCompleted < keepsake.runRequirement!
+      && profile.runsCompleted >= keepsake.runRequirement!;
+    return crossedGuardianMilestone || crossedRunMilestone;
+  });
+}
+
 export function exportCastleBalanceData(deckId: string): string {
   const record = loadAll()[deckId];
   return JSON.stringify({

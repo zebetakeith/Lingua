@@ -79,6 +79,7 @@ import {
   clearCastleRun,
   completeCastleTutorial,
   exportCastleBalanceData,
+  getNewCastleKeepsakeIds,
   loadCastleProfile,
   loadCastleRun,
   saveCastleRun,
@@ -1504,16 +1505,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const newPermanentDiscoveries = profile.unlockedUpgradeIds
     .filter(id => !run.draftPoolIds.includes(id))
     .map(id => CASTLE_UPGRADE_DEFS[id]);
-  const guardiansThisRun = Math.floor(run.battlesWon / 3);
-  const guardianClearsBeforeRun = Math.max(0, profile.guardianClears - guardiansThisRun);
-  const completedRunsBeforeRun = Math.max(0, profile.runsCompleted - (run.phase === "complete" ? 1 : 0));
-  const newKeepsakeDiscoveries = Object.values(CASTLE_KEEPSAKE_DEFS).filter(keepsake => (
-    profile.unlockedKeepsakeIds.includes(keepsake.id)
-    && (
-      guardianClearsBeforeRun < (keepsake.guardianRequirement || 0)
-      || completedRunsBeforeRun < (keepsake.runRequirement || 0)
-    )
-  ));
+  const newKeepsakeDiscoveries = getNewCastleKeepsakeIds(profile, run).map(id => CASTLE_KEEPSAKE_DEFS[id]);
   const permanentDiscoveryNames = [
     ...newPermanentDiscoveries.map(discovery => discovery.name),
     ...newKeepsakeDiscoveries.map(keepsake => `${keepsake.name} keepsake`),
