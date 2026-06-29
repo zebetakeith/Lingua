@@ -172,9 +172,14 @@ const FRIENDLY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/piplet/walk/0${index + 1}.png`,
   ),
+  dartlet: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/walk/0${index + 1}.png`,
+  ),
 };
 const FRIENDLY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   piplet: 140,
+  dartlet: 95,
 };
 const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   piplet: Array.from(
