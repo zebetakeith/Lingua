@@ -5,6 +5,8 @@ export const CASTLE_LANE_LENGTH = 100;
 export const CASTLE_RALLY_LIMIT = 3;
 export const CASTLE_RECALL_BOLT_LIMIT = 5;
 export const CASTLE_MAX_ENERGY = 12;
+export const CASTLE_MELEE_ENGAGEMENT_SLOTS = 3;
+export const CASTLE_RANGED_ENGAGEMENT_SLOTS = 2;
 
 export type CastleSide = "player" | "enemy";
 export type CastleContractId = "quick" | "regular" | "long";
@@ -970,6 +972,38 @@ function resolveBattleStep(
   let playerCastleDamage = 0;
   let enemyCastleDamage = 0;
   let energyDrain = 0;
+  const bubbleShieldTarget = (unit: CastleUnitState) => unit.side === "player" && unit.kind === "bubbleBud"
+    ? battle.units
+      .filter(candidate => candidate.side === "player" && candidate.id !== unit.id && candidate.hp > 0 && Math.abs(candidate.position - unit.position) <= 10)
+      .sort((a, b) => a.shield - b.shield)[0]
+    : undefined;
+  const attackGroups = new Map<string, Array<{ id: string; distance: number; damage: number }>>();
+  for (const unit of battle.units) {
+    if (unit.hp <= 0 || unit.attackCooldownMs > 0) continue;
+    if (unit.side === "enemy" && battle.enemySlowMs > 0) continue;
+    if (bubbleShieldTarget(unit)) continue;
+    const stats = getUnitStats(unit, upgrades, battle.units);
+    const target = nearestUnit(battle.units, unit);
+    const targetDistance = target ? Math.abs(target.position - unit.position) : Number.POSITIVE_INFINITY;
+    const castleDistance = unit.side === "player" ? CASTLE_LANE_LENGTH - unit.position : unit.position;
+    const canAttackTarget = Boolean(target && targetDistance <= stats.range);
+    const canAttackCastle = !canAttackTarget && castleDistance <= stats.range + 3;
+    if (!canAttackTarget && !canAttackCastle) continue;
+    const channel = stats.range >= 10 ? "ranged" : "melee";
+    const targetKey = canAttackTarget && target ? target.id : `castle-${unit.side === "player" ? "enemy" : "player"}`;
+    const groupKey = `${targetKey}:${channel}`;
+    const group = attackGroups.get(groupKey) || [];
+    group.push({ id: unit.id, distance: canAttackTarget ? targetDistance : castleDistance, damage: stats.damage });
+    attackGroups.set(groupKey, group);
+  }
+  const engagedAttackerIds = new Set<string>();
+  for (const [groupKey, group] of attackGroups) {
+    const slots = groupKey.endsWith(":ranged") ? CASTLE_RANGED_ENGAGEMENT_SLOTS : CASTLE_MELEE_ENGAGEMENT_SLOTS;
+    group
+      .sort((a, b) => a.distance - b.distance || b.damage - a.damage || a.id.localeCompare(b.id))
+      .slice(0, slots)
+      .forEach(candidate => engagedAttackerIds.add(candidate.id));
+  }
   const updatedUnits = battle.units.map(unit => {
     if (unit.hp <= 0) return unit;
     const stats = getUnitStats(unit, upgrades, battle.units);
@@ -980,16 +1014,14 @@ function resolveBattleStep(
     const canAttackCastle = !canAttackTarget && castleDistance <= stats.range + 3;
     const enemyFrozen = unit.side === "enemy" && battle.enemySlowMs > 0;
     if (unit.side === "player" && unit.kind === "bubbleBud" && unit.attackCooldownMs <= 0) {
-      const ally = battle.units
-        .filter(candidate => candidate.side === "player" && candidate.id !== unit.id && candidate.hp > 0 && Math.abs(candidate.position - unit.position) <= 10)
-        .sort((a, b) => a.shield - b.shield)[0];
+      const ally = bubbleShieldTarget(unit);
       if (ally) {
         shieldById.set(ally.id, (shieldById.get(ally.id) || 0) + 3);
         generatedFx.push({ kind: "shield", side: "player", position: ally.position, label: "+3" });
         return { ...unit, attackCooldownMs: 1_500 };
       }
     }
-    if (!enemyFrozen && (canAttackTarget || canAttackCastle) && unit.attackCooldownMs <= 0) {
+    if (!enemyFrozen && engagedAttackerIds.has(unit.id) && (canAttackTarget || canAttackCastle) && unit.attackCooldownMs <= 0) {
       let damage = stats.damage;
       if (unit.side === "player" && unit.kind === "bigChonk" && hasUpgrade(upgrades, "rootMouth") && canAttackCastle) damage += 4;
       if (canAttackTarget && target) {

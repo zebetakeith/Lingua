@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import {
   ALL_CASTLE_UPGRADE_IDS,
+  CASTLE_MELEE_ENGAGEMENT_SLOTS,
+  CASTLE_RANGED_ENGAGEMENT_SLOTS,
   CASTLE_UNIT_DEFS,
   STARTER_CASTLE_UPGRADE_IDS,
   activateCastlePower,
@@ -318,6 +320,50 @@ assert.ok(projectile, "ranged units should emit a visible travelling projectile"
 assert.equal(projectile.fromPosition, 36, "a projectile should begin at its attacker");
 assert.equal(projectile.position, 48, "a projectile should end at its target");
 assert.equal(projectile.side, "player", "projectile direction should preserve the attacking side");
+
+let cheapSwarm = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: Array.from({ length: 10 }, (_, index) => testUnit("dartlet", "player", `swarm-${index}`, { position: 95, attackCooldownMs: 0 })),
+  },
+};
+const cheapSwarmCastleHp = cheapSwarm.battle.enemyCastleHp;
+cheapSwarm = tickCastleRun(cheapSwarm, 100, 1);
+assert.equal(
+  cheapSwarmCastleHp - cheapSwarm.battle.enemyCastleHp,
+  CASTLE_MELEE_ENGAGEMENT_SLOTS * CASTLE_UNIT_DEFS.dartlet.damage,
+  "ten cheap melee units should use only the three front engagement slots against a castle",
+);
+assert.equal(cheapSwarm.battle.units.filter(unit => unit.attackCooldownMs > 0).length, CASTLE_MELEE_ENGAGEMENT_SLOTS, "surplus melee units should queue as ready reserves instead of attacking simultaneously");
+
+let mixedFormation = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [
+      ...Array.from({ length: 3 }, (_, index) => testUnit("dartlet", "player", `melee-${index}`, { position: 95, attackCooldownMs: 0 })),
+      ...Array.from({ length: 2 }, (_, index) => testUnit("spitlet", "player", `ranged-${index}`, { position: 85, attackCooldownMs: 0 })),
+    ],
+  },
+};
+const mixedCastleHp = mixedFormation.battle.enemyCastleHp;
+mixedFormation = tickCastleRun(mixedFormation, 100, 1);
+assert.equal(
+  mixedCastleHp - mixedFormation.battle.enemyCastleHp,
+  (CASTLE_MELEE_ENGAGEMENT_SLOTS * CASTLE_UNIT_DEFS.dartlet.damage) + (CASTLE_RANGED_ENGAGEMENT_SLOTS * CASTLE_UNIT_DEFS.spitlet.damage),
+  "melee and ranged formation lanes should stack so a varied army outperforms one-unit spam",
+);
 
 let echoMoth = {
   ...freshRun(),
