@@ -49,6 +49,7 @@ import {
   CASTLE_RALLY_LIMIT,
   CASTLE_UNIT_DEFS,
   CASTLE_UPGRADE_DEFS,
+  acknowledgeCastleGuardianBriefing,
   applyCastleStudyOutcome,
   activateCastlePower,
   canChooseCastleEvent,
@@ -1004,6 +1005,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   ]), [profile.discoveredEnemyKinds, run?.battle.encounteredEnemyKinds]);
   const activeDialogKey = tutorialOpen
     ? "tutorial"
+    : run?.phase === "battle" && run.battle.guardianBriefingPending
+      ? "guardian-briefing"
     : guideOpen
       ? "guide"
       : helpOpen
@@ -1339,6 +1342,21 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       : pauseCastleBattle(baseRun, "First exposure protected: combat remains paused while you learn this direction."));
   };
 
+  const beginGuardianBattle = () => {
+    if (!run || run.phase !== "battle" || !run.battle.guardianBriefingPending) return;
+    const prepared = acknowledgeCastleGuardianBriefing(run);
+    setInterrupted(false);
+    setPanelMode("study");
+    if (!question) {
+      beginQuestion(prepared, null);
+      return;
+    }
+    startQuestionTimer();
+    setRun(question.seenBefore
+      ? resumeCastleBattle(prepared)
+      : pauseCastleBattle(prepared, "First exposure protected: combat remains paused while you learn this direction."));
+  };
+
   const resumeInterruptedQuestion = () => {
     if (!question) return;
     setInterrupted(false);
@@ -1552,6 +1570,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   }
 
   const activeEvent = run.pendingEventId ? CASTLE_EVENT_DEFS[run.pendingEventId] : null;
+  const guardianPower = run.battle.guardianPowerId ? CASTLE_GUARDIAN_POWER_DEFS[run.battle.guardianPowerId] : null;
+  const guardianRegion = getCastleRegionDef(run.region);
+  const guardianThreat = getCastleEndlessThreat(run.region);
   const studyReport = getCastleStudyReport(run);
   const battleLesson = getCastleBattleLesson(run);
   const studyFocus = studyReport.focusDirections.flatMap(item => {
@@ -1584,7 +1605,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       <CastleScene run={run} pipploAnimation={pipploAnimation} />
 
       <section className="castle-notice" aria-live="polite">
-        <b>{tutorialOpen ? "Tutorial pause" : run.battle.mode === "study" ? "Combat live" : question && !question.seenBefore ? "New card pause" : "Paused"}</b>
+        <b>{tutorialOpen
+          ? "Tutorial pause"
+          : run.battle.guardianBriefingPending
+            ? "Guardian briefing"
+            : run.battle.mode === "study"
+              ? "Combat live"
+              : question && !question.seenBefore ? "New card pause" : "Paused"}</b>
         <span>{run.battle.notice || run.notice}</span>
       </section>
 
@@ -1668,6 +1695,29 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
           />
           <button className="castle-back-to-study" onClick={() => changePanelMode("study")}><BookOpen />Back to flashcards</button>
         </section>
+      )}
+
+      {run.phase === "battle" && run.battle.guardianBriefingPending && guardianPower && (
+        <aside className="castle-overlay castle-guardian-briefing-overlay">
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-guardian-briefing" role="dialog" aria-modal="true" aria-labelledby="castle-guardian-briefing-title">
+            <MallowSprite className="castle-guardian-mallow" animation="idle" />
+            <p className="castle-eyebrow">Guardian briefing · {guardianRegion.name}</p>
+            <h2 id="castle-guardian-briefing-title">Mallow changes the rules</h2>
+            <p>Combat and response timing are paused until you acknowledge this guardian’s powers.</p>
+            <div className="castle-guardian-rule" style={{ "--guardian-accent": guardianPower.accent } as CSSProperties}>
+              <Castle />
+              <div><span>Regional stance</span><b>{guardianPower.name}</b><small>{guardianPower.description}</small></div>
+            </div>
+            <div className="castle-guardian-phase-preview">
+              <span><b>66% HP</b><small>Rootwall defender{guardianThreat.tier >= 1 ? " + Echo Moth escort" : ""}</small></span>
+              <span><b>33% HP</b><small>Siege beast{guardianThreat.tier >= 2 ? " + Spore Bud" : ""}{guardianThreat.tier >= 3 ? ` + ${Math.min(8, 2 + guardianThreat.tier)}-damage Moon Pulse` : ""}</small></span>
+            </div>
+            {guardianThreat.tier > 0 && (
+              <p className="castle-guardian-ascension"><Sparkles /><span><b>{guardianThreat.label}</b>{guardianThreat.description}</span></p>
+            )}
+            <button onClick={beginGuardianBattle}><Swords />Face the guardian</button>
+          </section>
+        </aside>
       )}
 
       {run.phase === "reward" && (
@@ -1866,7 +1916,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Swords /><b>Enemy Rally</b><small>A miss pulls the next wave closer and adds a pip. Recall that direction later to clear one; three pips fire a 3-damage Moon Volley and summon a bonus squad.</small></span>
               <span><Clock3 /><b>Next wave</b><small>The HUD previews the next enemy. Each seen prompt has a short grace period, then enemy speed rises until you answer.</small></span>
               <span><Route /><b>Formation lanes</b><small>Up to {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged units strike one target at once. Extra units queue as reserves.</small></span>
-              <span><Castle /><b>Guardian phases</b><small>At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
+              <span><Castle /><b>Guardian phases</b><small>A pre-fight briefing freezes combat and response timing. At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
               <span><Sparkles /><b>Moon Ascension</b><small>After the three named regions, each deeper region adds 10% enemy HP and +1 attack every two tiers. Guardians gain Echo escorts, Spore support, then Moon Pulse.</small></span>
             </div>
 
@@ -1945,7 +1995,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p>Army size is not capped, but each target has formation space for {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged attackers. Extra units queue behind the front rank, so a mixed army gains more active attack lanes than one-unit spam.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
             <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
-            <p>Each region has its own enemy mix and colors. Guardian keeps change at 66% and 33% HP and rotate a visible stance: Shell Reprisal grants enemy barrier, Spore Weather slows your formation, and Moon Tax drains stored energy. The center banner shows the active rule before either phase change.</p>
+            <p>Each region has its own enemy mix and colors. Before a guardian, a required briefing freezes both combat and response timing and previews every phase. Guardian keeps change at 66% and 33% HP and rotate a visible stance: Shell Reprisal grants enemy barrier, Spore Weather slows your formation, and Moon Tax drains stored energy.</p>
             <p>After the three named regions, endless Moon Ascensions add 10% enemy HP per tier and +1 attack every two tiers. Ascension guardians add an Echo Moth in phase 2, a Spore Bud from tier 2, and a barrier-aware Moon Pulse from tier 3.</p>
             <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries and unlocked keepsakes remain.</p>
             <button className="castle-tutorial-replay" onClick={() => { setHelpOpen(false); setTutorialStep(0); setTutorialOpen(true); }}><Play />Replay tutorial</button>

@@ -1,4 +1,5 @@
 import {
+  acknowledgeCastleGuardianBriefing,
   applyCastleStudyOutcome,
   activateCastlePower,
   chooseCastleRoute,
@@ -152,6 +153,7 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0,
       continue;
     }
     if (run.phase !== "battle") break;
+    if (run.battle.guardianBriefingPending) run = acknowledgeCastleGuardianBriefing(run);
     const cycle = Math.max(2, Math.round(1 / Math.max(0.01, 1 - correctRate)));
     const isCorrect = reviews % cycle !== cycle - 1;
     const selfGraded = mastery >= 0.76 || (mastery >= 0.42 && reviews % 2 === 0);

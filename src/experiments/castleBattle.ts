@@ -128,6 +128,7 @@ export interface CastleBattleState {
   guardian: boolean;
   guardianPhase: number;
   guardianPowerId: CastleGuardianPowerId | null;
+  guardianBriefingPending: boolean;
   mode: CastleBattleMode;
   activeTimeMs: number;
   playerCastleHp: number;
@@ -710,6 +711,7 @@ function createBattle(
     guardian,
     guardianPhase: guardian ? 1 : 0,
     guardianPowerId: guardian ? getCastleGuardianPower(region).id : null,
+    guardianBriefingPending: guardian,
     mode: "command",
     activeTimeMs: 0,
     playerCastleHp: clamp(carriedCastleHp || playerCastleMaxHp, 1, playerCastleMaxHp),
@@ -1515,10 +1517,36 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
 
 export function resumeCastleBattle(run: CastleRunState): CastleRunState {
   if (run.phase !== "battle") return run;
+  if (run.battle.guardianBriefingPending) {
+    return {
+      ...run,
+      savedAt: Date.now(),
+      battle: { ...run.battle, mode: "command" },
+    };
+  }
   return {
     ...run,
     savedAt: Date.now(),
     battle: { ...run.battle, mode: "study", notice: "Combat is live while this seen prompt is active." },
+  };
+}
+
+export function acknowledgeCastleGuardianBriefing(run: CastleRunState): CastleRunState {
+  if (run.phase !== "battle" || !run.battle.guardian || !run.battle.guardianBriefingPending) return run;
+  const power = run.battle.guardianPowerId ? CASTLE_GUARDIAN_POWER_DEFS[run.battle.guardianPowerId] : null;
+  const notice = power
+    ? `${power.name} understood. Choose when to begin the first guardian recall.`
+    : "Guardian briefing understood. Choose when to begin the first recall.";
+  return {
+    ...run,
+    savedAt: Date.now(),
+    battle: {
+      ...run.battle,
+      guardianBriefingPending: false,
+      mode: "command",
+      notice,
+    },
+    notice,
   };
 }
 

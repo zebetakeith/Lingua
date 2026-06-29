@@ -99,6 +99,11 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
           ? battle.guardianPowerId
           : base.battle.guardianPowerId
         : null,
+      guardianBriefingPending: battle.guardian
+        ? typeof battle.guardianBriefingPending === "boolean"
+          ? battle.guardianBriefingPending
+          : battle.activeTimeMs === 0
+        : false,
       nextEnemyKind,
       afterNextEnemyKind,
       recallBoltCharge: battle.recallBoltCharge || 0,

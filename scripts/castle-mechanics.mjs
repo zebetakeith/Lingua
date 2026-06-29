@@ -5,6 +5,7 @@ import {
   CASTLE_RANGED_ENGAGEMENT_SLOTS,
   CASTLE_UNIT_DEFS,
   STARTER_CASTLE_UPGRADE_IDS,
+  acknowledgeCastleGuardianBriefing,
   activateCastlePower,
   applyCastleStudyOutcome,
   canChooseCastleEvent,
@@ -515,6 +516,24 @@ assert.doesNotThrow(
 );
 clearCastleRun("mechanics");
 
+const preBriefingGuardianSave = freshRun();
+saveCastleRun("mechanics", {
+  ...preBriefingGuardianSave,
+  battleInRegion: 3,
+  battle: {
+    ...preBriefingGuardianSave.battle,
+    guardian: true,
+    guardianPhase: 1,
+    guardianPowerId: "shellReprisal",
+    activeTimeMs: 0,
+  },
+});
+const preBriefingSaveFile = JSON.parse(localStorage.getItem("lexicon_labyrinth_castle_runs_v1"));
+delete preBriefingSaveFile.mechanics.run.battle.guardianBriefingPending;
+localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify(preBriefingSaveFile));
+assert.equal(loadCastleRun("mechanics").battle.guardianBriefingPending, true, "an untouched legacy guardian should recover with its safety briefing pending");
+clearCastleRun("mechanics");
+
 let progressionRun = freshRun();
 saveCastleRun("mechanics", { ...progressionRun, battlesWon: 2 });
 let progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
@@ -667,6 +686,25 @@ const mutationEvent = {
 const mutated = resolveCastleEvent(mutationEvent, "starwellDive");
 assert.equal(mutated.upgrades.length, 1, "a risky mutation event should add one available run mutation");
 assert.equal(mutated.battle.playerCastleHp, 66, "the Starwell dive should visibly charge its fourteen-HP cost");
+
+const guardianEntry = chooseCastleRoute({
+  ...routeDraft,
+  region: 1,
+  battleInRegion: 2,
+  targetRegions: 3,
+  phase: "route",
+  routeChoices: ["battle"],
+}, "battle");
+assert.equal(guardianEntry.battle.guardian, true, "the third castle in a region should be a guardian");
+assert.equal(guardianEntry.battle.guardianBriefingPending, true, "a new guardian should require a briefing before combat begins");
+const guardianEntryResumedEarly = resumeCastleBattle(guardianEntry);
+assert.equal(guardianEntryResumedEarly.battle.mode, "command", "resume must not bypass an unread guardian briefing");
+const guardianEntryTickedEarly = tickCastleRun(guardianEntryResumedEarly, 1_000, 1);
+assert.equal(guardianEntryTickedEarly.battle.activeTimeMs, 0, "guardian briefing time must not advance combat");
+const guardianEntryAcknowledged = acknowledgeCastleGuardianBriefing(guardianEntry);
+assert.equal(guardianEntryAcknowledged.battle.guardianBriefingPending, false, "acknowledging the briefing should unlock the guardian battle");
+assert.equal(resumeCastleBattle(guardianEntryAcknowledged).battle.mode, "study", "combat may begin after the guardian briefing is acknowledged");
+assert.equal(acknowledgeCastleGuardianBriefing(guardianEntryAcknowledged), guardianEntryAcknowledged, "acknowledgment should be idempotent");
 
 let guardian = freshRun();
 guardian = {
