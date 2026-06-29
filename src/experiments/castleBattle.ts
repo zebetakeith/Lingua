@@ -1514,6 +1514,19 @@ export function canChooseCastleEvent(run: CastleRunState, choiceId: CastleEventC
   return Boolean(choice && run.carriedEnergy >= (choice.requiresEnergy || 0));
 }
 
+export function getCastleEventChoiceEffect(run: CastleRunState, choiceId: CastleEventChoiceId): string {
+  if (!run.pendingEventId) return "";
+  const choice = CASTLE_EVENT_DEFS[run.pendingEventId].choices.find(candidate => candidate.id === choiceId);
+  if (!choice) return "";
+  const mutationChoice = choiceId === "starwellDive" || choiceId === "oracleListen";
+  const hasAvailableMutation = run.draftPoolIds.some(id => !run.upgrades.includes(id));
+  if (mutationChoice && !hasAvailableMutation) {
+    const hpCost = choiceId === "starwellDive" ? 14 : 8;
+    return `Lose ${hpCost} HP; no new mutation remains, so gain 3 energy.`;
+  }
+  return choice.effect;
+}
+
 export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventChoiceId): CastleRunState {
   if (!canChooseCastleEvent(run, choiceId)) return run;
   let preparedRun = run;

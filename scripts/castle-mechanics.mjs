@@ -9,6 +9,7 @@ import {
   chooseCastleRoute,
   claimCastleUpgrade,
   createInitialCastleRun,
+  getCastleEventChoiceEffect,
   getCastleStudyReport,
   resolveCastleEvent,
   resumeCastleBattle,
@@ -486,6 +487,64 @@ const escorted = resolveCastleEvent({ ...eventDraw, pendingEventId: "hatchling" 
 assert.equal(escorted.phase, "battle", "resolving an event should prepare the next battle");
 assert.equal(escorted.battle.units.filter(unit => unit.side === "player" && unit.kind === "piplet").length, 2, "the hatchling escort should start with two Piplets");
 assert.equal(escorted.pendingEventId, null, "resolved events should clear their pending state");
+
+function eventState(pendingEventId, carriedCastleHp = 50, carriedEnergy = 5, overrides = {}) {
+  return {
+    ...eventDraw,
+    phase: "event",
+    pendingEventId,
+    carriedCastleHp,
+    carriedEnergy,
+    upgrades: [],
+    draftPoolIds: STARTER_CASTLE_UPGRADE_IDS,
+    ...overrides,
+  };
+}
+
+const starwellSip = resolveCastleEvent(eventState("starwell"), "starwellSip");
+assert.equal(starwellSip.battle.playerCastleHp, 72, "Starwell Sip should deliver its disclosed 22-HP repair");
+assert.equal(starwellSip.battle.energy, 5, "Starwell Sip should not change stored energy");
+const starwellBottle = resolveCastleEvent(eventState("starwell"), "starwellBottle");
+assert.equal(starwellBottle.battle.playerCastleHp, 50, "Starwell Bottle should not change keep health");
+assert.equal(starwellBottle.battle.energy, 8, "Starwell Bottle should deliver its disclosed three energy");
+
+const hatchlingShell = resolveCastleEvent(eventState("hatchling"), "hatchlingShell");
+assert.equal(hatchlingShell.battle.playerBarrier, 18, "Hatchling Shell should deliver its disclosed eighteen barrier");
+const hatchlingShare = resolveCastleEvent(eventState("hatchling"), "hatchlingShare");
+assert.equal(hatchlingShare.battle.playerCastleHp, 60, "Hatchling Share should repair ten keep HP");
+assert.equal(hatchlingShare.battle.energy, 6.5, "Hatchling Share should add 1.5 energy");
+
+const marketSnack = resolveCastleEvent(eventState("wobbleMarket"), "marketSnack");
+assert.equal(marketSnack.battle.playerCastleHp, 82, "Market Snack should repair its disclosed 32 HP");
+assert.equal(marketSnack.battle.energy, 3, "Market Snack should charge exactly two energy");
+const marketTrade = resolveCastleEvent(eventState("wobbleMarket"), "marketTrade");
+assert.equal(marketTrade.battle.playerCastleHp, 40, "Market Trade should charge exactly ten keep HP");
+assert.equal(marketTrade.battle.energy, 9, "Market Trade should deliver its disclosed four energy");
+const marketEgg = resolveCastleEvent(eventState("wobbleMarket"), "marketEgg");
+assert.equal(marketEgg.battle.energy, 4, "Market Egg should charge exactly one energy");
+assert.equal(marketEgg.battle.units.filter(unit => unit.kind === "bubbleBud").length, 1, "Market Egg should hatch one opening Bubble Bud");
+
+const oracleShelter = resolveCastleEvent(eventState("rootOracle"), "oracleShelter");
+assert.equal(oracleShelter.battle.playerCastleHp, 68, "Oracle Shelter should repair eighteen keep HP");
+assert.equal(oracleShelter.battle.energy, 6, "Oracle Shelter should add one energy");
+const oracleChallenge = resolveCastleEvent(eventState("rootOracle"), "oracleChallenge");
+assert.equal(oracleChallenge.battle.playerCastleHp, 38, "Oracle Challenge should charge exactly twelve keep HP");
+assert.equal(oracleChallenge.battle.units.filter(unit => unit.kind === "bigChonk").length, 1, "Oracle Challenge should add one opening Big Chonk");
+const oracleListen = resolveCastleEvent(eventState("rootOracle"), "oracleListen");
+assert.equal(oracleListen.battle.playerCastleHp, 42, "Oracle Listen should charge exactly eight keep HP");
+assert.equal(oracleListen.upgrades.length, 1, "Oracle Listen should absorb one available mutation");
+const exhaustedMutationEvent = eventState("rootOracle", 50, 5, {
+  upgrades: [...STARTER_CASTLE_UPGRADE_IDS],
+  draftPoolIds: [...STARTER_CASTLE_UPGRADE_IDS],
+});
+assert.equal(
+  getCastleEventChoiceEffect(exhaustedMutationEvent, "oracleListen"),
+  "Lose 8 HP; no new mutation remains, so gain 3 energy.",
+  "an exhausted mutation event should disclose its energy fallback before the player chooses",
+);
+const exhaustedOracle = resolveCastleEvent(exhaustedMutationEvent, "oracleListen");
+assert.equal(exhaustedOracle.battle.playerCastleHp, 42, "the exhausted Oracle fallback should still charge the disclosed HP cost");
+assert.equal(exhaustedOracle.battle.energy, 8, "the exhausted Oracle fallback should grant the disclosed three energy");
 
 const mutationEvent = {
   ...eventDraw,

@@ -56,6 +56,7 @@ import {
   formatCastleEnergy,
   getAvailableCastlePowers,
   getCastleBattleProgress,
+  getCastleEventChoiceEffect,
   getCastleRegionDef,
   getCastleStudyReport,
   getPlayerSummonKinds,
@@ -1708,7 +1709,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                     }}>
                       <strong>{choice.name}</strong>
                       <span>{choice.story}</span>
-                      <b>{choice.effect}</b>
+                      <b>{getCastleEventChoiceEffect(run, choice.id)}</b>
                       {!available && choice.requiresEnergy && <small>Need {choice.requiresEnergy} energy</small>}
                     </button>
                   );
