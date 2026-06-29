@@ -182,12 +182,17 @@ const FRIENDLY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   dartlet: 95,
 };
 const ENEMY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
+  shellSlime: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/shellSlime/walk/0${index + 1}.png`,
+  ),
   nibbleImp: Array.from(
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/nibbleImp/walk/0${index + 1}.png`,
   ),
 };
 const ENEMY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
+  shellSlime: 210,
   nibbleImp: 90,
 };
 const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
