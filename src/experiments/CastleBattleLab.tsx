@@ -163,6 +163,15 @@ const ENEMY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   echoMoth: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/seed-v1.png`,
   rootLump: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/rootLump/seed-v1.png`,
 };
+const FRIENDLY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
+  piplet: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/piplet/walk/0${index + 1}.png`,
+  ),
+};
+const FRIENDLY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
+  piplet: 140,
+};
 const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
   piplet: Array.from(
     { length: 4 },
@@ -291,10 +300,12 @@ function SlimeFace({
   kind,
   side,
   attacking = false,
+  walking = false,
 }: {
   kind: CastleUnitKind;
   side: "player" | "enemy";
   attacking?: boolean;
+  walking?: boolean;
 }) {
   const art = side === "player" ? FRIENDLY_UNIT_ART[kind] : ENEMY_UNIT_ART[kind];
   const attackFrames = attacking
@@ -302,24 +313,28 @@ function SlimeFace({
       ? FRIENDLY_UNIT_ATTACK_FRAMES[kind]
       : ENEMY_UNIT_ATTACK_FRAMES[kind]
     : undefined;
-  const attackFrameMs = (
-    side === "player" ? FRIENDLY_UNIT_ATTACK_FRAME_MS[kind] : ENEMY_UNIT_ATTACK_FRAME_MS[kind]
-  ) || 45;
+  const walkFrames = walking && side === "player" ? FRIENDLY_UNIT_WALK_FRAMES[kind] : undefined;
+  const animationFrames = attackFrames || walkFrames;
+  const animationName = attackFrames ? "attack" : walkFrames ? "walk" : "idle";
+  const animationFrameMs = attackFrames
+    ? (side === "player" ? FRIENDLY_UNIT_ATTACK_FRAME_MS[kind] : ENEMY_UNIT_ATTACK_FRAME_MS[kind]) || 45
+    : FRIENDLY_UNIT_WALK_FRAME_MS[kind] || 140;
   if (art) {
     return (
       <span
-        className={`castle-unit-face is-production-art ${attackFrames ? "is-unit-action" : ""} kind-${kind} side-${side}`}
-        data-unit-animation={attackFrames ? "attack" : "idle"}
+        className={`castle-unit-face is-production-art ${attackFrames ? "is-unit-action" : ""} ${walkFrames ? "is-unit-walk" : ""} kind-${kind} side-${side}`}
+        data-unit-animation={animationName}
         aria-hidden="true"
       >
-        {(attackFrames || [art]).map((src, index) => (
+        {(animationFrames || [art]).map((src, index) => (
           <img
             key={src}
             src={src}
             alt=""
             style={{
-              "--unit-art-duration": `${attackFrameMs}ms`,
-              "--unit-art-delay": `${index * attackFrameMs}ms`,
+              "--unit-art-duration": `${animationFrameMs}ms`,
+              "--unit-art-cycle": `${animationFrameMs * (animationFrames?.length || 1)}ms`,
+              "--unit-art-delay": `${index * animationFrameMs}ms`,
             } as CSSProperties}
           />
         ))}
@@ -422,7 +437,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
               title={`${CASTLE_UNIT_DEFS[unit.kind].name}: ${Math.ceil(unit.hp)}/${unit.maxHp} HP${statusText ? ` · ${statusText}` : ""} · ${CASTLE_UNIT_DEFS[unit.kind].role}`}
             >
               {unit.shield > 0 && <span className="castle-unit-shield" aria-hidden="true"><b>{Math.ceil(unit.shield)}</b></span>}
-              <SlimeFace kind={unit.kind} side={unit.side} attacking={attacking} />
+              <SlimeFace kind={unit.kind} side={unit.side} attacking={attacking} walking={!attacking && battle.mode === "study"} />
               <span className="castle-unit-hp"><i style={{ width: `${Math.max(0, (unit.hp / unit.maxHp) * 100)}%` }} /></span>
             </div>
             );
@@ -1007,6 +1022,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       ...Object.entries(MALLOW_ANIMATION_FRAMES).filter(([name]) => name !== "idle").flatMap(([, frames]) => frames),
       ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
       ...Object.values(ENEMY_UNIT_ATTACK_FRAMES).flat(),
+      ...Object.values(FRIENDLY_UNIT_WALK_FRAMES).flat(),
       ].forEach(src => {
         const image = new Image();
         image.decoding = "async";

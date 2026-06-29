@@ -213,6 +213,7 @@
 .castle-unit-face.is-production-art.is-unit-action > img { opacity: 0; animation: castle-unit-art-action-frame var(--unit-art-duration, 45ms) steps(1, end) 1 forwards; animation-delay: var(--unit-art-delay, 0ms); }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art > img { animation: castle-unit-art-walk var(--unit-bob, 700ms) ease-in-out infinite; }
 .castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art.is-unit-action > img { animation: castle-unit-art-action-frame var(--unit-art-duration, 45ms) steps(1, end) 1 forwards; animation-delay: var(--unit-art-delay, 0ms); }
+.castle-scene.is-live .castle-lane-unit .castle-unit-face.is-production-art.is-unit-walk > img { opacity: 0; animation: castle-unit-art-walk-frame var(--unit-art-cycle, 560ms) steps(1, end) infinite; animation-delay: var(--unit-art-delay, 0ms); }
 .castle-lane-unit:has(.kind-dartlet) { --unit-bob: 380ms; }
 .castle-lane-unit:has(.kind-bubbleBud) { --unit-bob: 820ms; }
 .castle-lane-unit:has(.kind-spitlet) { --unit-bob: 660ms; }
@@ -256,6 +257,7 @@
 @keyframes castle-unit-arrive { from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(.55); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
 @keyframes castle-unit-art-walk { 0%,100% { transform: translateY(0) rotate(-1deg) scale(1); } 50% { transform: translateY(-2px) rotate(1deg) scale(1.025,.975); } }
 @keyframes castle-unit-art-action-frame { 0%, 94% { opacity: 1; } 95%, 100% { opacity: 0; } }
+@keyframes castle-unit-art-walk-frame { 0%, 24.9% { opacity: 1; } 25%, 100% { opacity: 0; } }
 @keyframes castle-unit-lunge-player { 0%,100% { transform: translateX(0) scale(1); } 48% { transform: translateX(7px) scale(1.12,.92); } }
 @keyframes castle-unit-lunge-enemy { 0%,100% { transform: scaleX(-1) translateX(0) scale(1); } 48% { transform: scaleX(-1) translateX(7px) scale(1.12,.92); } }
 @keyframes castle-home-hit-player { 0%,100% { transform: translateX(0); } 35% { transform: translateX(-5px) rotate(-2deg); } 70% { transform: translateX(3px) rotate(1deg); } }
@@ -690,6 +692,8 @@
   .goo-keeper-sprite img:not(:first-child) { display: none; }
   .castle-unit-face.is-unit-action > img { opacity: 0; }
   .castle-unit-face.is-unit-action > img:first-child { opacity: 1; }
+  .castle-unit-face.is-unit-walk > img { display: none; }
+  .castle-unit-face.is-unit-walk > img:first-child { display: block; opacity: 1; }
   .castle-battle-fx.fx-projectile::before,
   .castle-battle-fx.fx-projectile > i { display: none; }
   .castle-battle-fx.fx-projectile::after,
