@@ -165,6 +165,22 @@ assert.equal(rally.battle.playerCastleHp, 97, "an unshielded Rally should land a
 assert.equal(rally.battle.telemetry.damageTaken, 3, "Moon Volley damage should be represented in battle telemetry");
 assert.ok(rally.battle.enemySpawnTimerMs < rallyWaveBefore, "misses should pull the next regular enemy wave closer before Rally triggers");
 
+function completeTwoWayRecall(upgrades) {
+  let twoWayRun = { ...freshRun(), upgrades };
+  twoWayRun = applyCastleStudyOutcome(twoWayRun, outcome(20, { progressKey: "two-way-card::term_to_definition" }));
+  return applyCastleStudyOutcome(twoWayRun, outcome(21, { progressKey: "two-way-card::definition_to_term" }));
+}
+
+const treatedTwoWay = completeTwoWayRecall(["twoWayTreat"]);
+assert.equal(treatedTwoWay.battle.units.filter(unit => unit.kind === "piplet").length, 1, "Two-Way Treat should hatch one Piplet after both card directions are recalled");
+assert.equal(treatedTwoWay.battle.energy, 2, "Two-Way Treat should not silently add an undisclosed energy reward");
+const echoedTwoWay = completeTwoWayRecall(["echoCheeks"]);
+assert.equal(echoedTwoWay.battle.units.filter(unit => unit.kind === "piplet").length, 0, "Echo Cheeks should remain distinct from the Piplet-hatching Two-Way Treat");
+assert.equal(echoedTwoWay.battle.energy, 2.5, "Echo Cheeks should grant its disclosed half-energy two-way bonus");
+const stackedTwoWay = completeTwoWayRecall(["twoWayTreat", "echoCheeks"]);
+assert.equal(stackedTwoWay.battle.units.filter(unit => unit.kind === "piplet").length, 1, "the two rare two-way upgrades should stack without duplicating the same reward");
+assert.equal(stackedTwoWay.battle.energy, 2.5, "stacking the two-way upgrades should preserve Echo Cheeks' energy bonus");
+
 let live = resumeCastleBattle({ ...freshRun(), battle: { ...freshRun().battle, energy: 12 } });
 live = summonCastleUnit(live, "dartlet");
 assert.equal(live.battle.telemetry.summons, 1, "summoning must work while combat is live");

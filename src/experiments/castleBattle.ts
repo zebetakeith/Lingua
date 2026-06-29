@@ -471,7 +471,7 @@ export const CASTLE_UPGRADE_DEFS: Record<CastleUpgradeId, CastleUpgradeDef> = {
   rootMouth: upgrade("rootMouth", "Root Mouth", "Big Chonks deal extra damage to castles.", "trait", "rare", "#71994e"),
   nibbleTeeth: upgrade("nibbleTeeth", "Nibble Teeth", "Tongue Snatch can eat healthier targets.", "trait", "uncommon", "#ef8867"),
   puddlePaws: upgrade("puddlePaws", "Puddle Paws", "Friendly slows last longer.", "trait", "common", "#78bf58"),
-  echoCheeks: upgrade("echoCheeks", "Echo Cheeks", "Two-way recall on one card summons a Piplet.", "trait", "rare", "#cf75ad"),
+  echoCheeks: upgrade("echoCheeks", "Echo Cheeks", "Recalling both directions of one card grants +0.5 energy.", "trait", "rare", "#cf75ad"),
   mossCoat: upgrade("mossCoat", "Moss Coat", "Rest routes also grant two starting energy.", "trait", "uncommon", "#6cad57"),
   firstRecall: upgrade("firstRecall", "First Recall", "The first correct seen review each battle gives +0.5 energy.", "study", "common", "#f1c94d"),
   dueDew: upgrade("dueDew", "Due Dew", "A correct due review adds a small castle barrier.", "study", "uncommon", "#70c7e8"),
@@ -1278,8 +1278,9 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
     const completedBothDirections = battle.recalledDirectionKeys.includes(otherDirectionKey)
       && !battle.recalledDirectionKeys.includes(outcome.progressKey);
     battle.recalledDirectionKeys = Array.from(new Set([...battle.recalledDirectionKeys, outcome.progressKey]));
-    if (completedBothDirections && (hasUpgrade(run.upgrades, "twoWayTreat") || hasUpgrade(run.upgrades, "echoCheeks"))) {
-      battle = addUnit(battle, "player", "piplet", run.upgrades);
+    if (completedBothDirections) {
+      if (hasUpgrade(run.upgrades, "twoWayTreat")) battle = addUnit(battle, "player", "piplet", run.upgrades);
+      if (hasUpgrade(run.upgrades, "echoCheeks")) reward += 0.5;
     }
     battle.cleanStreak += 1;
     let recallBoltFired = false;
