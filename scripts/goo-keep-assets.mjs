@@ -26,6 +26,7 @@ for (const kind of ["piplet", "dartlet", "bubbleBud", "spitlet", "bigChonk"]) {
 expectFrames(path.join("units", "friendly", "piplet"), ["walk"], 160);
 expectFrames(path.join("units", "friendly", "dartlet"), ["walk"], 160);
 expectFrames(path.join("units", "friendly", "bubbleBud"), ["walk"], 160);
+expectFrames(path.join("units", "friendly", "spitlet"), ["walk"], 160);
 for (const kind of ["shellSlime", "nibbleImp", "sporeBud", "echoMoth", "rootLump"]) {
   expected.set(path.join("units", "enemy", kind, "seed-v1.png"), 160);
   expectFrames(path.join("units", "enemy", kind), ["attack"], 160);
@@ -34,6 +35,8 @@ expectFrames(path.join("units", "enemy", "nibbleImp"), ["walk"], 160);
 expectFrames(path.join("units", "enemy", "shellSlime"), ["walk"], 160);
 expectFrames(path.join("units", "enemy", "sporeBud"), ["walk"], 160);
 expected.set(path.join("units", "enemy", "sporeBud", "seed-v2.png"), 160);
+expectFrames(path.join("units", "enemy", "echoMoth"), ["walk"], 160);
+expected.set(path.join("units", "enemy", "echoMoth", "seed-v2.png"), 160);
 
 async function collectPngs(directory, relative = "") {
   const files = [];
