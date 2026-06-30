@@ -593,7 +593,7 @@ function CommandTray({
       <div className="castle-command-scroll" role="group" aria-label="Summons and castle powers">
         {getPlayerSummonKinds(run.upgrades).map(kind => {
           const unit = CASTLE_UNIT_DEFS[kind];
-          const actionText = kind === "mendlet" ? "4 HEAL" : `${unit.damage} ATK`;
+          const actionText = kind === "mendlet" ? `${run.upgrades.includes("dewSatchel") ? 6 : 4} HEAL` : `${unit.damage} ATK`;
           return (
             <button
               key={kind}
@@ -1984,11 +1984,15 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <div className="castle-guide-list">
               {getPlayerSummonKinds(run.upgrades).map(kind => {
                 const unit = CASTLE_UNIT_DEFS[kind];
-                const actionText = kind === "mendlet" ? "4 healing" : `${unit.damage} attack`;
+                const mendletHealing = run.upgrades.includes("dewSatchel") ? 6 : 4;
+                const actionText = kind === "mendlet" ? `${mendletHealing} healing` : `${unit.damage} attack`;
                 const roleText = kind === "mendlet" ? "support" : unit.range >= 10 ? "ranged" : unit.speed >= 7 ? "fast" : "melee";
-                return <article key={kind}><SlimeFace kind={kind} side="player" /><div><b>{unit.name}</b><span>{CASTLE_UNIT_GUIDE[kind]}</span><small>{unit.cost} energy · {unit.hp} HP · {actionText} · {roleText}</small></div></article>;
+                const guideText = kind === "mendlet"
+                  ? `Heals the most wounded nearby ally for ${mendletHealing} HP every 1.4 seconds${run.upgrades.includes("pollenPuff") ? " and grants 2 shield" : ""}. It never occupies an attack slot.`
+                  : CASTLE_UNIT_GUIDE[kind];
+                return <article key={kind}><SlimeFace kind={kind} side="player" /><div><b>{unit.name}</b><span>{guideText}</span><small>{unit.cost} energy · {unit.hp} HP · {actionText} · {roleText}</small></div></article>;
               })}
-              {!run.upgrades.includes("mendletEgg") ? <article className="is-locked"><SlimeFace kind="mendlet" side="player" /><div><b>Mendlet</b><span>Clear four guardians to discover Mendlet Egg, then choose it during a run to hatch this nearby ally healer.</span><small>Locked mutation summon</small></div></article> : null}
+              {!run.upgrades.includes("mendletEgg") ? <article className="is-locked"><SlimeFace kind="mendlet" side="player" /><div><b>Mendlet</b><span>Clear four guardians to discover Mendlet Egg, then choose it during a run to hatch this nearby ally healer. Later discoveries evolve her dew healing and add pollen shields.</span><small>Locked mutation summon · branching evolutions</small></div></article> : null}
             </div>
 
             <h3>Castle powers</h3>

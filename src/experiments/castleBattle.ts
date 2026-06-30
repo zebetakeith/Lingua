@@ -27,7 +27,7 @@ export type CastleUpgradeCategory = "minion" | "castle" | "trait" | "study";
 export type CastleFxKind = "spawn" | "hit" | "projectile" | "pop" | "heal" | "power" | "shield";
 export type CastleUpgradeId =
   | "splitNursery" | "bubbleBrood" | "stretchyLegs" | "gooSoles" | "snackPockets" | "popcornBodies"
-  | "relayJelly" | "bigSibling" | "mendletEgg" | "copycatJelly" | "swarmSchool" | "shellPolish" | "overripeSplit"
+  | "relayJelly" | "bigSibling" | "mendletEgg" | "dewSatchel" | "pollenPuff" | "copycatJelly" | "swarmSchool" | "shellPolish" | "overripeSplit"
   | "snackCannon" | "gooMoat" | "echoBell" | "nurseryChimney" | "rootRepair" | "timewobbleClock"
   | "tongueCrane" | "digestor" | "sporeMortar" | "rallyLantern"
   | "impHorns" | "bubbleBelly" | "sproutTuft" | "springTail" | "starFreckles" | "mothEars"
@@ -64,6 +64,7 @@ export interface CastleUpgradeDef {
   category: CastleUpgradeCategory;
   rarity: "common" | "uncommon" | "rare";
   accent: string;
+  requires?: CastleUpgradeId;
 }
 
 export interface CastleGuardianPowerDef {
@@ -492,7 +493,8 @@ const upgrade = (
   category: CastleUpgradeCategory,
   rarity: CastleUpgradeDef["rarity"],
   accent: string,
-): CastleUpgradeDef => ({ id, name, description, category, rarity, accent });
+  requires?: CastleUpgradeId,
+): CastleUpgradeDef => ({ id, name, description, category, rarity, accent, requires });
 
 export const CASTLE_UPGRADE_DEFS: Record<CastleUpgradeId, CastleUpgradeDef> = {
   splitNursery: upgrade("splitNursery", "Split Nursery", "Big Chonks split into two Piplets when they pop.", "minion", "uncommon", "#a984e5"),
@@ -504,6 +506,8 @@ export const CASTLE_UPGRADE_DEFS: Record<CastleUpgradeId, CastleUpgradeDef> = {
   relayJelly: upgrade("relayJelly", "Relay Jelly", "Spitlets encourage nearby allies to hit harder.", "minion", "rare", "#8c7cdb"),
   bigSibling: upgrade("bigSibling", "Big Sibling", "A premium unit summoned to an empty lane grows larger.", "minion", "uncommon", "#83bd59"),
   mendletEgg: upgrade("mendletEgg", "Mendlet Egg", "Unlock Mendlet, a support slime that heals a nearby wounded ally for 4 HP.", "minion", "rare", "#78d7ae"),
+  dewSatchel: upgrade("dewSatchel", "Bottomless Dew Satchel", "Mendlet heals 2 additional HP each time it tends an ally.", "minion", "uncommon", "#5cc7ba", "mendletEgg"),
+  pollenPuff: upgrade("pollenPuff", "Pollen Puff", "Every Mendlet heal also gives that ally 2 shield.", "minion", "rare", "#f1ae7b", "mendletEgg"),
   copycatJelly: upgrade("copycatJelly", "Copycat Jelly", "The first enemy defeated each battle grants a burst of energy.", "minion", "rare", "#d57dbc"),
   swarmSchool: upgrade("swarmSchool", "Swarm School", "Every fifth automatic Piplet brings a friend.", "minion", "uncommon", "#efcf48"),
   shellPolish: upgrade("shellPolish", "Shell Polish", "Every friendly unit begins with a small shell.", "minion", "common", "#91b7ba"),
@@ -554,6 +558,11 @@ export function getAvailableCastlePowers(upgrades: CastleUpgradeId[]): CastlePow
 
 export function getPlayerSummonKinds(upgrades: CastleUpgradeId[] = []): CastleUnitKind[] {
   return ["dartlet", "bubbleBud", ...(hasUpgrade(upgrades, "mendletEgg") ? ["mendlet" as const] : []), "spitlet", "bigChonk"];
+}
+
+export function canDraftCastleUpgrade(upgradeId: CastleUpgradeId, upgrades: CastleUpgradeId[]): boolean {
+  const requirement = CASTLE_UPGRADE_DEFS[upgradeId].requires;
+  return !requirement || upgrades.includes(requirement);
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1135,8 +1144,13 @@ function resolveBattleStep(
     if (unit.side === "player" && unit.kind === "mendlet" && unit.attackCooldownMs <= 0) {
       const ally = mendTarget(unit);
       if (ally) {
-        healById.set(ally.id, (healById.get(ally.id) || 0) + 4);
-        generatedFx.push({ kind: "heal", side: "player", position: ally.position, fromPosition: unit.position, label: "+4" });
+        const healing = hasUpgrade(upgrades, "dewSatchel") ? 6 : 4;
+        healById.set(ally.id, (healById.get(ally.id) || 0) + healing);
+        if (hasUpgrade(upgrades, "pollenPuff")) {
+          shieldById.set(ally.id, (shieldById.get(ally.id) || 0) + 2);
+          generatedFx.push({ kind: "shield", side: "player", position: ally.position, label: "+2" });
+        }
+        generatedFx.push({ kind: "heal", side: "player", position: ally.position, fromPosition: unit.position, label: `+${healing}` });
         return { ...unit, attackCooldownMs: stats.attackMs };
       }
     }
@@ -1271,8 +1285,9 @@ function resolveBattleStep(
 
 function drawUpgradeChoices(run: CastleRunState): { choices: CastleUpgradeId[]; rngState: number } {
   const owned = new Set(run.upgrades);
-  let pool = run.draftPoolIds.filter(id => !owned.has(id));
-  if (pool.length < 3) pool = run.draftPoolIds;
+  const eligiblePool = run.draftPoolIds.filter(id => canDraftCastleUpgrade(id, run.upgrades));
+  let pool = eligiblePool.filter(id => !owned.has(id));
+  if (pool.length < 3) pool = eligiblePool;
   const choices: CastleUpgradeId[] = [];
   let rngState = run.rngState;
   while (pool.length > 0 && choices.length < 3) {
@@ -1734,7 +1749,7 @@ export function getCastleEventChoiceEffect(run: CastleRunState, choiceId: Castle
   const choice = CASTLE_EVENT_DEFS[run.pendingEventId].choices.find(candidate => candidate.id === choiceId);
   if (!choice) return "";
   const mutationChoice = choiceId === "starwellDive" || choiceId === "oracleListen";
-  const hasAvailableMutation = run.draftPoolIds.some(id => !run.upgrades.includes(id));
+  const hasAvailableMutation = run.draftPoolIds.some(id => !run.upgrades.includes(id) && canDraftCastleUpgrade(id, run.upgrades));
   if (mutationChoice && !hasAvailableMutation) {
     const hpCost = choiceId === "starwellDive" ? 14 : 8;
     return `Lose ${hpCost} HP; no new mutation remains, so gain 3 energy.`;
@@ -1753,7 +1768,7 @@ export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventCho
 
   const absorbMutation = (hpCost: number) => {
     hp = Math.max(1, hp - hpCost);
-    const available = preparedRun.draftPoolIds.filter(id => !preparedRun.upgrades.includes(id));
+    const available = preparedRun.draftPoolIds.filter(id => !preparedRun.upgrades.includes(id) && canDraftCastleUpgrade(id, preparedRun.upgrades));
     if (available.length === 0) {
       energy = Math.min(CASTLE_MAX_ENERGY, energy + 3);
       result = `No new mutation answered, so the echo condensed into +3 energy.`;

@@ -8,6 +8,7 @@ import {
   acknowledgeCastleGuardianBriefing,
   activateCastlePower,
   applyCastleStudyOutcome,
+  canDraftCastleUpgrade,
   canChooseCastleEvent,
   chooseCastleRoute,
   claimCastleUpgrade,
@@ -297,6 +298,8 @@ let hatchedMendlet = { ...freshRun(), upgrades: ["mendletEgg"], battle: { ...fre
 hatchedMendlet = summonCastleUnit(hatchedMendlet, "mendlet");
 assert.equal(hatchedMendlet.battle.energy, 8, "Mendlet should cost four energy");
 assert.equal(hatchedMendlet.battle.units.some(unit => unit.kind === "mendlet"), true, "Mendlet Egg should add Mendlet to the command tray summon roster");
+assert.equal(canDraftCastleUpgrade("dewSatchel", []), false, "a Mendlet evolution should stay out of drafts before Mendlet Egg is active");
+assert.equal(canDraftCastleUpgrade("pollenPuff", ["mendletEgg"]), true, "Mendlet evolutions should enter drafts after their parent mutation is active");
 
 let healingSupport = {
   ...freshRun(),
@@ -319,6 +322,27 @@ healingSupport = tickCastleRun(healingSupport, 100, 1);
 assert.equal(healingSupport.battle.units.find(unit => unit.id === "mendlet-patient").hp, 6, "Mendlet should heal the most wounded nearby ally for four HP");
 assert.equal(healingSupport.battle.units.find(unit => unit.id === "mendlet-healer").attackCooldownMs, CASTLE_UNIT_DEFS.mendlet.attackMs, "Mendlet healing should use its support cooldown");
 assert.equal(healingSupport.battle.fxEvents.some(event => event.kind === "heal" && event.label === "+4"), true, "Mendlet healing should be visible in battlefield feedback");
+
+let evolvedSupport = {
+  ...freshRun(),
+  upgrades: ["mendletEgg", "dewSatchel", "pollenPuff"],
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [
+      testUnit("mendlet", "player", "evolved-healer", { position: 40, attackCooldownMs: 0 }),
+      testUnit("dartlet", "player", "evolved-patient", { position: 45, hp: 2, shield: 0, attackCooldownMs: 999_999 }),
+    ],
+  },
+};
+evolvedSupport = tickCastleRun(evolvedSupport, 100, 1);
+assert.equal(evolvedSupport.battle.units.find(unit => unit.id === "evolved-patient").hp, 8, "Bottomless Dew Satchel should raise Mendlet healing from four to six");
+assert.equal(evolvedSupport.battle.units.find(unit => unit.id === "evolved-patient").shield, 2, "Pollen Puff should add two shield to Mendlet's patient");
+assert.equal(evolvedSupport.battle.fxEvents.some(event => event.kind === "shield" && event.label === "+2"), true, "Pollen Puff should have distinct shield feedback");
 
 let support = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
 support = summonCastleUnit(support, "dartlet");
@@ -401,6 +425,34 @@ assert.equal(
   "melee and ranged formation lanes should stack so a varied army outperforms one-unit spam",
 );
 assert.equal(mixedFormation.battle.units.find(unit => unit.id === "formation-mendlet").attackCooldownMs, 0, "support units should not consume a melee or ranged attack slot");
+
+const branchDraftBattle = {
+  ...freshRun().battle,
+  mode: "study",
+  enemyCastleHp: 1,
+  autoSpawnTimerMs: 999_999,
+  enemySpawnTimerMs: 999_999,
+  playerTurretTimerMs: 999_999,
+  enemyTurretTimerMs: 999_999,
+  units: [testUnit("dartlet", "player", "branch-finisher", { position: 95, attackCooldownMs: 0 })],
+};
+let lockedBranchDraft = {
+  ...freshRun(),
+  upgrades: [],
+  draftPoolIds: ["springTail", "dewSatchel", "pollenPuff"],
+  battle: branchDraftBattle,
+};
+lockedBranchDraft = tickCastleRun(lockedBranchDraft, 100, 1);
+assert.deepEqual(lockedBranchDraft.rewardChoices, ["springTail"], "a reward draft should hide child mutations until their parent is owned");
+
+let openBranchDraft = {
+  ...freshRun(),
+  upgrades: ["mendletEgg"],
+  draftPoolIds: ["springTail", "dewSatchel", "pollenPuff"],
+  battle: branchDraftBattle,
+};
+openBranchDraft = tickCastleRun(openBranchDraft, 100, 1);
+assert.deepEqual(new Set(openBranchDraft.rewardChoices), new Set(["springTail", "dewSatchel", "pollenPuff"]), "owning Mendlet Egg should open both of its evolution choices in later drafts");
 
 let echoMoth = {
   ...freshRun(),
@@ -596,6 +648,16 @@ assert.equal(progressionProfile.guardianClears, 4, "guardian progression should 
 assert.equal(progressionProfile.unlockedKeepsakeIds.includes("nurseryBell"), true, "the fourth guardian should unlock Nursery Bell");
 assert.equal(progressionProfile.unlockedUpgradeIds.includes("mendletEgg"), true, "the fourth guardian should add Mendlet Egg to future mutation drafts");
 assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "reward", battlesWon: 3 }), ["nurseryBell"], "the fourth guardian should celebrate only Nursery Bell");
+
+for (let guardianIndex = 0; guardianIndex < 2; guardianIndex += 1) {
+  clearCastleRun("mechanics");
+  progressionRun = freshRun();
+  saveCastleRun("mechanics", progressionRun);
+  progressionProfile = saveCastleRun("mechanics", { ...progressionRun, battlesWon: 3 });
+}
+assert.equal(progressionProfile.guardianClears, 6, "guardian progression should continue through Mendlet's mutation branch");
+assert.equal(progressionProfile.unlockedUpgradeIds.includes("dewSatchel"), true, "the fifth guardian should discover Bottomless Dew Satchel");
+assert.equal(progressionProfile.unlockedUpgradeIds.includes("pollenPuff"), true, "the sixth guardian should discover Pollen Puff");
 
 clearCastleRun("mechanics");
 progressionRun = freshRun();
