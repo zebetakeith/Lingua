@@ -24,7 +24,7 @@ for (const kind of ["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "big
   expectFrames(path.join("units", "friendly", kind), ["attack", "walk"], 160);
 }
 expected.set(path.join("units", "friendly", "bigChonk", "seed-v2.png"), 160);
-for (const kind of ["shellSlime", "nibbleImp", "sporeBud", "echoMoth", "rootLump"]) {
+for (const kind of ["shellSlime", "nibbleImp", "sporeBud", "boomcap", "echoMoth", "rootLump"]) {
   expected.set(path.join("units", "enemy", kind, "seed-v1.png"), 160);
   expectFrames(path.join("units", "enemy", kind), ["attack", "walk"], 160);
 }

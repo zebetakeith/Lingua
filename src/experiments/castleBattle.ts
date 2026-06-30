@@ -21,7 +21,7 @@ export type CastleEventChoiceId =
   | "hatchlingEscort" | "hatchlingShell" | "hatchlingShare"
   | "marketSnack" | "marketTrade" | "marketEgg"
   | "oracleListen" | "oracleShelter" | "oracleChallenge";
-export type CastleUnitKind = "piplet" | "dartlet" | "bubbleBud" | "mendlet" | "spitlet" | "bigChonk" | "shellSlime" | "nibbleImp" | "sporeBud" | "echoMoth" | "rootLump";
+export type CastleUnitKind = "piplet" | "dartlet" | "bubbleBud" | "mendlet" | "spitlet" | "bigChonk" | "shellSlime" | "nibbleImp" | "sporeBud" | "boomcap" | "echoMoth" | "rootLump";
 export type CastlePowerId = "slingshot" | "bubbleGate" | "snackCannon" | "gooMoat" | "timewobble" | "tongueSnatch" | "sporeMortar";
 export type CastleUpgradeCategory = "minion" | "castle" | "trait" | "study";
 export type CastleFxKind = "spawn" | "hit" | "projectile" | "pop" | "heal" | "power" | "shield";
@@ -484,6 +484,7 @@ export const CASTLE_UNIT_DEFS: Record<CastleUnitKind, CastleUnitDef> = {
   shellSlime: { kind: "shellSlime", name: "Shell Slime", cost: 0, hp: 18, damage: 2, speed: 3, range: 2.5, attackMs: 1_200, accent: "#8fb4b8", role: "Armored defender" },
   nibbleImp: { kind: "nibbleImp", name: "Nibble Imp", cost: 0, hp: 9, damage: 4, speed: 7.2, range: 2.2, attackMs: 850, accent: "#f08b68", role: "Rushing biter" },
   sporeBud: { kind: "sporeBud", name: "Spore Bud", cost: 0, hp: 12, damage: 3, speed: 2.7, range: 11, attackMs: 1_450, accent: "#d77bb7", role: "Hazard lobber" },
+  boomcap: { kind: "boomcap", name: "Boomcap", cost: 0, hp: 14, damage: 2, speed: 2.8, range: 2.5, attackMs: 1_250, accent: "#ee8b52", role: "Death-burst disruptor" },
   echoMoth: { kind: "echoMoth", name: "Echo Moth", cost: 0, hp: 10, damage: 3, speed: 4.8, range: 14, attackMs: 1_400, accent: "#8175d5", role: "Ranged siphon" },
   rootLump: { kind: "rootLump", name: "Root Lump", cost: 0, hp: 50, damage: 6, speed: 1.7, range: 3, attackMs: 1_750, accent: "#678f45", role: "Guardian siege beast" },
 };
@@ -714,7 +715,7 @@ function getEnemyWaveKind(region: number, battleInRegion: number, wave: number, 
     ? ["shellSlime", "nibbleImp", "sporeBud"]
     : region === 2
       ? ["nibbleImp", "sporeBud", "echoMoth", "shellSlime"]
-      : ["echoMoth", "shellSlime", "sporeBud", "nibbleImp"];
+      : ["echoMoth", "boomcap", "shellSlime", "sporeBud", "nibbleImp"];
   return regionPool[(wave + battleInRegion + region) % regionPool.length];
 }
 
@@ -1275,6 +1276,17 @@ function resolveBattleStep(
       generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${turretDamage}` });
     }
     battle.enemyTurretTimerMs += battle.guardian ? 2_700 - ((battle.guardianPhase - 1) * 250) : 3_500;
+  }
+
+  const burstBoomcaps = battle.units.filter(unit => unit.side === "enemy" && unit.kind === "boomcap" && unit.hp <= 0);
+  for (const boomcap of burstBoomcaps) {
+    let targetsHit = 0;
+    battle.units = battle.units.map(unit => {
+      if (unit.side !== "player" || unit.hp <= 0 || Math.abs(unit.position - boomcap.position) > 8) return unit;
+      targetsHit += 1;
+      return applyDamage(unit, 3).unit;
+    });
+    generatedFx.push({ kind: "power", side: "enemy", position: boomcap.position, label: targetsHit > 0 ? `Boomcap burst ×${targetsHit}` : "Boomcap burst" });
   }
 
   const defeated = battle.units.filter(unit => unit.hp <= 0);

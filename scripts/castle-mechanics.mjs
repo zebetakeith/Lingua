@@ -495,6 +495,50 @@ assert.equal(sporeTarget.hp, CASTLE_UNIT_DEFS.dartlet.hp - CASTLE_UNIT_DEFS.spor
 assert.equal(sporeTarget.slowMs, 1_600, "Spore Bud attacks should slow their target for 1.6 seconds");
 assert.equal(sporeBud.battle.fxEvents.some(event => event.label?.includes("slowed")), true, "Spore Bud slow should be named in the battlefield feedback");
 
+let boomcapBurst = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [
+      testUnit("boomcap", "enemy", "burst-boomcap", { position: 50, hp: 0 }),
+      testUnit("dartlet", "player", "burst-near", { position: 44, attackCooldownMs: 999_999 }),
+      testUnit("dartlet", "player", "burst-shielded", { position: 55, shield: 2, attackCooldownMs: 999_999 }),
+      testUnit("dartlet", "player", "burst-distant", { position: 59, attackCooldownMs: 999_999 }),
+    ],
+  },
+};
+boomcapBurst = tickCastleRun(boomcapBurst, 100, 1);
+assert.equal(boomcapBurst.battle.units.some(unit => unit.id === "burst-boomcap"), false, "a defeated Boomcap should pop normally after releasing its burst");
+assert.equal(boomcapBurst.battle.units.find(unit => unit.id === "burst-near").hp, CASTLE_UNIT_DEFS.dartlet.hp - 3, "Boomcap should damage every nearby friendly unit when defeated");
+assert.equal(boomcapBurst.battle.units.find(unit => unit.id === "burst-shielded").hp, CASTLE_UNIT_DEFS.dartlet.hp - 1, "unit shields should absorb Boomcap burst damage before HP");
+assert.equal(boomcapBurst.battle.units.find(unit => unit.id === "burst-shielded").shield, 0, "Boomcap should consume the nearby unit's shield");
+assert.equal(boomcapBurst.battle.units.find(unit => unit.id === "burst-distant").hp, CASTLE_UNIT_DEFS.dartlet.hp, "Boomcap should not damage formations outside its eight-space burst radius");
+assert.equal(boomcapBurst.battle.fxEvents.some(event => event.kind === "power" && event.label === "Boomcap burst ×2"), true, "Boomcap should telegraph how many friendly units its burst hit");
+
+let boomcapWave = {
+  ...freshRun(),
+  region: 3,
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 0,
+    nextEnemyKind: "boomcap",
+    afterNextEnemyKind: "boomcap",
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [],
+  },
+};
+boomcapWave = tickCastleRun(boomcapWave, 100, 1);
+assert.equal(boomcapWave.battle.units.some(unit => unit.kind === "boomcap"), true, "Boomcap should enter through the standard late-region wave path");
+assert.equal(boomcapWave.battle.encounteredEnemyKinds.includes("boomcap"), true, "meeting Boomcap should reveal it in the field guide");
+
 for (const [kind, label] of [["shellSlime", "Shell Slime"], ["rootLump", "Root Lump"]]) {
   let armoredSpawn = {
     ...freshRun(),

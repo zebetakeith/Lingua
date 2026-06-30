@@ -166,6 +166,7 @@ const ENEMY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   shellSlime: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/shellSlime/seed-v1.png`,
   nibbleImp: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/nibbleImp/seed-v1.png`,
   sporeBud: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/sporeBud/seed-v2.png`,
+  boomcap: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/boomcap/seed-v1.png`,
   echoMoth: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/seed-v2.png`,
   rootLump: `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/rootLump/seed-v2.png`,
 };
@@ -216,6 +217,10 @@ const ENEMY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/sporeBud/walk/0${index + 1}.png`,
   ),
+  boomcap: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/boomcap/walk/0${index + 1}.png`,
+  ),
   echoMoth: Array.from(
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/walk/0${index + 1}.png`,
@@ -229,6 +234,7 @@ const ENEMY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   shellSlime: 210,
   nibbleImp: 90,
   sporeBud: 190,
+  boomcap: 175,
   echoMoth: 115,
   rootLump: 260,
 };
@@ -279,6 +285,10 @@ const ENEMY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/sporeBud/attack/0${index + 1}.png`,
   ),
+  boomcap: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/boomcap/attack/0${index + 1}.png`,
+  ),
   echoMoth: Array.from(
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/enemy/echoMoth/attack/0${index + 1}.png`,
@@ -292,6 +302,7 @@ const ENEMY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   shellSlime: 60,
   nibbleImp: 45,
   sporeBud: 65,
+  boomcap: 65,
   echoMoth: 55,
   rootLump: 90,
 };
@@ -932,11 +943,12 @@ const CASTLE_UNIT_GUIDE: Partial<Record<CastleUnitKind, string>> = {
   shellSlime: "Arrives with 6 shield and stalls light attackers.",
   nibbleImp: "A fragile but dangerous sprinter that punishes an undefended lane.",
   sporeBud: "Lobs ranged spores that slow the friendly unit it hits.",
+  boomcap: "Bursts for 3 damage against every friendly unit within 8 lane spaces when defeated. Shields absorb the blast.",
   echoMoth: "Attacks from range and siphons 0.15 energy whenever it reaches Pipplo’s keep.",
   rootLump: "A guardian siege beast with armor, heavy attacks, and enough health to anchor an enemy wave.",
 };
 
-const ENEMY_GUIDE_KINDS: CastleUnitKind[] = ["shellSlime", "nibbleImp", "sporeBud", "echoMoth", "rootLump"];
+const ENEMY_GUIDE_KINDS: CastleUnitKind[] = ["shellSlime", "nibbleImp", "sporeBud", "boomcap", "echoMoth", "rootLump"];
 
 const CASTLE_TUTORIAL_STEPS = [
   {
