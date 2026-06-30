@@ -1,7 +1,12 @@
 import { lazy, Suspense, useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import "./index.css";
 import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot } from "lucide-react";
-import VOCABULARY, { generateDistractors, type VocabWord } from "./data/vocabulary";
+import { generateDistractors, type VocabWord } from "./data/vocabulary";
+import STARTER_JAPANESE, {
+  JAPANESE_STARTER_DECK_ID,
+  LEGACY_ENGLISH_STARTER_NAME,
+  isLegacyEnglishStarterDeck,
+} from "./data/starterJapanese";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
 import { getClassById } from "./data/classes";
 import { getEncounterForFloor, type EncounterInfo } from "./game/encounters";
@@ -464,7 +469,7 @@ const STARTING_HP = 100;
 const SAVE_KEY = "lexicon_labyrinth_save";
 const SAVE_BACKUP_APP_ID = "lexicon-labyrinth";
 const SAVE_BACKUP_VERSION = 2;
-const DEFAULT_DECK_ID = "starter-japanese";
+const DEFAULT_DECK_ID = JAPANESE_STARTER_DECK_ID;
 const MAX_DECK_CARDS = 2000;
 const RUN_START_CARD_TARGET = 6;
 const REWARD_CARD_COUNT = 3;
@@ -587,7 +592,7 @@ function createSavedDeck(name: string, cards: VocabWord[], id = `deck-${Date.now
 }
 
 function createDefaultDeck(): SavedDeck {
-  return createSavedDeck("Starter Japanese", VOCABULARY, DEFAULT_DECK_ID);
+  return createSavedDeck("Starter Japanese", STARTER_JAPANESE, DEFAULT_DECK_ID);
 }
 
 function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck {
@@ -665,9 +670,14 @@ function normalizeSave(data: Partial<SaveData> | null): SaveData {
   if (!data) return fallback;
   const legacyImportedCards = Array.isArray(data.importedCards) ? data.importedCards.slice(0, MAX_DECK_CARDS) : [];
   const normalizedDecks = Array.isArray(data.decks)
-    ? data.decks.map((deck, index) => normalizeDeck(deck, createSavedDeck(`Deck ${index + 1}`, [], deck?.id || `deck-${index + 1}`)))
+    ? data.decks.map((deck, index) => {
+        const normalized = normalizeDeck(deck, createSavedDeck(`Deck ${index + 1}`, [], deck?.id || `deck-${index + 1}`));
+        return isLegacyEnglishStarterDeck(normalized)
+          ? { ...normalized, name: LEGACY_ENGLISH_STARTER_NAME }
+          : normalized;
+      })
     : [];
-  const migratedDecks = normalizedDecks.length > 0
+  const baseDecks = normalizedDecks.length > 0
     ? normalizedDecks
     : legacyImportedCards.length > 0
       ? [
@@ -682,6 +692,9 @@ function normalizeSave(data: Partial<SaveData> | null): SaveData {
           createDefaultDeck(),
         ]
       : [createDefaultDeck()];
+  const migratedDecks = baseDecks.some(deck => deck.id === DEFAULT_DECK_ID)
+    ? baseDecks
+    : [...baseDecks, createDefaultDeck()];
   const selectedDeckId = migratedDecks.some(deck => deck.id === data.selectedDeckId)
     ? data.selectedDeckId as string
     : migratedDecks[0].id;

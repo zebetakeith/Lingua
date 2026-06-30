@@ -1,4 +1,9 @@
-import VOCABULARY, { type VocabWord } from "../data/vocabulary.ts";
+import type { VocabWord } from "../data/vocabulary.ts";
+import STARTER_JAPANESE, {
+  JAPANESE_STARTER_DECK_ID,
+  LEGACY_ENGLISH_STARTER_NAME,
+  isLegacyEnglishStarterDeck,
+} from "../data/starterJapanese.ts";
 import {
   DEFAULT_STUDY_SETTINGS,
   chooseQuestionType,
@@ -24,7 +29,7 @@ import {
 } from "./study.ts";
 
 const SAVE_KEY = "lexicon_labyrinth_save";
-const STARTER_DECK_ID = "starter-japanese";
+const STARTER_DECK_ID = JAPANESE_STARTER_DECK_ID;
 let nextStudyQuestionInstanceId = 1;
 
 function stableCardHash(value: string): string {
@@ -145,8 +150,8 @@ const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0
 function createFallbackDeck(): StudyDeck {
   return {
     id: STARTER_DECK_ID,
-    name: "Starter Deck",
-    cards: VOCABULARY,
+    name: "Starter Japanese",
+    cards: STARTER_JAPANESE,
     cardRatings: {},
     cardProgress: {},
     introducedCardIds: [],
@@ -167,10 +172,8 @@ function loadSave(): StudySave {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<StudySave>;
       if (Array.isArray(parsed.decks) && parsed.decks.length > 0) {
-        return {
-          ...parsed,
-          selectedDeckId: typeof parsed.selectedDeckId === "string" ? parsed.selectedDeckId : parsed.decks[0].id,
-          decks: parsed.decks.map(deck => ({
+        const normalizedDecks = parsed.decks.map(deck => {
+          const normalized = {
             ...deck,
             cards: repairDuplicateCardIds(Array.isArray(deck.cards) ? deck.cards : []),
             cardRatings: deck.cardRatings || {},
@@ -178,7 +181,20 @@ function loadSave(): StudySave {
             introducedCardIds: Array.isArray(deck.introducedCardIds) ? deck.introducedCardIds : [],
             directionProgress: deck.directionProgress || {},
             studySettings: normalizeStudySettings(deck.studySettings),
-          })),
+          };
+          return isLegacyEnglishStarterDeck(normalized)
+            ? { ...normalized, name: LEGACY_ENGLISH_STARTER_NAME }
+            : normalized;
+        });
+        const decks = normalizedDecks.some(deck => deck.id === STARTER_DECK_ID)
+          ? normalizedDecks
+          : [...normalizedDecks, createFallbackDeck()];
+        return {
+          ...parsed,
+          selectedDeckId: typeof parsed.selectedDeckId === "string" && decks.some(deck => deck.id === parsed.selectedDeckId)
+            ? parsed.selectedDeckId
+            : decks[0].id,
+          decks,
         } as StudySave;
       }
     }

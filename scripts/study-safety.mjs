@@ -10,6 +10,26 @@ globalThis.localStorage = {
 
 const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
 const { createDirectionStudyProgress, getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, updateDirectionStudyProgress } = await import("../src/game/study.ts");
+const { JAPANESE_STARTER_DECK_ID, STARTER_JAPANESE } = await import("../src/data/starterJapanese.ts");
+
+assert.equal(STARTER_JAPANESE.length, 120, "the Japanese-first starter deck should contain a substantial beginner core");
+assert.equal(new Set(STARTER_JAPANESE.map(card => card.id)).size, STARTER_JAPANESE.length, "starter Japanese card ids must be unique");
+assert.equal(new Set(STARTER_JAPANESE.map(card => card.word)).size, STARTER_JAPANESE.length, "starter Japanese terms must be unique");
+assert.equal(new Set(STARTER_JAPANESE.map(card => card.definition)).size, STARTER_JAPANESE.length, "starter Japanese meanings must be unique enough for answer choices");
+assert.ok(STARTER_JAPANESE.every(card => /[ぁ-んァ-ン一-龯]/u.test(card.word)), "every starter term should contain Japanese script rather than romaji");
+assert.ok(STARTER_JAPANESE.every(card => card.options.length === 0), "starter answers should be generated from same-deck Japanese content");
+
+values.set("lexicon_labyrinth_save", JSON.stringify({
+  selectedDeckId: "starter-japanese",
+  decks: [{
+    id: "starter-japanese",
+    name: "Starter Japanese",
+    cards: [{ id: "v001", word: "abandon", definition: "to leave behind or desert", difficulty: 1, options: [] }],
+  }],
+}));
+const migratedStarterDecks = getStudyDecks();
+assert.equal(migratedStarterDecks.find(deck => deck.id === "starter-japanese")?.name, "Starter English Vocabulary", "the mislabeled English seed should be preserved under an honest name");
+assert.equal(migratedStarterDecks.find(deck => deck.id === JAPANESE_STARTER_DECK_ID)?.cardCount, 120, "existing saves should gain the real Japanese starter without losing their old deck");
 
 const cards = [
   { id: "new-1", word: "mizu", definition: "water", difficulty: 2, options: [] },
