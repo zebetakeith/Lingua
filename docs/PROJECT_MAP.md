@@ -10,9 +10,9 @@ The main game code lives here. Most future gameplay, UI, study-system, and comba
 
 ### `src/experiments/`
 
-Prototype game modes and experimental screens live here. Pipplo's Goo Keep, the active castle-versus-castle Combat Lab, is in this area.
+Historical experiments and the production Goo Keep screen live here. Pipplo's Goo Keep is now the primary castle-versus-castle game mode.
 
-Use this folder when working on lane combat, live study pressure, castle progression, prototype UI, or lab-only features.
+Use this folder when working on lane combat, live study pressure, castle progression, game UI, or Goo Keep presentation.
 
 ### `src/game/`
 

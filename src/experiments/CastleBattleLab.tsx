@@ -810,7 +810,7 @@ function DeckSetup({
       <button className="castle-setup-exit" onClick={onExit}><ArrowLeft />Main menu</button>
       <section className="castle-setup-card">
         <PipploSprite className="castle-setup-pipplo" />
-        <p className="castle-eyebrow">Combat Lab · rebuilt</p>
+        <p className="castle-eyebrow">Castle expedition</p>
         <h1>Pipplo's Goo Keep</h1>
         <p>Recall words, hatch a wobbling army, and push across the lane before the rival keep overwhelms yours.</p>
 
@@ -821,7 +821,7 @@ function DeckSetup({
         </div>
 
         <section className="castle-profile-summary" aria-label="Keeper chronicle">
-          <header><FlaskConical /><div><span>Keeper chronicle</span><b>This deck-world remembers every expedition</b></div></header>
+          <header><Castle /><div><span>Keeper chronicle</span><b>This deck-world remembers every expedition</b></div></header>
           <div className="castle-profile-metrics">
             <span><b>{profile.runsCompleted}</b><small>runs completed</small></span>
             <span><b>{profile.guardianClears}</b><small>guardians cleared</small></span>

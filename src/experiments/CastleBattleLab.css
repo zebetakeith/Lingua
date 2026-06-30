@@ -668,8 +668,8 @@
   .castle-lab-shell { grid-template-rows: auto minmax(270px, 38dvh) auto auto 1fr; }
   .castle-setup-shell { place-items: start center; overflow-y: auto; }
   .castle-header-stats { display: none; }
-  .castle-scene-status { grid-template-columns: 1fr 70px 1fr; }
-  .castle-region-chip span { display: none; }
+  .castle-scene-status { grid-template-columns: 1fr 84px 1fr; }
+  .castle-region-chip span { display: block; overflow: hidden; font-size: 6px; letter-spacing: -0.02em; text-overflow: ellipsis; white-space: nowrap; }
   .castle-reward-grid { grid-template-columns: 1fr; }
   .castle-reward-grid button { min-height: 96px; }
   .castle-learning-metrics { grid-template-columns: 1fr 1fr; }

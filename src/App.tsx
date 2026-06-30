@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, useEffect, useRef, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import "./index.css";
-import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Volume2, VolumeX, HelpCircle, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot, Beaker } from "lucide-react";
+import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot } from "lucide-react";
 import VOCABULARY, { generateDistractors, type VocabWord } from "./data/vocabulary";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
 import { getClassById } from "./data/classes";
@@ -2730,7 +2730,6 @@ export default function App() {
   const [screen, setScreen] = useState<GameScreen>("menu");
   const [save, setSave] = useState<SaveData>(loadSave);
   const [combat, setCombat] = useState<CombatState | null>(null);
-  const [soundOn, setSoundOn] = useState(true);
   const [showTutorial, setShowTutorial] = useState(false);
   const [importText, setImportText] = useState("");
   const [importMessage, setImportMessage] = useState("");
@@ -6063,12 +6062,14 @@ export default function App() {
           
           {/* Play Button */}
           <button
-            onClick={() => setScreen("classSelect")}
+            onClick={() => {
+              window.location.href = `${window.location.pathname}?lab=goo-keep`;
+            }}
             className="group relative mb-6 max-w-[calc(100vw-2rem)] rounded-lg border border-teal-700/20 bg-[#ff7895] px-5 py-4 text-base font-black text-white shadow-[0_10px_0_rgba(184,78,117,0.72),0_18px_30px_rgba(18,91,115,0.18)] transition-all duration-200 hover:-translate-y-1 hover:bg-[#ff8fa6] sm:px-12 sm:text-xl"
           >
             <span className="flex items-center gap-3">
               <Play className="w-6 h-6" />
-              OPEN EXPEDITION
+              PLAY GOO KEEP
               <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </span>
           </button>
@@ -6076,60 +6077,13 @@ export default function App() {
           {/* Menu buttons */}
           <div className="flex flex-wrap justify-center gap-4 mt-4">
             <button
-              onClick={() => {
-                window.location.href = `${window.location.pathname}?lab=goo-keep`;
-              }}
-              className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-[#fff6bd]/90 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#fff9d8]"
-            >
-              <Beaker className="w-5 h-5 text-teal-600" />
-              Goo Keep Lab
-            </button>
-            <button
-              onClick={() => setScreen("howToPlay")}
-              className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
-            >
-              <HelpCircle className="w-5 h-5" />
-              How to Play
-            </button>
-            <button
               onClick={() => setScreen("flashcards")}
               className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
             >
               <FileText className="w-5 h-5 text-cyan-300" />
               Flashcards
             </button>
-            <button
-              onClick={() => setScreen("meta")}
-              className="flex items-center gap-2 rounded-lg border border-teal-700/15 bg-white/80 px-6 py-3 font-bold text-teal-950 shadow-md backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
-            >
-              <Star className="w-5 h-5 text-yellow-400" />
-              Discoveries
-            </button>
           </div>
-          
-          {/* Stats bar */}
-          <div className="absolute bottom-6 flex items-center gap-6 rounded-full border border-teal-700/15 bg-white/76 px-4 py-2 text-sm font-bold text-teal-900 shadow-md backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              <img src={assetUrl("/wisdom_orb_blob.svg")} alt="" className="h-5 w-5" />
-              <span>{save.wisdomOrbs}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-yellow-400" />
-              <span>Best: Floor {activeDeckStats.bestFloor}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-blue-400" />
-              <span>{activeDeckStats.totalCorrect} words</span>
-            </div>
-          </div>
-          
-          {/* Sound toggle */}
-          <button
-            onClick={() => setSoundOn(!soundOn)}
-            className="absolute top-4 right-4 p-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-full text-white transition-all"
-          >
-            {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
-          </button>
         </div>
       </div>
     );

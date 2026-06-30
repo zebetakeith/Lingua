@@ -15,6 +15,7 @@ import {
   continueCastleRun,
   createInitialCastleRun,
   getCastleBattleLesson,
+  getCastleBattleProgress,
   getCastleEndlessThreat,
   getCastleEventChoiceEffect,
   getCastleGuardianPower,
@@ -843,6 +844,8 @@ assert.equal(endlessStart.phase, "battle", "continuing after a contract should b
 assert.equal(endlessStart.region, 4, "the first endless battle should begin in region four");
 assert.equal(endlessStart.battle.enemyThreatTier, 1, "region four should begin Moon Ascension 1");
 assert.equal(getCastleEndlessThreat(6).tier, 3, "each region after the core three should add one ascension tier");
+assert.equal(getCastleBattleProgress(endlessStart), "Moon Ascension 1 · Castle 1/3", "endless HUD progress should use its ascension name instead of an impossible region fraction");
+assert.equal(getCastleBattleProgress({ ...freshRun(), targetRegions: 1, region: 2 }), "Deep run · Region 2 · Castle 1/3", "continuing beyond a short contract should label the deeper named region clearly");
 assert.equal(getCastleGuardianPower(4).id, "rootQuake", "the first endless region should introduce the Root Quake guardian stance");
 assert.equal(getCastleGuardianPower(5).id, "broodCall", "the second endless region should introduce the Brood Call guardian stance");
 

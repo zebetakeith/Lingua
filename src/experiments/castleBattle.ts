@@ -1882,5 +1882,10 @@ export function formatCastleEnergy(value: number): string {
 }
 
 export function getCastleBattleProgress(run: CastleRunState): string {
+  const threat = getCastleEndlessThreat(run.region);
+  if (threat.tier > 0) return `${threat.label} · Castle ${run.battleInRegion}/3`;
+  if (run.region > run.targetRegions) {
+    return `Deep run · Region ${run.region} · Castle ${run.battleInRegion}/3`;
+  }
   return `Region ${run.region}/${run.targetRegions} · Castle ${run.battleInRegion}/3`;
 }
