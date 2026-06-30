@@ -6029,32 +6029,30 @@ export default function App() {
         </div>
         
         <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
-          {/* Title */}
-          <div className="mb-2">
-            <h1 
-              className="text-5xl md:text-7xl font-bold text-center tracking-wider"
-              style={{ 
-                color: "#fff9d6",
-                textShadow: "0 3px 0 rgba(30,141,151,0.46), 0 8px 18px rgba(18,91,115,0.24)",
-                fontFamily: "Nunito, Inter, sans-serif"
-              }}
-            >
-              LEXICON
-            </h1>
-            <h1 
-              className="text-4xl md:text-6xl font-bold text-center tracking-widest -mt-2"
-              style={{ 
-                color: "#ff7895",
-                textShadow: "0 3px 0 rgba(175,70,109,0.42), 0 8px 18px rgba(18,91,115,0.2)",
-                fontFamily: "Nunito, Inter, sans-serif"
-              }}
-            >
-              LABYRINTH
-            </h1>
+          {/* Goo Keep title */}
+          <div className="mb-3 flex items-end justify-center gap-1 sm:gap-3">
+            <img
+              src={assetUrl("assets/goo-keep/characters/pipplo/idle/01.png")}
+              alt="Pipplo, the Goo Keep keeper"
+              className="h-24 w-24 object-contain drop-shadow-[0_8px_0_rgba(24,103,105,0.18)] sm:h-32 sm:w-32"
+            />
+            <div className="pb-1 text-left sm:pb-2">
+              <p className="mb-1 text-[9px] font-black tracking-[0.2em] text-teal-950/65 sm:text-xs">LEXICON LABYRINTH PRESENTS</p>
+              <h1 className="grid font-black uppercase leading-[0.82]" style={{ fontFamily: "Nunito, Inter, sans-serif" }}>
+                <span
+                  className="text-3xl tracking-wide sm:text-5xl"
+                  style={{ color: "#fff9d6", textShadow: "0 3px 0 rgba(30,141,151,0.46), 0 8px 18px rgba(18,91,115,0.24)" }}
+                >Pipplo's</span>
+                <span
+                  className="text-4xl tracking-wider sm:text-6xl"
+                  style={{ color: "#ff7895", textShadow: "0 3px 0 rgba(175,70,109,0.42), 0 8px 18px rgba(18,91,115,0.2)" }}
+                >Goo Keep</span>
+              </h1>
+            </div>
           </div>
           
           <p className="mb-8 text-lg font-bold tracking-wide text-teal-950" style={{ textShadow: "0 1px 0 rgba(255,255,255,0.65)" }}>
-            Feed your curiosity. Grow a strange little world.
+            Recall bravely. Hatch a wobbling army. Guard your words.
           </p>
           <div className="mb-4 rounded-lg border border-teal-700/20 bg-white/80 px-4 py-2 text-sm font-bold text-teal-900 shadow-lg backdrop-blur-sm">
             Deck: <span className="font-black text-teal-950">{activeDeck.name}</span> · {activeDeckCards.toLocaleString()} / {MAX_DECK_CARDS.toLocaleString()} cards
