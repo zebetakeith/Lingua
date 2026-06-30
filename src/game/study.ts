@@ -1,5 +1,5 @@
-export type StudyDirection = "term_to_definition" | "definition_to_term";
-export type StudyQuestionType = "multiple_choice" | "self_grade";
+export type StudyDirection = "term_to_definition" | "definition_to_term" | "reading_to_term";
+export type StudyQuestionType = "multiple_choice" | "self_grade" | "tile_builder";
 export type StudyRewardCurve = "current" | "quadratic" | "steep";
 export type StudyRecallMode = "balanced" | "deck";
 
@@ -12,6 +12,7 @@ export interface StudyPressureProfile {
 export interface DeckStudySettings {
   askTermToDefinition: boolean;
   askDefinitionToTerm: boolean;
+  askReadingToTerm: boolean;
   useMultipleChoice: boolean;
   useSelfGrade: boolean;
   shuffleAnswers: boolean;
@@ -35,6 +36,7 @@ export interface DirectionStudyProgress {
 export const DEFAULT_STUDY_SETTINGS: DeckStudySettings = {
   askTermToDefinition: true,
   askDefinitionToTerm: true,
+  askReadingToTerm: true,
   useMultipleChoice: true,
   useSelfGrade: true,
   shuffleAnswers: true,
@@ -68,7 +70,7 @@ export function normalizeStudySettings(settings?: Partial<DeckStudySettings> | n
     ...(settings || {}),
   };
 
-  if (!normalized.askTermToDefinition && !normalized.askDefinitionToTerm) {
+  if (!normalized.askTermToDefinition && !normalized.askDefinitionToTerm && !normalized.askReadingToTerm) {
     normalized.askDefinitionToTerm = true;
   }
   if (!normalized.useMultipleChoice && !normalized.useSelfGrade) {
@@ -132,10 +134,11 @@ export function normalizeDirectionStudyProgress(
   };
 }
 
-export function getEnabledStudyDirections(settings: DeckStudySettings): StudyDirection[] {
+export function getEnabledStudyDirections(settings: DeckStudySettings, hasReading = false): StudyDirection[] {
   const directions: StudyDirection[] = [];
   if (settings.askTermToDefinition) directions.push("term_to_definition");
   if (settings.askDefinitionToTerm) directions.push("definition_to_term");
+  if (settings.askReadingToTerm && hasReading) directions.push("reading_to_term");
   return directions.length > 0 ? directions : ["definition_to_term"];
 }
 
@@ -145,6 +148,7 @@ export function chooseQuestionType(
   direction?: StudyDirection,
   recallMode: StudyRecallMode = "deck",
 ): StudyQuestionType {
+  if (direction === "reading_to_term") return "tile_builder";
   if (recallMode === "balanced") {
     if (direction === "definition_to_term" && progress.mastery >= 0.42) return "self_grade";
     if (direction === "term_to_definition" && progress.mastery >= 0.76 && settings.useSelfGrade) return "self_grade";
@@ -194,7 +198,7 @@ export function getCorrectAnswerAp(progress: DirectionStudyProgress, questionTyp
       : normalized.correctToday === 2
         ? 0.45
         : 0.25;
-  const questionReward = questionType === "self_grade" ? 1.12 : 0.88;
+  const questionReward = questionType === "tile_builder" ? 1.2 : questionType === "self_grade" ? 1.12 : 0.88;
   const dueReward = normalized.dueAt <= now ? 1 : 0.82;
   return roundAp(Math.max(0.1, masteryReward * repeatReward * questionReward * dueReward));
 }
@@ -218,7 +222,7 @@ export function getCorrectAnswerReward(
       : normalized.correctToday === 2
         ? 0.45
         : 0.25;
-  const questionReward = questionType === "self_grade" ? 1.12 : 0.88;
+  const questionReward = questionType === "tile_builder" ? 1.2 : questionType === "self_grade" ? 1.12 : 0.88;
   const dueReward = normalized.dueAt <= now ? 1 : 0.82;
   return roundAp(Math.max(0.1, Math.min(3.5, baseReward * repeatReward * questionReward * dueReward)));
 }
@@ -247,7 +251,7 @@ export function updateDirectionStudyProgress(
   const nextCorrectStreak = isCorrect ? current.correctStreak + 1 : 0;
   const nextWrongStreak = isCorrect ? 0 : current.wrongStreak + 1;
   const earlyCorrectReview = isCorrect && current.dueAt > now;
-  const formatStrength = questionType === "self_grade" ? 1.25 : 0.82;
+  const formatStrength = questionType === "tile_builder" ? 1.3 : questionType === "self_grade" ? 1.25 : 0.82;
   const masteryChange = isCorrect
     ? (0.055 + Math.min(0.045, nextCorrectStreak * 0.008)) * formatStrength * (earlyCorrectReview ? 0.35 : 1)
     : -(0.11 + Math.min(0.12, nextWrongStreak * 0.035));

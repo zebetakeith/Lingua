@@ -1,7 +1,9 @@
 import type { VocabWord } from "../data/vocabulary.ts";
 import STARTER_JAPANESE, {
+  JAPANESE_STUDY_DECK_NAME,
   JAPANESE_STARTER_DECK_ID,
   LEGACY_ENGLISH_STARTER_NAME,
+  isGeneratedJapaneseSampleDeck,
   isLegacyEnglishStarterDeck,
 } from "../data/starterJapanese.ts";
 import {
@@ -27,6 +29,7 @@ import {
   type StudyRecallMode,
   type StudyRewardCurve,
 } from "./study.ts";
+import { createJapaneseTileChoices, type JapaneseStudyTile } from "./japaneseTiles.ts";
 
 const SAVE_KEY = "lexicon_labyrinth_save";
 const STARTER_DECK_ID = JAPANESE_STARTER_DECK_ID;
@@ -41,8 +44,8 @@ function stableCardHash(value: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function getCardFingerprint(card: Pick<VocabWord, "word" | "definition">): string {
-  const normalized = `${card.word.trim().toLocaleLowerCase()}\u241f${card.definition.trim().toLocaleLowerCase()}`;
+function getCardFingerprint(card: Pick<VocabWord, "word" | "reading" | "definition">): string {
+  const normalized = `${card.word.trim().toLocaleLowerCase()}\u241f${card.reading?.trim().toLocaleLowerCase() || ""}\u241f${card.definition.trim().toLocaleLowerCase()}`;
   return `card-${stableCardHash(normalized)}`;
 }
 
@@ -113,6 +116,7 @@ export interface StudyQuestion {
   direction: StudyDirection;
   questionType: StudyQuestionType;
   options: string[];
+  tiles: JapaneseStudyTile[];
   masteryBefore: number;
   masteryLabel: string;
   reward: number;
@@ -132,6 +136,8 @@ export interface StudyAnswerResult {
   progressKey: string;
 }
 
+export type StudyExposureRating = "hard" | "medium" | "easy" | "known";
+
 const completedQuestionInstances = new Set<number>();
 const STUDY_PROMPT_ALREADY_COMPLETED = "This study prompt was already completed.";
 const STUDY_DIRECTION_NOT_REVIEWABLE = "A new study direction must be completed as a lesson before it can be reviewed.";
@@ -150,7 +156,7 @@ const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0
 function createFallbackDeck(): StudyDeck {
   return {
     id: STARTER_DECK_ID,
-    name: "Starter Japanese",
+    name: JAPANESE_STUDY_DECK_NAME,
     cards: STARTER_JAPANESE,
     cardRatings: {},
     cardProgress: {},
@@ -182,6 +188,7 @@ function loadSave(): StudySave {
             directionProgress: deck.directionProgress || {},
             studySettings: normalizeStudySettings(deck.studySettings),
           };
+          if (isGeneratedJapaneseSampleDeck(normalized)) return createFallbackDeck();
           return isLegacyEnglishStarterDeck(normalized)
             ? { ...normalized, name: LEGACY_ENGLISH_STARTER_NAME }
             : normalized;
@@ -247,7 +254,7 @@ function ensureStudyCards(deckId: string): StudyDeck {
     const directionProgress = { ...(deck.directionProgress || {}) };
     const settings = normalizeStudySettings(deck.studySettings);
     deck.cards.filter(card => introducedIds.has(card.id)).forEach(card => {
-      getEnabledStudyDirections(settings).forEach(direction => {
+      getEnabledStudyDirections(settings, Boolean(card.reading)).forEach(direction => {
         const key = getStudyDirectionKey(card.id, direction);
         directionProgress[key] = getDirectionProgress({ ...deck, directionProgress }, card, direction);
       });
@@ -312,7 +319,7 @@ export function introduceStudyCards(deckId: string, count: number): VocabWord[] 
     const directionProgress = { ...(deck.directionProgress || {}) };
     introduced.forEach(card => {
       introducedIds.add(card.id);
-      getEnabledStudyDirections(settings).forEach(direction => {
+      getEnabledStudyDirections(settings, Boolean(card.reading)).forEach(direction => {
         const key = getStudyDirectionKey(card.id, direction);
         directionProgress[key] = getDirectionProgress({ ...deck, directionProgress }, card, direction);
       });
@@ -334,13 +341,13 @@ export function getStudyDirectionLabel(
   if (separator <= 0) return null;
   const cardId = progressKey.slice(0, separator);
   const direction = progressKey.slice(separator + 2) as StudyDirection;
-  if (direction !== "term_to_definition" && direction !== "definition_to_term") return null;
+  if (direction !== "term_to_definition" && direction !== "definition_to_term" && direction !== "reading_to_term") return null;
   const deck = loadSave().decks.find(candidate => candidate.id === deckId);
   const card = deck?.cards.find(candidate => candidate.id === cardId);
   if (!card) return null;
-  return direction === "term_to_definition"
-    ? { prompt: card.word, answer: card.definition }
-    : { prompt: card.definition, answer: card.word };
+  if (direction === "term_to_definition") return { prompt: card.word, answer: card.definition };
+  if (direction === "reading_to_term") return { prompt: card.reading || card.word, answer: card.word };
+  return { prompt: card.definition, answer: card.word };
 }
 
 export function drawStudyQuestion(
@@ -358,7 +365,7 @@ export function drawStudyQuestion(
   const introducedIds = new Set(deck.introducedCardIds || []);
   const candidates = deck.cards
     .filter(card => introducedIds.has(card.id) && !knownIds.has(card.id))
-    .flatMap(card => getEnabledStudyDirections(settings).map(direction => ({
+    .flatMap(card => getEnabledStudyDirections(settings, Boolean(card.reading)).map(direction => ({
       card,
       direction,
       key: getStudyDirectionKey(card.id, direction),
@@ -391,16 +398,28 @@ export function drawStudyQuestion(
     ? "self_grade"
     : questionType;
   const seenBefore = selected.progress.seen > 0;
+  const learnedWrittenForms = deck.cards
+    .filter(card => card.id !== selected.card.id && introducedIds.has(card.id))
+    .filter(card => Object.entries(deck.directionProgress || {}).some(([key, progress]) => key.startsWith(`${card.id}::`) && progress.seen > 0))
+    .map(card => card.word);
+  const tiles = effectiveQuestionType === "tile_builder"
+    ? createJapaneseTileChoices(selected.card.word, learnedWrittenForms)
+    : [];
   return {
     instanceId: nextStudyQuestionInstanceId++,
     cardId: selected.card.id,
     cardFingerprint: getCardFingerprint(selected.card),
-    prompt: selected.direction === "term_to_definition" ? selected.card.word : selected.card.definition,
+    prompt: selected.direction === "term_to_definition"
+      ? selected.card.word
+      : selected.direction === "reading_to_term"
+        ? selected.card.reading || selected.card.word
+        : selected.card.definition,
     answer: selected.direction === "term_to_definition" ? selected.card.definition : selected.card.word,
     definition: selected.card.definition,
     direction: selected.direction,
     questionType: effectiveQuestionType,
     options: effectiveQuestionType === "multiple_choice" ? candidateOptions : [],
+    tiles,
     masteryBefore: selected.progress.mastery,
     masteryLabel: getMasteryLabel(selected.progress.mastery),
     reward: seenBefore ? getCorrectAnswerReward(selected.progress, effectiveQuestionType, rewardCurve, now) : 0.25,
@@ -449,7 +468,7 @@ export function answerStudyQuestion(
   let blockedByNewDirection = false;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
+    const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings), Boolean(card?.reading));
     if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card) || !enabledDirections.includes(question.direction)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
@@ -507,6 +526,7 @@ export function answerStudyQuestion(
 export function completeStudyExposure(
   deckId: string,
   question: StudyQuestion,
+  rating: StudyExposureRating = "medium",
 ): StudyAnswerResult {
   if (completedQuestionInstances.has(question.instanceId)) throw new Error(STUDY_PROMPT_ALREADY_COMPLETED);
   if (!loadSave().decks.some(deck => deck.id === deckId)) throw new Error("The introduced card is no longer available.");
@@ -514,7 +534,7 @@ export function completeStudyExposure(
   let blockedBySeenDirection = false;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
-    const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
+    const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings), Boolean(card?.reading));
     if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card) || !enabledDirections.includes(question.direction)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
@@ -525,6 +545,7 @@ export function completeStudyExposure(
     const now = Date.now();
     const nextDirection: DirectionStudyProgress = {
       ...currentDirection,
+      mastery: getInitialMastery(rating),
       seen: currentDirection.seen + 1,
       dueAt: now,
       reviewDay: getReviewDay(now),
@@ -543,13 +564,17 @@ export function completeStudyExposure(
       isCorrect: true,
       answer: question.answer,
       masteryBefore: currentDirection.mastery,
-      masteryAfter: currentDirection.mastery,
+      masteryAfter: nextDirection.mastery,
       masteryEvent: "",
       wasUnseen: currentDirection.seen === 0,
       progressKey: key,
     };
     return {
       ...deck,
+      cardRatings: { ...(deck.cardRatings || {}), [card.id]: rating },
+      introducedCardIds: rating === "known"
+        ? (deck.introducedCardIds || []).filter(cardId => cardId !== card.id)
+        : deck.introducedCardIds,
       directionProgress: { ...(deck.directionProgress || {}), [key]: nextDirection },
       cardProgress: {
         ...(deck.cardProgress || {}),

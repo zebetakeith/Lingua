@@ -331,6 +331,18 @@
 .castle-answer-grid button { display: grid; grid-template-columns: 25px minmax(0, 1fr); align-items: center; gap: 8px; text-align: left; }
 .castle-answer-grid button kbd { display: grid; place-items: center; width: 24px; height: 24px; color: #267276; background: #e2f2dc; border: 1px solid #bad8ad; border-radius: 8px; font: inherit; font-size: 9px; }
 .castle-answer-grid button span { overflow-wrap: anywhere; }
+.castle-tile-answer { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; min-height: 50px; padding: 8px; background: #e7f4df; border: 2px solid #b9dbad; border-radius: 15px; }
+.castle-tile-answer i,
+.castle-tile-answer button { display: grid; place-items: center; width: 42px; height: 42px; box-sizing: border-box; border-radius: 10px; }
+.castle-tile-answer i { border: 2px dashed #91b59a; background: rgba(255,255,255,0.55); }
+.castle-tile-answer button { color: #164f54; background: white; border: 2px solid #72b796; font-size: 20px; font-weight: 950; box-shadow: 0 3px 0 rgba(39, 105, 82, 0.16); }
+.castle-tile-bank { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; padding: 7px; }
+.castle-tile-bank button { display: grid; place-items: center; min-width: 42px; height: 42px; padding: 0 9px; color: #174e52; background: white; border: 2px solid rgba(28, 105, 105, 0.2); border-radius: 11px; font-size: 19px; font-weight: 950; box-shadow: 0 3px 0 rgba(33, 98, 98, 0.09); }
+.castle-tile-bank button:disabled { opacity: 0.22; box-shadow: none; }
+.castle-tile-actions { display: grid; grid-template-columns: minmax(90px, .35fr) 1fr; gap: 8px; }
+.castle-tile-actions button { min-height: 44px; color: #526c6d; background: #edf2eb; border: 1px solid #ccd9d1; border-radius: 12px; font-weight: 950; }
+.castle-tile-actions button.is-submit { color: white; background: linear-gradient(135deg, #3e9f9c, #24777d); border-color: transparent; }
+.castle-tile-actions button:disabled { opacity: 0.42; }
 .castle-flip-card,
 .castle-resume-card { width: 100%; color: white; background: linear-gradient(135deg, #3e9f9c, #24777d); border-color: transparent; }
 .castle-flip-card { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -355,6 +367,14 @@
 .castle-first-exposure > p { max-width: 480px; margin: 4px 0; color: #315f64; font-size: 11px; line-height: 1.45; }
 .castle-first-exposure > button { display: flex; align-items: center; justify-content: center; gap: 7px; width: min(360px, 100%); min-height: 50px; color: white; background: linear-gradient(135deg, #328f91, #226c75); border: 0; border-radius: 15px; font-size: 13px; font-weight: 950; box-shadow: 0 5px 0 #175760; }
 .castle-first-exposure > button svg { width: 17px; }
+.castle-exposure-ratings { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; width: min(760px, 100%); }
+.castle-exposure-ratings button { display: grid; gap: 2px; min-height: 50px; padding: 7px; color: #174e52; background: white; border: 2px solid rgba(28, 105, 105, 0.16); border-radius: 13px; box-shadow: 0 4px 0 rgba(33, 98, 98, 0.09); }
+.castle-exposure-ratings button b { font-size: 11px; }
+.castle-exposure-ratings button span { font-size: 8px; opacity: 0.68; }
+.castle-exposure-ratings button.is-hard { color: #8d3f55; border-color: #e6a8b6; background: #fff0f3; }
+.castle-exposure-ratings button.is-learning { color: #7b5b12; border-color: #e4cb7b; background: #fff9d8; }
+.castle-exposure-ratings button.is-familiar { color: #277153; border-color: #9fd3b5; background: #eaf8e8; }
+.castle-exposure-ratings button.is-known { color: #536468; border-color: #c7d4d3; background: #f1f5f2; }
 
 .castle-mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 6px 10px; background: rgba(255, 250, 219, 0.96); border-bottom: 1px solid rgba(20, 91, 94, 0.12); }
 .castle-mode-switch button { position: relative; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; color: #236e72; background: rgba(255,255,255,0.62); border: 1px solid rgba(29, 101, 102, 0.13); border-radius: 12px; font-size: 11px; font-weight: 950; }
@@ -691,6 +711,8 @@
   .castle-setup-loop { grid-template-columns: 1fr; padding-right: 0; }
   .castle-setup-loop > div { min-height: 46px; }
   .castle-profile-metrics { grid-template-columns: 1fr 1fr; }
+  .castle-exposure-ratings { grid-template-columns: 1fr 1fr; gap: 5px; }
+  .castle-exposure-ratings button { min-height: 42px; padding: 5px; }
 }
 
 @media (min-width: 621px) and (max-height: 780px) {

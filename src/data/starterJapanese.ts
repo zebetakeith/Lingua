@@ -3,149 +3,23 @@ import type { VocabWord } from "./vocabulary";
 export const JAPANESE_STARTER_DECK_ID = "starter-japanese-core";
 export const LEGACY_ENGLISH_STARTER_DECK_ID = "starter-japanese";
 export const LEGACY_ENGLISH_STARTER_NAME = "Starter English Vocabulary";
+export const JAPANESE_STUDY_DECK_NAME = "Japanese Study";
 
-const card = (id: number, word: string, definition: string, difficulty: number): VocabWord => ({
-  id: `jp-${String(id).padStart(3, "0")}`,
-  word,
-  definition,
-  difficulty,
-  options: [],
-});
-
-/**
- * Beginner Japanese vocabulary ordered for gradual introduction.
- * Readings are kept beside kanji so every revealed answer is unambiguous
- * without romaji or typed-answer conversion.
- */
-export const STARTER_JAPANESE: VocabWord[] = [
-  card(1, "こんにちは", "hello; good afternoon", 1),
-  card(2, "ありがとう", "thank you", 1),
-  card(3, "すみません", "excuse me; sorry", 1),
-  card(4, "お願いします（おねがいします）", "please; I ask this favor", 1),
-  card(5, "はい", "yes", 1),
-  card(6, "いいえ", "no", 1),
-  card(7, "私（わたし）", "I; me", 1),
-  card(8, "あなた", "you (often omitted in Japanese)", 1),
-  card(9, "人（ひと）", "person", 1),
-  card(10, "友達（ともだち）", "friend", 1),
-  card(11, "先生（せんせい）", "teacher; instructor", 1),
-  card(12, "学生（がくせい）", "student", 1),
-  card(13, "これ", "this (near the speaker)", 1),
-  card(14, "それ", "that (near the listener)", 1),
-  card(15, "あれ", "that over there", 1),
-  card(16, "どれ", "which one", 1),
-  card(17, "ここ", "here", 1),
-  card(18, "そこ", "there (near the listener)", 1),
-  card(19, "あそこ", "over there", 1),
-  card(20, "どこ", "where", 1),
-  card(21, "何（なに／なん）", "what", 1),
-  card(22, "誰（だれ）", "who", 1),
-  card(23, "いつ", "when", 1),
-  card(24, "どう", "how; in what way", 1),
-  card(25, "今（いま）", "now", 1),
-  card(26, "今日（きょう）", "today", 1),
-  card(27, "明日（あした）", "tomorrow", 1),
-  card(28, "昨日（きのう）", "yesterday", 1),
-  card(29, "朝（あさ）", "morning", 1),
-  card(30, "昼（ひる）", "daytime; noon", 1),
-  card(31, "夜（よる）", "night", 1),
-  card(32, "水（みず）", "water", 1),
-  card(33, "ご飯（ごはん）", "cooked rice; meal", 1),
-  card(34, "本（ほん）", "book", 1),
-  card(35, "お金（おかね）", "money", 1),
-  card(36, "家（いえ）", "house; home", 1),
-  card(37, "学校（がっこう）", "school", 1),
-  card(38, "日本（にほん）", "Japan", 1),
-  card(39, "日本語（にほんご）", "Japanese language", 1),
-  card(40, "英語（えいご）", "English language", 1),
-
-  card(41, "行く（いく）", "to go", 2),
-  card(42, "来る（くる）", "to come", 2),
-  card(43, "帰る（かえる）", "to return; go home", 2),
-  card(44, "食べる（たべる）", "to eat", 2),
-  card(45, "飲む（のむ）", "to drink", 2),
-  card(46, "見る（みる）", "to see; watch", 2),
-  card(47, "聞く（きく）", "to listen; ask", 2),
-  card(48, "話す（はなす）", "to speak; talk", 2),
-  card(49, "読む（よむ）", "to read", 2),
-  card(50, "書く（かく）", "to write", 2),
-  card(51, "買う（かう）", "to buy", 2),
-  card(52, "会う（あう）", "to meet", 2),
-  card(53, "する", "to do", 2),
-  card(54, "ある", "to exist; have (inanimate things)", 2),
-  card(55, "いる", "to exist; be (people and animals)", 2),
-  card(56, "分かる（わかる）", "to understand", 2),
-  card(57, "思う（おもう）", "to think; feel", 2),
-  card(58, "知る（しる）", "to know; learn of", 2),
-  card(59, "使う（つかう）", "to use", 2),
-  card(60, "待つ（まつ）", "to wait", 2),
-  card(61, "大きい（おおきい）", "big; large", 2),
-  card(62, "小さい（ちいさい）", "small", 2),
-  card(63, "新しい（あたらしい）", "new", 2),
-  card(64, "古い（ふるい）", "old (for things)", 2),
-  card(65, "良い（いい）", "good", 2),
-  card(66, "悪い（わるい）", "bad", 2),
-  card(67, "高い（たかい）", "expensive; high", 2),
-  card(68, "安い（やすい）", "inexpensive; cheap", 2),
-  card(69, "暑い（あつい）", "hot (weather)", 2),
-  card(70, "寒い（さむい）", "cold (weather)", 2),
-  card(71, "忙しい（いそがしい）", "busy", 2),
-  card(72, "楽しい（たのしい）", "fun; enjoyable", 2),
-  card(73, "難しい（むずかしい）", "difficult", 2),
-  card(74, "易しい（やさしい）", "easy; simple", 2),
-  card(75, "面白い（おもしろい）", "interesting; funny", 2),
-  card(76, "美味しい（おいしい）", "delicious", 2),
-  card(77, "好き（すき）", "liked; favorite", 2),
-  card(78, "嫌い（きらい）", "disliked; not fond of", 2),
-  card(79, "元気（げんき）", "healthy; energetic; well", 2),
-  card(80, "静か（しずか）", "quiet", 2),
-
-  card(81, "駅（えき）", "train station", 3),
-  card(82, "店（みせ）", "shop; store", 3),
-  card(83, "電車（でんしゃ）", "train", 3),
-  card(84, "車（くるま）", "car; vehicle", 3),
-  card(85, "部屋（へや）", "room", 3),
-  card(86, "会社（かいしゃ）", "company; workplace", 3),
-  card(87, "病院（びょういん）", "hospital", 3),
-  card(88, "銀行（ぎんこう）", "bank", 3),
-  card(89, "名前（なまえ）", "name", 3),
-  card(90, "時間（じかん）", "time; hours", 3),
-  card(91, "上（うえ）", "above; on top", 3),
-  card(92, "下（した）", "below; underneath", 3),
-  card(93, "中（なか）", "inside; middle", 3),
-  card(94, "外（そと）", "outside", 3),
-  card(95, "前（まえ）", "front; before", 3),
-  card(96, "後（あと）", "after; later; behind", 3),
-  card(97, "右（みぎ）", "right side", 3),
-  card(98, "左（ひだり）", "left side", 3),
-  card(99, "一緒に（いっしょに）", "together", 3),
-  card(100, "もう", "already; another; more", 3),
-  card(101, "は", "topic marker (pronounced わ)", 3),
-  card(102, "が", "subject marker", 3),
-  card(103, "を", "direct-object marker (pronounced お)", 3),
-  card(104, "に", "destination, time, or existence marker", 3),
-  card(105, "で", "place of action or means marker", 3),
-  card(106, "と", "and; with; quotation marker", 3),
-  card(107, "も", "also; too", 3),
-  card(108, "の", "possession or noun-linking marker", 3),
-  card(109, "から", "from; because", 3),
-  card(110, "まで", "until; as far as", 3),
-  card(111, "大丈夫（だいじょうぶ）", "all right; okay", 3),
-  card(112, "ください", "please give me; please do", 3),
-  card(113, "もう一度（もういちど）", "once more", 3),
-  card(114, "ゆっくり", "slowly; without rushing", 3),
-  card(115, "たくさん", "many; a lot", 3),
-  card(116, "少し（すこし）", "a little; a few", 3),
-  card(117, "とても", "very", 3),
-  card(118, "本当に（ほんとうに）", "really; truly", 3),
-  card(119, "まだ", "still; not yet", 3),
-  card(120, "いつも", "always; usually", 3),
-];
+// Japanese-first describes the study tools, not bundled vocabulary.
+// The learner owns this deck and fills it through the structured importer.
+export const STARTER_JAPANESE: VocabWord[] = [];
 
 export function isLegacyEnglishStarterDeck(deck: { id?: string; cards?: VocabWord[] }): boolean {
   return deck.id === LEGACY_ENGLISH_STARTER_DECK_ID
     && deck.cards?.[0]?.id === "v001"
     && deck.cards[0].word === "abandon";
+}
+
+export function isGeneratedJapaneseSampleDeck(deck: { id?: string; cards?: VocabWord[] }): boolean {
+  return deck.id === JAPANESE_STARTER_DECK_ID
+    && deck.cards?.length === 120
+    && deck.cards[0]?.id === "jp-001"
+    && deck.cards[119]?.id === "jp-120";
 }
 
 export default STARTER_JAPANESE;

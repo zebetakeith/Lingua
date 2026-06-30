@@ -3,13 +3,16 @@ import "./index.css";
 import { Sword, Shield, Zap, BookOpen, Trophy, Lock, ChevronRight, Heart, Timer, Flame, Star, Skull, RotateCcw, Home, Check, Upload, Download, Trash2, Layers, FileText, Sparkles, Cookie, Backpack, Play, Utensils, CircleDot } from "lucide-react";
 import { generateDistractors, type VocabWord } from "./data/vocabulary";
 import STARTER_JAPANESE, {
+  JAPANESE_STUDY_DECK_NAME,
   JAPANESE_STARTER_DECK_ID,
   LEGACY_ENGLISH_STARTER_NAME,
+  isGeneratedJapaneseSampleDeck,
   isLegacyEnglishStarterDeck,
 } from "./data/starterJapanese";
 import { getEnemiesForFloor, getHpMultiplier, getTimerForFloor, type EnemyDef } from "./data/enemies";
 import { getClassById } from "./data/classes";
 import { getEncounterForFloor, type EncounterInfo } from "./game/encounters";
+import { parseJapaneseFlashcardImport, type ImportDelimiter } from "./game/japaneseImport";
 import {
   getEnemyActionPlan,
   getEnemyApForTurn,
@@ -592,7 +595,7 @@ function createSavedDeck(name: string, cards: VocabWord[], id = `deck-${Date.now
 }
 
 function createDefaultDeck(): SavedDeck {
-  return createSavedDeck("Starter Japanese", STARTER_JAPANESE, DEFAULT_DECK_ID);
+  return createSavedDeck(JAPANESE_STUDY_DECK_NAME, STARTER_JAPANESE, DEFAULT_DECK_ID);
 }
 
 function normalizeDeck(deck: Partial<SavedDeck>, fallback: SavedDeck): SavedDeck {
@@ -672,6 +675,13 @@ function normalizeSave(data: Partial<SaveData> | null): SaveData {
   const normalizedDecks = Array.isArray(data.decks)
     ? data.decks.map((deck, index) => {
         const normalized = normalizeDeck(deck, createSavedDeck(`Deck ${index + 1}`, [], deck?.id || `deck-${index + 1}`));
+        if (isGeneratedJapaneseSampleDeck(normalized)) {
+          return {
+            ...createDefaultDeck(),
+            createdAt: normalized.createdAt,
+            updatedAt: Date.now(),
+          };
+        }
         return isLegacyEnglishStarterDeck(normalized)
           ? { ...normalized, name: LEGACY_ENGLISH_STARTER_NAME }
           : normalized;
@@ -941,10 +951,6 @@ function shuffleCards<T>(items: T[]): T[] {
   return [...items].sort(() => Math.random() - 0.5);
 }
 
-function normalizeCardKey(word: string, definition: string): string {
-  return `${word.trim().toLocaleLowerCase()}::${definition.trim().toLocaleLowerCase()}`;
-}
-
 function getAllCards(saveData: SaveData): VocabWord[] {
   const activeDeck = getActiveDeck(saveData);
   return activeDeck.cards;
@@ -1019,7 +1025,7 @@ function getDirectionProgress(card: VocabWord, saveData: SaveData, direction: St
 
 function getCardMastery(card: VocabWord, saveData: SaveData): number {
   const settings = normalizeStudySettings(getActiveDeck(saveData).studySettings);
-  const directions = getEnabledStudyDirections(settings);
+  const directions = getEnabledStudyDirections(settings, Boolean(card.reading));
   const total = directions.reduce((sum, direction) => sum + getDirectionProgress(card, saveData, direction).mastery, 0);
   return total / Math.max(1, directions.length);
 }
@@ -1032,7 +1038,7 @@ function getDeckStudySummary(saveData: SaveData) {
   const summary = { due: 0, learning: 0, familiar: 0, mastered: 0, needsAttention: 0 };
   for (const card of cards) {
     const mastery = getCardMastery(card, saveData);
-    const directions = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
+    const directions = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings), Boolean(card.reading));
     const progress = directions.map(direction => getDirectionProgress(card, saveData, direction));
     if (progress.some(item => item.dueAt <= now)) summary.due += 1;
     if (progress.some(item => item.wrongStreak > 0)) summary.needsAttention += 1;
@@ -1045,7 +1051,7 @@ function getDeckStudySummary(saveData: SaveData) {
 
 function getCardReviewStatus(card: VocabWord, saveData: SaveData): string {
   const settings = normalizeStudySettings(getActiveDeck(saveData).studySettings);
-  const progress = getEnabledStudyDirections(settings).map(direction => getDirectionProgress(card, saveData, direction));
+  const progress = getEnabledStudyDirections(settings, Boolean(card.reading)).map(direction => getDirectionProgress(card, saveData, direction));
   if (progress.some(item => item.wrongStreak > 0)) return "Needs attention";
   const nextReviewAt = Math.min(...progress.map(item => item.dueAt));
   if (nextReviewAt <= Date.now()) return "Due now";
@@ -1181,7 +1187,7 @@ function introduceCard(saveData: SaveData, card: VocabWord, rating: CardRating):
   const mastery = getInitialMastery(rating);
   return updateActiveDeck(ratedSave, deck => {
     const nextDirectionProgress = { ...(deck.directionProgress || {}) };
-    for (const direction of getEnabledStudyDirections(normalizeStudySettings(deck.studySettings))) {
+    for (const direction of getEnabledStudyDirections(normalizeStudySettings(deck.studySettings), Boolean(card.reading))) {
       const key = getStudyDirectionKey(card.id, direction);
       if (!nextDirectionProgress[key]) {
         nextDirectionProgress[key] = createDirectionStudyProgress(mastery);
@@ -1231,7 +1237,7 @@ function generateStudyOptions(card: VocabWord, direction: StudyDirection, saveDa
 
 function drawStudyQuestionFromDeck(deck: VocabWord[], saveData: SaveData, previousKey?: string): StudyQuestionData {
   const settings = normalizeStudySettings(getActiveDeck(saveData).studySettings);
-  const directions = getEnabledStudyDirections(settings);
+  const directions = getEnabledStudyDirections(settings).filter(direction => direction !== "reading_to_term");
   const candidates = deck
     .filter(card => !isKnownCard(card, saveData))
     .flatMap(card => directions.map(direction => ({
@@ -1381,94 +1387,6 @@ function createRelicChoices(runRelics: string[], encounter?: EncounterInfo): Rel
   const filler = shuffleCards(available.filter(relic => !priorityIds.has(relic.id)));
 
   return [...priority, ...filler].slice(0, RELIC_CHOICE_COUNT);
-}
-
-function splitCsvLine(line: string): string[] {
-  const cells: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    const nextChar = line[i + 1];
-
-    if (char === '"' && inQuotes && nextChar === '"') {
-      current += '"';
-      i++;
-    } else if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === "," && !inQuotes) {
-      cells.push(current.trim());
-      current = "";
-    } else {
-      current += char;
-    }
-  }
-
-  cells.push(current.trim());
-  return cells;
-}
-
-function parseFlashcardLine(line: string): { word: string; definition: string } | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-
-  if (trimmed.includes("\t")) {
-    const [word, ...rest] = trimmed.split(/\t+/);
-    return { word: word.trim(), definition: rest.join(" ").trim() };
-  }
-
-  const csvCells = splitCsvLine(trimmed);
-  if (csvCells.length >= 2 && csvCells[0] && csvCells[1]) {
-    return { word: csvCells[0].trim(), definition: csvCells.slice(1).join(", ").trim() };
-  }
-
-  const separators = [" - ", " = ", " : ", ":"];
-  for (const separator of separators) {
-    const index = trimmed.indexOf(separator);
-    if (index > 0) {
-      return {
-        word: trimmed.slice(0, index).trim(),
-        definition: trimmed.slice(index + separator.length).trim(),
-      };
-    }
-  }
-
-  return null;
-}
-
-function parseFlashcardImport(text: string, existingCards: VocabWord[]) {
-  const existingKeys = new Set(existingCards.map(card => normalizeCardKey(card.word, card.definition)));
-  const importedKeys = new Set<string>();
-  const cards: VocabWord[] = [];
-  let skipped = 0;
-  let invalid = 0;
-  const timestamp = Date.now();
-
-  text.split(/\r?\n/).forEach((line, index) => {
-    const parsed = parseFlashcardLine(line);
-    if (!parsed || !parsed.word || !parsed.definition) {
-      if (line.trim()) invalid++;
-      return;
-    }
-
-    const key = normalizeCardKey(parsed.word, parsed.definition);
-    if (existingKeys.has(key) || importedKeys.has(key)) {
-      skipped++;
-      return;
-    }
-
-    importedKeys.add(key);
-    cards.push({
-      id: `imported-${timestamp}-${index}`,
-      word: parsed.word,
-      definition: parsed.definition,
-      difficulty: 2,
-      options: [],
-    });
-  });
-
-  return { cards, skipped, invalid };
 }
 
 function getQuestionTimerForFloor(floor: number): number {
@@ -2745,6 +2663,7 @@ export default function App() {
   const [combat, setCombat] = useState<CombatState | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
   const [importText, setImportText] = useState("");
+  const [importDelimiter, setImportDelimiter] = useState<ImportDelimiter>("auto");
   const [importMessage, setImportMessage] = useState("");
   const [backupMessage, setBackupMessage] = useState("");
   const [newDeckName, setNewDeckName] = useState("");
@@ -5773,10 +5692,10 @@ export default function App() {
 
   const handleImportCards = () => {
     const activeDeck = getActiveDeck(save);
-    const result = parseFlashcardImport(importText, getAllCards(save));
+    const result = parseJapaneseFlashcardImport(importText, getAllCards(save), importDelimiter);
 
     if (result.cards.length === 0) {
-      setImportMessage(result.invalid > 0 ? "No new cards found. Check that each line has a term and definition." : "Paste cards first.");
+      setImportMessage(result.invalid > 0 ? "No new cards found. Use Written, Reading, Meaning columns (or a legacy two-column deck)." : "Paste cards first.");
       return;
     }
     const openSlots = Math.max(0, MAX_DECK_CARDS - activeDeck.cards.length);
@@ -5791,7 +5710,7 @@ export default function App() {
       cards: [...deck.cards, ...acceptedCards].slice(0, MAX_DECK_CARDS),
     })));
     setImportText("");
-    setImportMessage(`Imported ${acceptedCards.length} cards into ${activeDeck.name}${result.cards.length > acceptedCards.length ? `, stopped at the ${MAX_DECK_CARDS.toLocaleString()} card cap` : ""}${result.skipped ? `, skipped ${result.skipped} duplicates` : ""}${result.invalid ? `, ignored ${result.invalid} lines` : ""}.`);
+    setImportMessage(`Imported ${acceptedCards.length} cards into ${activeDeck.name} using ${result.delimiter === "legacy" ? "legacy two-column" : result.delimiter} format${result.cards.length > acceptedCards.length ? `, stopped at the ${MAX_DECK_CARDS.toLocaleString()} card cap` : ""}${result.skipped ? `, skipped ${result.skipped} duplicates` : ""}${result.invalid ? `, ignored ${result.invalid} lines` : ""}.`);
   };
 
   const removeImportedCard = (cardId: string) => {
@@ -5804,6 +5723,7 @@ export default function App() {
         delete nextProgress[cardId];
         delete nextDirectionProgress[getStudyDirectionKey(cardId, "term_to_definition")];
         delete nextDirectionProgress[getStudyDirectionKey(cardId, "definition_to_term")];
+        delete nextDirectionProgress[getStudyDirectionKey(cardId, "reading_to_term")];
 
         return {
           ...deck,
@@ -6180,12 +6100,16 @@ export default function App() {
     const studyCount = introducedCards.length;
     const masteredCount = introducedCards.filter(card => getCardMastery(card, save) >= 0.88).length;
     const studySettings = normalizeStudySettings(activeDeck.studySettings);
+    const importPreview = importText.trim()
+      ? parseJapaneseFlashcardImport(importText, getAllCards(save), importDelimiter)
+      : null;
     const studySettingGroups: { title: string; options: { key: keyof DeckStudySettings; label: string; detail: string }[] }[] = [
       {
         title: "Question sides",
         options: [
           { key: "askTermToDefinition", label: "Term to definition", detail: "See the term and recall its meaning." },
           { key: "askDefinitionToTerm", label: "Definition to term", detail: "See the meaning and recall the term." },
+          { key: "askReadingToTerm", label: "Kana to written Japanese", detail: "Build the written form from kanji and kana tiles. Only available on three-sided cards." },
         ],
       },
       {
@@ -6358,6 +6282,29 @@ export default function App() {
                   <Upload className="w-5 h-5 text-cyan-300" />
                   <h3 className="text-lg font-bold text-white">Import to {activeDeck.name}</h3>
                 </div>
+
+                <div className="mb-3 rounded-lg border border-cyan-400/25 bg-cyan-400/8 p-3 text-xs leading-relaxed text-cyan-50">
+                  <b className="block text-sm">Japanese format: Written · Reading · Meaning</b>
+                  <span>Use a header row for the clearest import. Quoted CSV is supported, and legacy two-column Term/Definition decks still work.</span>
+                </div>
+
+                <label className="mb-3 grid gap-1 text-xs font-bold text-gray-300">
+                  Column separator
+                  <select
+                    value={importDelimiter}
+                    onChange={event => {
+                      setImportDelimiter(event.target.value as ImportDelimiter);
+                      setImportMessage("");
+                    }}
+                    className="rounded-md border border-[#0F3460] bg-[#071225] px-3 py-2 text-sm text-white outline-none focus:border-cyan-400"
+                  >
+                    <option value="auto">Detect automatically</option>
+                    <option value="tab">Tab</option>
+                    <option value="comma">Comma / CSV</option>
+                    <option value="semicolon">Semicolon</option>
+                    <option value="pipe">Pipe |</option>
+                  </select>
+                </label>
                 
                 <textarea
                   value={importText}
@@ -6365,9 +6312,26 @@ export default function App() {
                     setImportText(event.target.value);
                     setImportMessage("");
                   }}
-                  placeholder={"bonjour\thello\nau revoir\tgoodbye\nmerci - thank you"}
+                  placeholder={"Written\tReading\tMeaning\n美味しい\tおいしい\tdelicious\n食べる\tたべる\tto eat"}
                   className="w-full h-56 resize-none rounded-lg border border-[#0F3460] bg-[#0B1024] p-4 text-sm text-white placeholder:text-gray-600 outline-none focus:border-cyan-400"
                 />
+
+                {importPreview && (
+                  <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-gray-300">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <b className="text-white">Preview · {importPreview.cards.length} valid card{importPreview.cards.length === 1 ? "" : "s"}</b>
+                      <span>{importPreview.delimiter === "legacy" ? "Legacy two-column" : `${importPreview.delimiter}${importPreview.hasHeader ? " · header found" : ""}`}</span>
+                    </div>
+                    <div className="grid gap-1">
+                      {importPreview.cards.slice(0, 3).map(card => (
+                        <div key={card.id} className="grid grid-cols-[1fr_1fr_1.2fr] gap-2 rounded bg-white/5 px-2 py-1">
+                          <span>{card.word}</span><span>{card.reading || "—"}</span><span>{card.definition}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {(importPreview.invalid > 0 || importPreview.skipped > 0) && <small className="mt-2 block text-yellow-200">{importPreview.invalid} invalid · {importPreview.skipped} duplicate</small>}
+                  </div>
+                )}
                 
                 <button
                   onClick={handleImportCards}
@@ -6431,6 +6395,7 @@ export default function App() {
                             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="text-white font-bold">{card.word}</div>
+                                {card.reading && <div className="text-xs font-bold text-cyan-200">{card.reading}</div>}
                                 <div className="text-sm text-gray-400">{card.definition}</div>
                               </div>
                               <button
@@ -6550,6 +6515,7 @@ export default function App() {
                 {starterDraftDeck.map(card => (
                   <div key={card.id} className="rounded-md bg-black/25 px-3 py-2">
                     <div className="truncate text-sm font-bold text-white">{card.word}</div>
+                    {card.reading && <div className="truncate text-xs font-bold text-cyan-200">{card.reading}</div>}
                     <div className="truncate text-xs text-gray-500">{card.definition}</div>
                   </div>
                 ))}

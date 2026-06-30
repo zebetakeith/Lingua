@@ -11,13 +11,23 @@ globalThis.localStorage = {
 const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
 const { createDirectionStudyProgress, getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, updateDirectionStudyProgress } = await import("../src/game/study.ts");
 const { JAPANESE_STARTER_DECK_ID, STARTER_JAPANESE } = await import("../src/data/starterJapanese.ts");
+const { parseJapaneseFlashcardImport } = await import("../src/game/japaneseImport.ts");
+const { createJapaneseTileChoices } = await import("../src/game/japaneseTiles.ts");
 
-assert.equal(STARTER_JAPANESE.length, 120, "the Japanese-first starter deck should contain a substantial beginner core");
-assert.equal(new Set(STARTER_JAPANESE.map(card => card.id)).size, STARTER_JAPANESE.length, "starter Japanese card ids must be unique");
-assert.equal(new Set(STARTER_JAPANESE.map(card => card.word)).size, STARTER_JAPANESE.length, "starter Japanese terms must be unique");
-assert.equal(new Set(STARTER_JAPANESE.map(card => card.definition)).size, STARTER_JAPANESE.length, "starter Japanese meanings must be unique enough for answer choices");
-assert.ok(STARTER_JAPANESE.every(card => /[ぁ-んァ-ン一-龯]/u.test(card.word)), "every starter term should contain Japanese script rather than romaji");
-assert.ok(STARTER_JAPANESE.every(card => card.options.length === 0), "starter answers should be generated from same-deck Japanese content");
+assert.equal(STARTER_JAPANESE.length, 0, "Japanese-first should provide study tools without authoring the learner's deck");
+const tabImport = parseJapaneseFlashcardImport("Written\tReading\tMeaning\n美味しい\tおいしい\tdelicious\n食べる\tたべる\tto eat", []);
+assert.deepEqual(tabImport.cards.map(card => [card.word, card.reading, card.definition]), [["美味しい", "おいしい", "delicious"], ["食べる", "たべる", "to eat"]], "three-sided tab imports should preserve written form, kana, and meaning");
+assert.equal(tabImport.hasHeader, true, "Japanese import headers should be detected");
+const csvImport = parseJapaneseFlashcardImport('kanji,reading,meaning\n今日,きょう,"today, this day"', []);
+assert.equal(csvImport.cards[0].definition, "today, this day", "quoted CSV meanings may contain commas");
+const semicolonImport = parseJapaneseFlashcardImport("水;みず;water", [], "semicolon");
+assert.equal(semicolonImport.cards[0].reading, "みず", "explicit separators should support headerless Japanese rows");
+const legacyTwoSidedImport = parseJapaneseFlashcardImport("猫\tcat", []);
+assert.equal(legacyTwoSidedImport.cards[0].reading, undefined, "legacy two-sided imports should remain supported");
+const japaneseTiles = createJapaneseTileChoices("美味しい", ["妹", "話す", "さかな"], () => 0.5);
+assert.ok(["美", "味", "し", "い"].every(character => japaneseTiles.some(tile => tile.text === character)), "tile builders must retain every kanji and okurigana character in the answer");
+assert.ok(japaneseTiles.some(tile => tile.text === "妹"), "a learned visually similar kanji should be preferred as a distractor");
+assert.ok(japaneseTiles.some(tile => /[ぁ-ん]/u.test(tile.text) && !["し", "い"].includes(tile.text)), "okurigana should receive kana distractors rather than exposing the suffix");
 
 values.set("lexicon_labyrinth_save", JSON.stringify({
   selectedDeckId: "starter-japanese",
@@ -29,7 +39,17 @@ values.set("lexicon_labyrinth_save", JSON.stringify({
 }));
 const migratedStarterDecks = getStudyDecks();
 assert.equal(migratedStarterDecks.find(deck => deck.id === "starter-japanese")?.name, "Starter English Vocabulary", "the mislabeled English seed should be preserved under an honest name");
-assert.equal(migratedStarterDecks.find(deck => deck.id === JAPANESE_STARTER_DECK_ID)?.cardCount, 120, "existing saves should gain the real Japanese starter without losing their old deck");
+assert.equal(migratedStarterDecks.find(deck => deck.id === JAPANESE_STARTER_DECK_ID)?.cardCount, 0, "existing saves should gain an empty learner-owned Japanese deck");
+
+values.set("lexicon_labyrinth_save", JSON.stringify({
+  selectedDeckId: JAPANESE_STARTER_DECK_ID,
+  decks: [{
+    id: JAPANESE_STARTER_DECK_ID,
+    name: "Starter Japanese",
+    cards: Array.from({ length: 120 }, (_, index) => ({ id: `jp-${String(index + 1).padStart(3, "0")}`, word: `sample-${index}`, definition: `sample-${index}`, difficulty: 1, options: [] })),
+  }],
+}));
+assert.equal(getStudyDecks()[0].cardCount, 0, "the generated sample deck should migrate back to an empty Japanese workspace");
 
 const cards = [
   { id: "new-1", word: "mizu", definition: "water", difficulty: 2, options: [] },
@@ -75,6 +95,35 @@ function putDeck(id, overrides = {}) {
   };
   values.set("lexicon_labyrinth_save", JSON.stringify({ selectedDeckId: id, decks: [deck] }));
 }
+
+const builderCards = [
+  { id: "jp-oishii", word: "美味しい", reading: "おいしい", definition: "delicious", difficulty: 2, options: [] },
+];
+putDeck("japanese-builder", {
+  cards: builderCards,
+  introducedCardIds: ["jp-oishii"],
+  studySettings: { ...settings, askTermToDefinition: false, askReadingToTerm: true },
+});
+selectStudyDeck("japanese-builder");
+const builderQuestion = drawStudyQuestion("japanese-builder", "quadratic");
+assert.equal(builderQuestion.direction, "reading_to_term", "three-sided Japanese cards should add a reading-to-written direction");
+assert.equal(builderQuestion.questionType, "tile_builder", "reading-to-written recall should use tiles instead of a keyboard or guessable whole-word choice");
+assert.equal(builderQuestion.prompt, "おいしい", "the tile prompt should be the imported kana reading");
+assert.equal(builderQuestion.answer, "美味しい", "the tile target should be the imported written form");
+assert.ok(builderQuestion.tiles.length > 4, "a tile question should include script-matched distractors");
+completeStudyExposure("japanese-builder", builderQuestion, "hard");
+const hardRatedDeck = JSON.parse(values.get("lexicon_labyrinth_save")).decks.find(deck => deck.id === "japanese-builder");
+assert.equal(hardRatedDeck.cardRatings["jp-oishii"], "hard", "first exposure should restore the learner's own difficulty rating");
+assert.equal(hardRatedDeck.directionProgress["jp-oishii::reading_to_term"].mastery, 0.12, "a hard first-exposure rating should set a low starting mastery");
+
+putDeck("known-exposure", {
+  cards: builderCards,
+  introducedCardIds: ["jp-oishii"],
+  studySettings: { ...settings, askTermToDefinition: false, askReadingToTerm: true },
+});
+selectStudyDeck("known-exposure");
+completeStudyExposure("known-exposure", drawStudyQuestion("known-exposure", "quadratic"), "known");
+assert.equal(getStudyDecks()[0].activeCount, 0, "Already know should remove a card from active study after its lesson");
 
 putDeck("pristine");
 selectStudyDeck("pristine");

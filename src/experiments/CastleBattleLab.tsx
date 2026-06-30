@@ -34,9 +34,11 @@ import {
   tryDrawStudyQuestion,
   type StudyAnswerResult,
   type StudyDeckSummary,
+  type StudyExposureRating,
   type StudyQuestion,
 } from "../game/studyBridge";
 import { getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, type StudyRecallMode, type StudyRewardCurve } from "../game/study";
+import { splitJapaneseWrittenForm, type JapaneseStudyTile } from "../game/japaneseTiles";
 import {
   CASTLE_CONTRACTS,
   CASTLE_EVENT_DEFS,
@@ -132,7 +134,7 @@ const RECALL_MODE_LABELS: Record<StudyRecallMode, string> = {
   deck: "Deck default",
 };
 const RECALL_MODE_HELP: Record<StudyRecallMode, string> = {
-  balanced: "Recommended: recognition first, then reveal and self-grade the named Term or Meaning field as mastery grows.",
+  balanced: "Recommended: meaning choices, kana-to-written tile building, then reveal and self-grade as mastery grows.",
   deck: "Use the multiple-choice and self-grade rules saved with this deck. Typing stays disabled.",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
@@ -658,13 +660,14 @@ function StudyCard({
   onOption: (option: string) => void;
   onReveal: () => void;
   onSelfGrade: (correct: boolean) => void;
-  onExpose: () => void;
+  onExpose: (rating: StudyExposureRating) => void;
   onResume: () => void;
 }) {
   const promptRef = useRef<HTMLHeadingElement | null>(null);
   const onOptionRef = useRef(onOption);
   const onRevealRef = useRef(onReveal);
   const onSelfGradeRef = useRef(onSelfGrade);
+  const [selectedTileIds, setSelectedTileIds] = useState<string[]>([]);
   useEffect(() => {
     onOptionRef.current = onOption;
     onRevealRef.current = onReveal;
@@ -706,13 +709,25 @@ function StudyCard({
     : interrupted
       ? "Interrupted · combat paused"
       : `Combat live · ${question.pressure.combatSpeed}× then faster`;
-  const answerField = question.direction === "definition_to_term" ? "Term" : "Meaning";
+  const directionLabel = question.direction === "term_to_definition"
+    ? "Term → Meaning"
+    : question.direction === "reading_to_term"
+      ? "Reading → Written Japanese"
+      : "Meaning → Term";
+  const promptField = question.direction === "term_to_definition" ? "Term" : question.direction === "reading_to_term" ? "Reading" : "Meaning";
+  const answerField = question.direction === "term_to_definition" ? "Meaning" : question.direction === "reading_to_term" ? "Written Japanese" : "Term";
+  const selectedTiles = selectedTileIds
+    .map(id => question.tiles.find(tile => tile.id === id))
+    .filter((tile): tile is JapaneseStudyTile => Boolean(tile));
+  const builtAnswer = selectedTiles.map(tile => tile.text).join("");
+  const writtenLength = splitJapaneseWrittenForm(question.answer).length;
+  const pressureGraceSeconds = (question.pressure.graceMs + 3_000 + (question.questionType === "tile_builder" ? 5_000 : 0)) / 1_000;
   return (
     <section className={`castle-study-card ${combatLive ? "is-live" : ""} ${!question.seenBefore ? "is-new" : ""}`}>
       <div className="castle-study-meta">
-        <span>{question.direction === "term_to_definition" ? "Term → Meaning" : "Meaning → Term"}</span>
+        <span>{directionLabel}</span>
         <span>{question.masteryLabel} · {question.due ? "due now" : "bonus review"}</span>
-        <span className="castle-study-pressure" title={question.seenBefore ? `Enemy pressure begins rising after ${(question.pressure.graceMs + 3_000) / 1_000} seconds on this prompt.` : undefined}><Clock3 />{status}</span>
+        <span className="castle-study-pressure" title={question.seenBefore ? `Enemy pressure begins rising after ${pressureGraceSeconds} seconds on this prompt.` : undefined}><Clock3 />{status}</span>
       </div>
       <div className="castle-study-reward">
         <Sparkles />{question.seenBefore ? "Worth" : "Learning bonus"} {formatCastleEnergy(question.reward)}
@@ -720,18 +735,45 @@ function StudyCard({
       {!question.seenBefore ? (
         <div className="castle-first-exposure">
           <span>New direction</span>
-          <small>{question.direction === "term_to_definition" ? "Term" : "Meaning"}</small>
+          <small>{promptField}</small>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <i aria-hidden="true">↓</i>
-          <small>{question.direction === "term_to_definition" ? "Meaning" : "Term"}</small>
+          <small>{answerField}</small>
           <strong>{question.answer}</strong>
-          <p>This is an ungraded lesson, not a test. It cannot add Enemy Rally or charge Recall Bolt, and combat stays completely paused until you have read both sides.</p>
-          <button onClick={onExpose}><BookOpen />I’ve read both sides<ChevronRight /></button>
+          <p>This is an ungraded lesson, not a test. Read both sides, then tell Pipplo how this card feels. Combat stays completely paused and your rating sets its starting difficulty.</p>
+          <div className="castle-exposure-ratings" role="group" aria-label="Rate this new card">
+            <button className="is-hard" onClick={() => onExpose("hard")}><b>Hard</b><span>I don’t know it</span></button>
+            <button className="is-learning" onClick={() => onExpose("medium")}><b>Learning</b><span>A little familiar</span></button>
+            <button className="is-familiar" onClick={() => onExpose("easy")}><b>Familiar</b><span>Nearly know it</span></button>
+            <button className="is-known" onClick={() => onExpose("known")}><b>Already know</b><span>Skip this card</span></button>
+          </div>
         </div>
       ) : interrupted ? (
         <>
           <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
           <button className="castle-resume-card" onClick={onResume}><Play />Resume this prompt</button>
+        </>
+      ) : question.questionType === "tile_builder" ? (
+        <>
+          <h2 ref={promptRef} tabIndex={-1}>{question.prompt}</h2>
+          <p className="castle-recall-instruction">Build the <b>written Japanese</b>. Tap kanji and kana in order; distractors may be visually similar or come from earlier cards.</p>
+          <div className="castle-tile-answer" aria-label="Built written answer">
+            {Array.from({ length: writtenLength }, (_, index) => {
+              const tile = selectedTiles[index];
+              return tile
+                ? <button key={tile.id} onClick={() => setSelectedTileIds(ids => ids.filter(id => id !== tile.id))}>{tile.text}</button>
+                : <i key={`blank-${index}`} aria-hidden="true" />;
+            })}
+          </div>
+          <div className="castle-tile-bank" role="group" aria-label="Japanese answer tiles">
+            {question.tiles.map(tile => (
+              <button key={tile.id} disabled={selectedTileIds.includes(tile.id) || selectedTileIds.length >= writtenLength} onClick={() => setSelectedTileIds(ids => [...ids, tile.id])}>{tile.text}</button>
+            ))}
+          </div>
+          <div className="castle-tile-actions">
+            <button onClick={() => setSelectedTileIds([])} disabled={selectedTileIds.length === 0}>Clear</button>
+            <button className="is-submit" onClick={() => onOption(builtAnswer)} disabled={selectedTileIds.length !== writtenLength}>Check answer</button>
+          </div>
         </>
       ) : question.questionType === "multiple_choice" ? (
         <>
@@ -961,7 +1003,7 @@ const CASTLE_TUTORIAL_STEPS = [
     icon: Clock3,
     eyebrow: "Live recall",
     title: "Seen cards keep the battle moving",
-    copy: "Once taught, combat continues while you answer. Balanced Recall uses choices for recognition and reveal/self-grade for production, always naming the expected Term or Meaning field. Harder cards pay more energy.",
+    copy: "Once taught, combat continues while you answer. Japanese cards can turn kana readings into kanji-and-kana tile building; meaning prompts still use choices or reveal/self-grade. Harder cards pay more energy.",
   },
   {
     icon: Swords,
@@ -1147,7 +1189,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const calmMultiplier = run?.upgrades.includes("calmBell") && run.battle.playerCastleHp / run.battle.playerCastleMaxHp < 0.25 ? 0.75 : 1;
     const timer = window.setInterval(() => {
       const pressureSpeed = question
-        ? getEscalatedStudyCombatSpeed(question.pressure, Math.max(0, (questionRevealedAt.current ?? Date.now()) - questionStartedAt.current))
+        ? getEscalatedStudyCombatSpeed(
+            question.pressure,
+            Math.max(0, (questionRevealedAt.current ?? Date.now()) - questionStartedAt.current - (question.questionType === "tile_builder" ? 5_000 : 0)),
+          )
         : 1;
       setRun(current => current ? tickCastleRun(current, 100, pressureSpeed * calmMultiplier) : current);
     }, 100);
@@ -1492,12 +1537,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setDecks(getStudyDecks());
   };
 
-  const finishExposure = () => {
+  const finishExposure = (rating: StudyExposureRating) => {
     if (!question || !run || question.seenBefore) return;
     playCastleSound("correct", soundEnabled);
     let result: StudyAnswerResult;
     try {
-      result = completeStudyExposure(selectedDeckId, question);
+      result = completeStudyExposure(selectedDeckId, question, rating);
     } catch (error) {
       if (!isStudyQuestionUnavailableError(error)) throw error;
       beginQuestion(
@@ -1512,7 +1557,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       isCorrect: true,
       isExposure: true,
       wasUnseen: true,
-      reward: question.reward,
+      reward: rating === "known" ? 0 : question.reward,
       progressKey: result.progressKey,
       responseMs: getQuestionResponseMs(),
       selfGraded: false,
@@ -2052,7 +2097,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new card direction is shown as an ungraded lesson with both sides visible, and combat freezes completely. Once taught, that direction becomes a live recall prompt.</p>
             <p>Correct recall earns energy, and every five correct seen-card recalls fire a Recall Bolt at the rival keep. Seen prompts begin with a short grace window, then enemy speed rises until you answer. A miss keeps combat live, pulls the next wave closer, requires a correction step, and fills Enemy Rally; recalling that missed direction later clears one pip. At three pips, Mallow fires a 3-damage Moon Volley and summons a bonus squad.</p>
-            <p>Balanced Recall uses multiple choice for recognition, then reveal and self-grade for production. Every prompt names whether it expects the saved Term or Meaning field; a reading only counts when it is saved in that field. Choices accept 1–4; self-grade accepts Space or Enter to reveal, then 1 for Not yet or 2 for Got it. Deck Default remains available in settings, and typing stays disabled in both modes.</p>
+            <p>Balanced Recall uses multiple choice for meaning recognition, kana-to-written tile building for three-sided Japanese cards, then reveal and self-grade for free recall. Tile questions mix kanji and kana distractors and give five extra seconds before pressure rises. Choices accept 1–4; self-grade accepts Space or Enter to reveal, then 1 for Not yet or 2 for Got it. Typing stays disabled.</p>
             <p>Flashcards continue automatically after every seen answer. Switch to Army &amp; Powers whenever you want to summon or cast; battle keeps moving, but command time never counts as flashcard response time.</p>
             <p>Army size is not capped, but each target has formation space for {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged attackers. Extra units queue behind the front rank, so a mixed army gains more active attack lanes than one-unit spam.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>

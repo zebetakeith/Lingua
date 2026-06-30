@@ -1,6 +1,10 @@
 export interface VocabWord {
   id: string;
+  /** Japanese written form, or the front of a legacy two-sided card. */
   word: string;
+  /** Kana reading for Japanese cards. Omitted for legacy two-sided cards. */
+  reading?: string;
+  /** English meaning, or the back of a legacy two-sided card. */
   definition: string;
   difficulty: number; // 1-6
   options: string[];
