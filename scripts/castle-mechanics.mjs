@@ -17,6 +17,7 @@ import {
   getCastleBattleLesson,
   getCastleEndlessThreat,
   getCastleEventChoiceEffect,
+  getCastleGuardianPower,
   getCastleStudyReport,
   resolveCastleEvent,
   resumeCastleBattle,
@@ -842,6 +843,8 @@ assert.equal(endlessStart.phase, "battle", "continuing after a contract should b
 assert.equal(endlessStart.region, 4, "the first endless battle should begin in region four");
 assert.equal(endlessStart.battle.enemyThreatTier, 1, "region four should begin Moon Ascension 1");
 assert.equal(getCastleEndlessThreat(6).tier, 3, "each region after the core three should add one ascension tier");
+assert.equal(getCastleGuardianPower(4).id, "rootQuake", "the first endless region should introduce the Root Quake guardian stance");
+assert.equal(getCastleGuardianPower(5).id, "broodCall", "the second endless region should introduce the Brood Call guardian stance");
 
 let scaledWave = {
   ...endlessStart,
@@ -926,5 +929,36 @@ const moonStance = tickCastleRun({
 }, 100, 1);
 assert.equal(moonStance.battle.energy, 1, "Moon Tax should drain one stored energy at a phase change");
 assert.match(moonStance.battle.notice, /Moon Tax drained 1 energy/, "Moon Tax should explain the exact energy loss");
+
+const quakeStanceBase = guardianAtThreat(1, 1, 60);
+const quakeStance = tickCastleRun({
+  ...quakeStanceBase,
+  battle: {
+    ...quakeStanceBase.battle,
+    guardianPowerId: "rootQuake",
+    units: [
+      testUnit("piplet", "player", "quake-shielded", { shield: 3 }),
+      testUnit("piplet", "player", "quake-open", { shield: 0 }),
+    ],
+  },
+}, 100, 1);
+assert.equal(quakeStance.battle.units.find(unit => unit.id === "quake-shielded").hp, CASTLE_UNIT_DEFS.piplet.hp - 1, "Root Quake should let unit shields absorb damage first");
+assert.equal(quakeStance.battle.units.find(unit => unit.id === "quake-open").hp, CASTLE_UNIT_DEFS.piplet.hp - 4, "Root Quake should damage each unshielded friendly unit");
+assert.match(quakeStance.battle.notice, /Root Quake struck 2 friendly units for 4 damage/, "Root Quake should explain its exact formation damage");
+
+const broodStanceBase = guardianAtThreat(1, 1, 60);
+const broodStance = tickCastleRun({
+  ...broodStanceBase,
+  battle: { ...broodStanceBase.battle, guardianPowerId: "broodCall" },
+}, 100, 1);
+assert.equal(broodStance.battle.units.filter(unit => unit.kind === "nibbleImp").length, 1, "Brood Call should add a Nibble Imp at phase two");
+assert.match(broodStance.battle.notice, /Brood Call released a rushing Nibble Imp/, "Brood Call should announce its bonus attacker");
+
+const finalBroodStanceBase = guardianAtThreat(2, 2, 30);
+const finalBroodStance = tickCastleRun({
+  ...finalBroodStanceBase,
+  battle: { ...finalBroodStanceBase.battle, guardianPowerId: "broodCall" },
+}, 100, 1);
+assert.ok(finalBroodStance.battle.units.some(unit => unit.kind === "shellSlime"), "Brood Call should add an armored Shell Slime at phase three");
 
 process.stdout.write("Castle mechanics assertions passed.\n");

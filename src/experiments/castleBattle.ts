@@ -13,7 +13,7 @@ export type CastleContractId = "quick" | "regular" | "long";
 export type CastleRunPhase = "battle" | "reward" | "route" | "event" | "retire" | "complete" | "lost";
 export type CastleBattleMode = "study" | "command";
 export type CastleRouteChoice = "battle" | "rest" | "workshop" | "event";
-export type CastleGuardianPowerId = "shellReprisal" | "sporeWeather" | "moonTax";
+export type CastleGuardianPowerId = "shellReprisal" | "sporeWeather" | "moonTax" | "rootQuake" | "broodCall";
 export type CastleKeepsakeId = "starBuckle" | "shellButton" | "boltBead" | "nurseryBell" | "mossPatch" | "moonTreaty";
 export type CastleEventId = "starwell" | "hatchling" | "wobbleMarket" | "rootOracle";
 export type CastleEventChoiceId =
@@ -290,6 +290,18 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
     name: "Moon Tax",
     description: "At each phase change, Mallow drains up to 1 stored energy.",
     accent: "#9d83dc",
+  },
+  rootQuake: {
+    id: "rootQuake",
+    name: "Root Quake",
+    description: "At each phase change, every friendly unit takes 4 damage; unit shields absorb it first.",
+    accent: "#b67c53",
+  },
+  broodCall: {
+    id: "broodCall",
+    name: "Brood Call",
+    description: "At each phase change, Mallow calls an extra Nibble Imp, then an armored Shell Slime.",
+    accent: "#e47b79",
   },
 };
 
@@ -978,6 +990,24 @@ function advanceGuardianPhase(battle: CastleBattleState, upgrades: CastleUpgrade
       next.energy = roundEnergy(next.energy - drained);
       next = addBattleFx(next, "power", "enemy", 88, drained > 0 ? `Moon Tax -${formatCastleEnergy(drained)}` : "Moon Tax: empty");
       next.notice += drained > 0 ? ` Moon Tax drained ${formatCastleEnergy(drained)} energy.` : " Moon Tax found no stored energy.";
+    } else if (next.guardianPowerId === "rootQuake") {
+      let friendlyHits = 0;
+      next.units = next.units.map(unit => {
+        if (unit.side !== "player" || unit.hp <= 0) return unit;
+        friendlyHits += 1;
+        return applyDamage(unit, 4).unit;
+      });
+      next = addBattleFx(next, "power", "enemy", 50, friendlyHits > 0 ? `Root Quake ×${friendlyHits}` : "Root Quake: clear lane");
+      next.notice += friendlyHits > 0
+        ? ` Root Quake struck ${friendlyHits} friendly unit${friendlyHits === 1 ? "" : "s"} for 4 damage; their shields absorbed what they could.`
+        : " Root Quake found the lane clear.";
+    } else if (next.guardianPowerId === "broodCall") {
+      const broodKind: CastleUnitKind = phase >= 3 ? "shellSlime" : "nibbleImp";
+      next = addUnit(next, "enemy", broodKind, upgrades);
+      next = addBattleFx(next, "spawn", "enemy", 92, phase >= 3 ? "Brood Call: Shell Slime" : "Brood Call: Nibble Imp");
+      next.notice += phase >= 3
+        ? " Brood Call hatched an armored Shell Slime for the final push."
+        : " Brood Call released a rushing Nibble Imp.";
     }
     next.guardianPhase = phase;
   }
