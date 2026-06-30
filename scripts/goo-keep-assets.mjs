@@ -19,7 +19,7 @@ function expectFrames(relativeRoot, animations, size) {
 expectFrames(path.join("characters", "pipplo"), ["idle", "cast", "hurt", "cheer"], 192);
 expectFrames(path.join("characters", "mallow"), ["idle", "cast", "hurt", "cheer"], 160);
 
-for (const kind of ["piplet", "dartlet", "bubbleBud", "spitlet", "bigChonk"]) {
+for (const kind of ["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]) {
   expected.set(path.join("units", "friendly", kind, "seed-v1.png"), 160);
   expectFrames(path.join("units", "friendly", kind), ["attack", "walk"], 160);
 }

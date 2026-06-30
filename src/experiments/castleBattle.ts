@@ -21,13 +21,13 @@ export type CastleEventChoiceId =
   | "hatchlingEscort" | "hatchlingShell" | "hatchlingShare"
   | "marketSnack" | "marketTrade" | "marketEgg"
   | "oracleListen" | "oracleShelter" | "oracleChallenge";
-export type CastleUnitKind = "piplet" | "dartlet" | "bubbleBud" | "spitlet" | "bigChonk" | "shellSlime" | "nibbleImp" | "sporeBud" | "echoMoth" | "rootLump";
+export type CastleUnitKind = "piplet" | "dartlet" | "bubbleBud" | "mendlet" | "spitlet" | "bigChonk" | "shellSlime" | "nibbleImp" | "sporeBud" | "echoMoth" | "rootLump";
 export type CastlePowerId = "slingshot" | "bubbleGate" | "snackCannon" | "gooMoat" | "timewobble" | "tongueSnatch" | "sporeMortar";
 export type CastleUpgradeCategory = "minion" | "castle" | "trait" | "study";
 export type CastleFxKind = "spawn" | "hit" | "projectile" | "pop" | "heal" | "power" | "shield";
 export type CastleUpgradeId =
   | "splitNursery" | "bubbleBrood" | "stretchyLegs" | "gooSoles" | "snackPockets" | "popcornBodies"
-  | "relayJelly" | "bigSibling" | "copycatJelly" | "swarmSchool" | "shellPolish" | "overripeSplit"
+  | "relayJelly" | "bigSibling" | "mendletEgg" | "copycatJelly" | "swarmSchool" | "shellPolish" | "overripeSplit"
   | "snackCannon" | "gooMoat" | "echoBell" | "nurseryChimney" | "rootRepair" | "timewobbleClock"
   | "tongueCrane" | "digestor" | "sporeMortar" | "rallyLantern"
   | "impHorns" | "bubbleBelly" | "sproutTuft" | "springTail" | "starFreckles" | "mothEars"
@@ -465,6 +465,7 @@ export const CASTLE_UNIT_DEFS: Record<CastleUnitKind, CastleUnitDef> = {
   piplet: { kind: "piplet", name: "Piplet", cost: 0, hp: 12, damage: 2, speed: 4.5, range: 2.4, attackMs: 1_000, accent: "#f4d84a", role: "Free frontline wobble" },
   dartlet: { kind: "dartlet", name: "Dartlet", cost: 1, hp: 8, damage: 3, speed: 8, range: 2.2, attackMs: 800, accent: "#ff8a72", role: "Fast pressure" },
   bubbleBud: { kind: "bubbleBud", name: "Bubble Bud", cost: 2, hp: 22, damage: 1, speed: 3.1, range: 2.5, attackMs: 1_200, accent: "#78ccef", role: "Shielding support" },
+  mendlet: { kind: "mendlet", name: "Mendlet", cost: 4, hp: 16, damage: 0, speed: 3.2, range: 10, attackMs: 1_400, accent: "#78d7ae", role: "Nearby ally healer" },
   spitlet: { kind: "spitlet", name: "Spitlet", cost: 3.5, hp: 10, damage: 4, speed: 3.5, range: 13, attackMs: 1_300, accent: "#a785e5", role: "Ranged shell cracker" },
   bigChonk: { kind: "bigChonk", name: "Big Chonk", cost: 5.5, hp: 50, damage: 7, speed: 2, range: 2.8, attackMs: 1_600, accent: "#82c95c", role: "Slow siege tank" },
   shellSlime: { kind: "shellSlime", name: "Shell Slime", cost: 0, hp: 18, damage: 2, speed: 3, range: 2.5, attackMs: 1_200, accent: "#8fb4b8", role: "Armored defender" },
@@ -502,6 +503,7 @@ export const CASTLE_UPGRADE_DEFS: Record<CastleUpgradeId, CastleUpgradeDef> = {
   popcornBodies: upgrade("popcornBodies", "Popcorn Bodies", "When a bubble shield breaks, it pops damage around itself.", "minion", "uncommon", "#f2cc4f"),
   relayJelly: upgrade("relayJelly", "Relay Jelly", "Spitlets encourage nearby allies to hit harder.", "minion", "rare", "#8c7cdb"),
   bigSibling: upgrade("bigSibling", "Big Sibling", "A premium unit summoned to an empty lane grows larger.", "minion", "uncommon", "#83bd59"),
+  mendletEgg: upgrade("mendletEgg", "Mendlet Egg", "Unlock Mendlet, a support slime that heals a nearby wounded ally for 4 HP.", "minion", "rare", "#78d7ae"),
   copycatJelly: upgrade("copycatJelly", "Copycat Jelly", "The first enemy defeated each battle grants a burst of energy.", "minion", "rare", "#d57dbc"),
   swarmSchool: upgrade("swarmSchool", "Swarm School", "Every fifth automatic Piplet brings a friend.", "minion", "uncommon", "#efcf48"),
   shellPolish: upgrade("shellPolish", "Shell Polish", "Every friendly unit begins with a small shell.", "minion", "common", "#91b7ba"),
@@ -550,8 +552,8 @@ export function getAvailableCastlePowers(upgrades: CastleUpgradeId[]): CastlePow
   return Object.values(CASTLE_POWER_DEFS).filter(power => !power.requiredUpgradeId || upgrades.includes(power.requiredUpgradeId));
 }
 
-export function getPlayerSummonKinds(): CastleUnitKind[] {
-  return ["dartlet", "bubbleBud", "spitlet", "bigChonk"];
+export function getPlayerSummonKinds(upgrades: CastleUpgradeId[] = []): CastleUnitKind[] {
+  return ["dartlet", "bubbleBud", ...(hasUpgrade(upgrades, "mendletEgg") ? ["mendlet" as const] : []), "spitlet", "bigChonk"];
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -1063,6 +1065,7 @@ function resolveBattleStep(
   }
 
   const damageById = new Map<string, number>();
+  const healById = new Map<string, number>();
   const slowById = new Map<string, number>();
   const shieldById = new Map<string, number>();
   const popSplashById = new Map<string, number>();
@@ -1075,10 +1078,20 @@ function resolveBattleStep(
       .filter(candidate => candidate.side === "player" && candidate.id !== unit.id && candidate.hp > 0 && Math.abs(candidate.position - unit.position) <= 10)
       .sort((a, b) => a.shield - b.shield)[0]
     : undefined;
+  const mendTarget = (unit: CastleUnitState) => unit.side === "player" && unit.kind === "mendlet"
+    ? battle.units
+      .filter(candidate => candidate.side === "player"
+        && candidate.id !== unit.id
+        && candidate.hp > 0
+        && candidate.hp < candidate.maxHp
+        && Math.abs(candidate.position - unit.position) <= CASTLE_UNIT_DEFS.mendlet.range)
+      .sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp) || Math.abs(a.position - unit.position) - Math.abs(b.position - unit.position))[0]
+    : undefined;
   const attackGroups = new Map<string, Array<{ id: string; distance: number; damage: number }>>();
   for (const unit of battle.units) {
     if (unit.hp <= 0 || unit.attackCooldownMs > 0) continue;
     if (unit.side === "enemy" && battle.enemySlowMs > 0) continue;
+    if (unit.kind === "mendlet") continue;
     if (bubbleShieldTarget(unit)) continue;
     const stats = getUnitStats(unit, upgrades, battle.units);
     const target = nearestUnit(battle.units, unit);
@@ -1117,6 +1130,14 @@ function resolveBattleStep(
         shieldById.set(ally.id, (shieldById.get(ally.id) || 0) + 3);
         generatedFx.push({ kind: "shield", side: "player", position: ally.position, label: "+3" });
         return { ...unit, attackCooldownMs: 1_500 };
+      }
+    }
+    if (unit.side === "player" && unit.kind === "mendlet" && unit.attackCooldownMs <= 0) {
+      const ally = mendTarget(unit);
+      if (ally) {
+        healById.set(ally.id, (healById.get(ally.id) || 0) + 4);
+        generatedFx.push({ kind: "heal", side: "player", position: ally.position, fromPosition: unit.position, label: "+4" });
+        return { ...unit, attackCooldownMs: stats.attackMs };
       }
     }
     if (!enemyFrozen && engagedAttackerIds.has(unit.id) && (canAttackTarget || canAttackCastle) && unit.attackCooldownMs <= 0) {
@@ -1163,8 +1184,10 @@ function resolveBattleStep(
 
   const damagedUnits = updatedUnits.map(unit => {
     const damage = damageById.get(unit.id) || 0;
+    const healing = healById.get(unit.id) || 0;
     if (damage <= 0) return {
       ...unit,
+      hp: unit.hp > 0 ? Math.min(unit.maxHp, unit.hp + healing) : unit.hp,
       shield: Math.min(18, unit.shield + (shieldById.get(unit.id) || 0)),
       slowMs: Math.max(unit.slowMs, slowById.get(unit.id) || 0),
     };
@@ -1175,6 +1198,7 @@ function resolveBattleStep(
     }
     return {
       ...damaged.unit,
+      hp: damaged.unit.hp > 0 ? Math.min(damaged.unit.maxHp, damaged.unit.hp + healing) : damaged.unit.hp,
       shield: Math.min(18, damaged.unit.shield + (shieldById.get(unit.id) || 0)),
       slowMs: Math.max(damaged.unit.slowMs, slowById.get(unit.id) || 0),
     };
@@ -1296,7 +1320,7 @@ export function tickCastleRun(run: CastleRunState, deltaMs: number, combatSpeed 
 
 export function summonCastleUnit(run: CastleRunState, kind: CastleUnitKind): CastleRunState {
   if (run.phase !== "battle") return run;
-  if (!getPlayerSummonKinds().includes(kind)) return run;
+  if (!getPlayerSummonKinds(run.upgrades).includes(kind)) return run;
   const def = CASTLE_UNIT_DEFS[kind];
   if (run.battle.energy < def.cost) return run;
   let battle = addUnit(run.battle, "player", kind, run.upgrades, true);

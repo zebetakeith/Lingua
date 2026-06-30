@@ -49,6 +49,13 @@ function spendEnergy(run) {
         continue;
       }
     }
+    if (next.battle.energy >= 4 && !next.battle.units.some(unit => unit.side === "player" && unit.kind === "mendlet")) {
+      const supported = summonCastleUnit(next, "mendlet");
+      if (supported !== next) {
+        next = supported;
+        continue;
+      }
+    }
     if (next.battle.energy < 3.5) break;
     let spent = false;
     for (const kind of priorities) {

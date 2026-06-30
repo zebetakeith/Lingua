@@ -158,6 +158,7 @@ const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   piplet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/piplet/seed-v1.png`,
   dartlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/seed-v1.png`,
   bubbleBud: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bubbleBud/seed-v1.png`,
+  mendlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/mendlet/seed-v1.png`,
   spitlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/seed-v1.png`,
   bigChonk: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bigChonk/seed-v2.png`,
 };
@@ -181,6 +182,10 @@ const FRIENDLY_UNIT_WALK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bubbleBud/walk/0${index + 1}.png`,
   ),
+  mendlet: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/mendlet/walk/0${index + 1}.png`,
+  ),
   spitlet: Array.from(
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/walk/0${index + 1}.png`,
@@ -194,6 +199,7 @@ const FRIENDLY_UNIT_WALK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   piplet: 140,
   dartlet: 95,
   bubbleBud: 180,
+  mendlet: 170,
   spitlet: 155,
   bigChonk: 240,
 };
@@ -239,6 +245,10 @@ const FRIENDLY_UNIT_ATTACK_FRAMES: Partial<Record<CastleUnitKind, string[]>> = {
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/bubbleBud/attack/0${index + 1}.png`,
   ),
+  mendlet: Array.from(
+    { length: 4 },
+    (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/mendlet/attack/0${index + 1}.png`,
+  ),
   spitlet: Array.from(
     { length: 4 },
     (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/spitlet/attack/0${index + 1}.png`,
@@ -252,6 +262,7 @@ const FRIENDLY_UNIT_ATTACK_FRAME_MS: Partial<Record<CastleUnitKind, number>> = {
   piplet: 50,
   dartlet: 45,
   bubbleBud: 55,
+  mendlet: 70,
   spitlet: 55,
   bigChonk: 75,
 };
@@ -580,19 +591,20 @@ function CommandTray({
         <small>Combat keeps moving; command time never counts as recall time.</small>
       </div>
       <div className="castle-command-scroll" role="group" aria-label="Summons and castle powers">
-        {getPlayerSummonKinds().map(kind => {
+        {getPlayerSummonKinds(run.upgrades).map(kind => {
           const unit = CASTLE_UNIT_DEFS[kind];
+          const actionText = kind === "mendlet" ? "4 HEAL" : `${unit.damage} ATK`;
           return (
             <button
               key={kind}
               disabled={run.battle.energy < unit.cost}
               onClick={() => onSummon(kind)}
-              title={`${unit.name}: ${unit.role}. ${unit.hp} HP, ${unit.damage} attack, costs ${unit.cost} energy.`}
-              aria-label={`Summon ${unit.name}. ${unit.role}. ${unit.hp} HP, ${unit.damage} attack, costs ${unit.cost} energy.`}
+              title={`${unit.name}: ${unit.role}. ${unit.hp} HP, ${actionText}, costs ${unit.cost} energy.`}
+              aria-label={`Summon ${unit.name}. ${unit.role}. ${unit.hp} HP, ${actionText}, costs ${unit.cost} energy.`}
             >
               <SlimeFace kind={kind} side="player" />
               <strong>{unit.name}</strong>
-              <span>{unit.role} · {unit.hp} HP · {unit.damage} ATK</span>
+              <span>{unit.role} · {unit.hp} HP · {actionText}</span>
               <b>{unit.cost}</b>
             </button>
           );
@@ -914,6 +926,7 @@ const CASTLE_EVENT_ICONS: Record<CastleEventId, typeof Sparkles> = {
 const CASTLE_UNIT_GUIDE: Partial<Record<CastleUnitKind, string>> = {
   dartlet: "Cheap and very fast. Best for quick pressure, but fragile in a long fight.",
   bubbleBud: "Periodically gives a nearby ally 3 shield, up to 18. It supports instead of attacking when an ally is close.",
+  mendlet: "Heals the most wounded nearby ally for 4 HP every 1.4 seconds. It never occupies an attack slot.",
   spitlet: "Attacks from long range and deals 3 bonus damage when cracking a shield.",
   bigChonk: "A slow, durable siege unit. Bank energy for one when the lane needs a lasting frontline.",
   shellSlime: "Arrives with 6 shield and stalls light attackers.",
@@ -1969,10 +1982,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
             <h3>Your summons</h3>
             <div className="castle-guide-list">
-              {getPlayerSummonKinds().map(kind => {
+              {getPlayerSummonKinds(run.upgrades).map(kind => {
                 const unit = CASTLE_UNIT_DEFS[kind];
-                return <article key={kind}><SlimeFace kind={kind} side="player" /><div><b>{unit.name}</b><span>{CASTLE_UNIT_GUIDE[kind]}</span><small>{unit.cost} energy · {unit.hp} HP · {unit.damage} attack · {unit.range >= 10 ? "ranged" : unit.speed >= 7 ? "fast" : "melee"}</small></div></article>;
+                const actionText = kind === "mendlet" ? "4 healing" : `${unit.damage} attack`;
+                const roleText = kind === "mendlet" ? "support" : unit.range >= 10 ? "ranged" : unit.speed >= 7 ? "fast" : "melee";
+                return <article key={kind}><SlimeFace kind={kind} side="player" /><div><b>{unit.name}</b><span>{CASTLE_UNIT_GUIDE[kind]}</span><small>{unit.cost} energy · {unit.hp} HP · {actionText} · {roleText}</small></div></article>;
               })}
+              {!run.upgrades.includes("mendletEgg") ? <article className="is-locked"><SlimeFace kind="mendlet" side="player" /><div><b>Mendlet</b><span>Clear four guardians to discover Mendlet Egg, then choose it during a run to hatch this nearby ally healer.</span><small>Locked mutation summon</small></div></article> : null}
             </div>
 
             <h3>Castle powers</h3>

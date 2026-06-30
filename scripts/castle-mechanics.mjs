@@ -288,6 +288,38 @@ mortar = activateCastlePower(mortar, "sporeMortar");
 assert.deepEqual(mortar.battle.units.map(unit => unit.hp), [10, 10, 10, 18], "Spore Mortar should damage only the three front enemies");
 assert.equal(mortar.battle.telemetry.powersUsed, 1, "successful castle powers should be represented in telemetry");
 
+let lockedMendlet = { ...freshRun(), upgrades: [], battle: { ...freshRun().battle, energy: 12 } };
+const lockedMendletSnapshot = lockedMendlet;
+lockedMendlet = summonCastleUnit(lockedMendlet, "mendlet");
+assert.equal(lockedMendlet, lockedMendletSnapshot, "Mendlet should not be summonable before its egg mutation is chosen");
+
+let hatchedMendlet = { ...freshRun(), upgrades: ["mendletEgg"], battle: { ...freshRun().battle, energy: 12 } };
+hatchedMendlet = summonCastleUnit(hatchedMendlet, "mendlet");
+assert.equal(hatchedMendlet.battle.energy, 8, "Mendlet should cost four energy");
+assert.equal(hatchedMendlet.battle.units.some(unit => unit.kind === "mendlet"), true, "Mendlet Egg should add Mendlet to the command tray summon roster");
+
+let healingSupport = {
+  ...freshRun(),
+  upgrades: ["mendletEgg"],
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [
+      testUnit("mendlet", "player", "mendlet-healer", { position: 40, attackCooldownMs: 0 }),
+      testUnit("dartlet", "player", "mendlet-patient", { position: 45, hp: 2, attackCooldownMs: 999_999 }),
+      testUnit("piplet", "player", "mendlet-healthier", { position: 42, hp: 8, attackCooldownMs: 999_999 }),
+    ],
+  },
+};
+healingSupport = tickCastleRun(healingSupport, 100, 1);
+assert.equal(healingSupport.battle.units.find(unit => unit.id === "mendlet-patient").hp, 6, "Mendlet should heal the most wounded nearby ally for four HP");
+assert.equal(healingSupport.battle.units.find(unit => unit.id === "mendlet-healer").attackCooldownMs, CASTLE_UNIT_DEFS.mendlet.attackMs, "Mendlet healing should use its support cooldown");
+assert.equal(healingSupport.battle.fxEvents.some(event => event.kind === "heal" && event.label === "+4"), true, "Mendlet healing should be visible in battlefield feedback");
+
 let support = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
 support = summonCastleUnit(support, "dartlet");
 support = summonCastleUnit(support, "bubbleBud");
@@ -357,6 +389,7 @@ let mixedFormation = {
     units: [
       ...Array.from({ length: 3 }, (_, index) => testUnit("dartlet", "player", `melee-${index}`, { position: 95, attackCooldownMs: 0 })),
       ...Array.from({ length: 2 }, (_, index) => testUnit("spitlet", "player", `ranged-${index}`, { position: 85, attackCooldownMs: 0 })),
+      testUnit("mendlet", "player", "formation-mendlet", { position: 95, attackCooldownMs: 0 }),
     ],
   },
 };
@@ -367,6 +400,7 @@ assert.equal(
   (CASTLE_MELEE_ENGAGEMENT_SLOTS * CASTLE_UNIT_DEFS.dartlet.damage) + (CASTLE_RANGED_ENGAGEMENT_SLOTS * CASTLE_UNIT_DEFS.spitlet.damage),
   "melee and ranged formation lanes should stack so a varied army outperforms one-unit spam",
 );
+assert.equal(mixedFormation.battle.units.find(unit => unit.id === "formation-mendlet").attackCooldownMs, 0, "support units should not consume a melee or ranged attack slot");
 
 let echoMoth = {
   ...freshRun(),
@@ -560,6 +594,7 @@ for (let guardianIndex = 0; guardianIndex < 2; guardianIndex += 1) {
 }
 assert.equal(progressionProfile.guardianClears, 4, "guardian progression should continue across four separate expeditions");
 assert.equal(progressionProfile.unlockedKeepsakeIds.includes("nurseryBell"), true, "the fourth guardian should unlock Nursery Bell");
+assert.equal(progressionProfile.unlockedUpgradeIds.includes("mendletEgg"), true, "the fourth guardian should add Mendlet Egg to future mutation drafts");
 assert.deepEqual(getNewCastleKeepsakeIds(progressionProfile, { ...progressionRun, phase: "reward", battlesWon: 3 }), ["nurseryBell"], "the fourth guardian should celebrate only Nursery Bell");
 
 clearCastleRun("mechanics");
