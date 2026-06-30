@@ -702,7 +702,7 @@ function StudyCard({
     return () => window.removeEventListener("keydown", answerByKeyboard);
   }, [interrupted, question.options, question.questionType, question.seenBefore, reveal]);
   const status = !question.seenBefore
-    ? "First exposure · combat safely paused"
+    ? "Ungraded first exposure · combat safely paused"
     : interrupted
       ? "Interrupted · combat paused"
       : `Combat live · ${question.pressure.combatSpeed}× then faster`;
@@ -725,7 +725,7 @@ function StudyCard({
           <i aria-hidden="true">↓</i>
           <small>{question.direction === "term_to_definition" ? "Meaning" : "Term"}</small>
           <strong>{question.answer}</strong>
-          <p>This is a lesson, not a test. Combat is completely paused until you have read both sides.</p>
+          <p>This is an ungraded lesson, not a test. It cannot add Enemy Rally or charge Recall Bolt, and combat stays completely paused until you have read both sides.</p>
           <button onClick={onExpose}><BookOpen />I’ve read both sides<ChevronRight /></button>
         </div>
       ) : interrupted ? (
@@ -1434,7 +1434,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     } catch (error) {
       if (!isStudyQuestionUnavailableError(error)) throw error;
       beginQuestion(
-        pauseCastleBattle(run, "That card changed outside Goo Keep, so the prompt was safely skipped."),
+        pauseCastleBattle(run, "That prompt was already completed or changed, so it was safely skipped."),
         getStudyQuestionKey(question),
       );
       setDecks(getStudyDecks());
@@ -1501,7 +1501,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     } catch (error) {
       if (!isStudyQuestionUnavailableError(error)) throw error;
       beginQuestion(
-        pauseCastleBattle(run, "That card changed outside Goo Keep, so the lesson was safely skipped."),
+        pauseCastleBattle(run, "That lesson was already completed or changed, so it was safely skipped."),
         getStudyQuestionKey(question),
       );
       setDecks(getStudyDecks());

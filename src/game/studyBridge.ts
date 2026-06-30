@@ -127,6 +127,19 @@ export interface StudyAnswerResult {
   progressKey: string;
 }
 
+const completedQuestionInstances = new Set<number>();
+const STUDY_PROMPT_ALREADY_COMPLETED = "This study prompt was already completed.";
+const STUDY_DIRECTION_NOT_REVIEWABLE = "A new study direction must be completed as a lesson before it can be reviewed.";
+const STUDY_DIRECTION_NOT_NEW = "This study direction is no longer a new lesson.";
+
+function rememberCompletedQuestion(instanceId: number) {
+  completedQuestionInstances.add(instanceId);
+  if (completedQuestionInstances.size > 500) {
+    const oldest = completedQuestionInstances.values().next().value;
+    if (oldest !== undefined) completedQuestionInstances.delete(oldest);
+  }
+}
+
 const shuffle = <T,>(items: T[]): T[] => [...items].sort(() => Math.random() - 0.5);
 
 function createFallbackDeck(): StudyDeck {
@@ -403,6 +416,9 @@ export function isStudyQuestionUnavailableError(error: unknown): boolean {
   return error instanceof Error && (
     error.message === "The reviewed card is no longer available."
     || error.message === "The introduced card is no longer available."
+    || error.message === STUDY_PROMPT_ALREADY_COMPLETED
+    || error.message === STUDY_DIRECTION_NOT_REVIEWABLE
+    || error.message === STUDY_DIRECTION_NOT_NEW
   );
 }
 
@@ -411,14 +427,20 @@ export function answerStudyQuestion(
   question: StudyQuestion,
   isCorrect: boolean,
 ): StudyAnswerResult {
+  if (completedQuestionInstances.has(question.instanceId)) throw new Error(STUDY_PROMPT_ALREADY_COMPLETED);
   if (!loadSave().decks.some(deck => deck.id === deckId)) throw new Error("The reviewed card is no longer available.");
   let answerResult: StudyAnswerResult | null = null;
+  let blockedByNewDirection = false;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
     const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
     if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card) || !enabledDirections.includes(question.direction)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
+    if (currentDirection.seen === 0) {
+      blockedByNewDirection = true;
+      return deck;
+    }
     const nextDirection = updateDirectionStudyProgress(currentDirection, isCorrect, question.questionType);
     const currentCard = deck.cardProgress?.[card.id] || {
       box: 2,
@@ -460,7 +482,9 @@ export function answerStudyQuestion(
       },
     };
   });
+  if (blockedByNewDirection) throw new Error(STUDY_DIRECTION_NOT_REVIEWABLE);
   if (!answerResult) throw new Error("The reviewed card is no longer available.");
+  rememberCompletedQuestion(question.instanceId);
   return answerResult;
 }
 
@@ -468,14 +492,20 @@ export function completeStudyExposure(
   deckId: string,
   question: StudyQuestion,
 ): StudyAnswerResult {
+  if (completedQuestionInstances.has(question.instanceId)) throw new Error(STUDY_PROMPT_ALREADY_COMPLETED);
   if (!loadSave().decks.some(deck => deck.id === deckId)) throw new Error("The introduced card is no longer available.");
   let exposureResult: StudyAnswerResult | null = null;
+  let blockedBySeenDirection = false;
   updateDeck(deckId, deck => {
     const card = deck.cards.find(candidate => candidate.id === question.cardId);
     const enabledDirections = getEnabledStudyDirections(normalizeStudySettings(deck.studySettings));
     if (!card || deck.cardRatings?.[card.id] === "known" || question.cardFingerprint !== getCardFingerprint(card) || !enabledDirections.includes(question.direction)) return deck;
     const key = getStudyDirectionKey(card.id, question.direction);
     const currentDirection = getDirectionProgress(deck, card, question.direction);
+    if (currentDirection.seen > 0) {
+      blockedBySeenDirection = true;
+      return deck;
+    }
     const now = Date.now();
     const nextDirection: DirectionStudyProgress = {
       ...currentDirection,
@@ -511,6 +541,8 @@ export function completeStudyExposure(
       },
     };
   });
+  if (blockedBySeenDirection) throw new Error(STUDY_DIRECTION_NOT_NEW);
   if (!exposureResult) throw new Error("The introduced card is no longer available.");
+  rememberCompletedQuestion(question.instanceId);
   return exposureResult;
 }

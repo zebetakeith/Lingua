@@ -58,7 +58,21 @@ function putDeck(id, overrides = {}) {
 
 putDeck("pristine");
 selectStudyDeck("pristine");
-assert.equal(drawStudyQuestion("pristine", "quadratic").seenBefore, false, "a pristine direction must be protected");
+const pristineQuestion = drawStudyQuestion("pristine", "quadratic");
+assert.equal(pristineQuestion.seenBefore, false, "a pristine direction must be protected");
+assert.throws(
+  () => answerStudyQuestion("pristine", pristineQuestion, true),
+  isStudyQuestionUnavailableError,
+  "an unseen direction must be impossible to grade through the review path",
+);
+assert.equal(drawStudyQuestion("pristine", "quadratic").seenBefore, false, "a blocked grading attempt must leave the direction unseen");
+completeStudyExposure("pristine", pristineQuestion);
+assert.throws(
+  () => completeStudyExposure("pristine", pristineQuestion),
+  isStudyQuestionUnavailableError,
+  "one rendered lesson instance must not complete its exposure twice",
+);
+assert.equal(getStudyDecks()[0].reviewCount, 1, "a completed first exposure should write exactly one seen event");
 assert.deepEqual(getStudyDirectionLabel("pristine", "new-1::term_to_definition"), { prompt: "mizu", answer: "water" }, "learning reports should resolve a missed direction back to readable card text");
 
 putDeck("legacy", {
@@ -241,5 +255,19 @@ Math.random = () => 0;
 const productionQuestion = drawStudyQuestion("balanced-production", "quadratic", undefined, "balanced");
 Math.random = originalRandom;
 assert.equal(productionQuestion.questionType, "self_grade", "balanced production recall should reveal and self-grade without typing");
+
+putDeck("single-write-review", {
+  cardRatings: { "new-2": "known" },
+  directionProgress: { "new-1::term_to_definition": progress(3) },
+});
+selectStudyDeck("single-write-review");
+const singleWriteQuestion = drawStudyQuestion("single-write-review", "quadratic");
+answerStudyQuestion("single-write-review", singleWriteQuestion, true);
+assert.throws(
+  () => answerStudyQuestion("single-write-review", singleWriteQuestion, true),
+  isStudyQuestionUnavailableError,
+  "one rendered review instance must not apply progress twice",
+);
+assert.equal(getStudyDecks()[0].reviewCount, 4, "a double activation should add only one review to existing direction history");
 
 process.stdout.write("Study safety assertions passed.\n");
