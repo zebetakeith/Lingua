@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import {
   ALL_CASTLE_UPGRADE_IDS,
+  CASTLE_ARMY_CAPACITY,
+  CASTLE_DIFFICULTIES,
+  CASTLE_ENEMY_AFFIX_DEFS,
   CASTLE_MELEE_ENGAGEMENT_SLOTS,
   CASTLE_RANGED_ENGAGEMENT_SLOTS,
   CASTLE_UNIT_DEFS,
@@ -15,13 +18,19 @@ import {
   continueCastleRun,
   createInitialCastleRun,
   getCastleBattleLesson,
+  getCastleArmyPopulation,
   getCastleBattleProgress,
   getCastleEndlessThreat,
+  getCastleEnemyAffix,
   getCastleEventChoiceEffect,
   getCastleGuardianPower,
+  getActiveCastleSynergies,
+  getCastleSynergyProgress,
   getCastleStudyReport,
+  refreshCastleCommandHand,
   resolveCastleEvent,
   resumeCastleBattle,
+  startCastleCombatBeat,
   summonCastleUnit,
   tickCastleRun,
 } from "../src/experiments/castleBattle.ts";
@@ -53,6 +62,19 @@ function freshRun() {
   return createInitialCastleRun("mechanics", "quick", "quadratic", ALL_CASTLE_UPGRADE_IDS, 42);
 }
 
+function readyCommand(run, cardId) {
+  return {
+    ...run,
+    battle: {
+      ...run.battle,
+      commandWindowReady: true,
+      summonPlayedThisWindow: false,
+      powerPlayedThisWindow: false,
+      commandHand: [cardId, ...run.battle.commandHand.filter(id => id !== cardId)].slice(0, 4),
+    },
+  };
+}
+
 function keepsakeRun(keepsakeId) {
   return createInitialCastleRun("mechanics", "quick", "quadratic", ALL_CASTLE_UPGRADE_IDS, 42, "balanced", keepsakeId);
 }
@@ -63,6 +85,7 @@ function testUnit(kind, side, id, overrides = {}) {
     id,
     side,
     kind,
+    affix: null,
     hp: definition.hp,
     maxHp: definition.hp,
     shield: 0,
@@ -77,10 +100,24 @@ function testUnit(kind, side, id, overrides = {}) {
 
 assert.equal(keepsakeRun("starBuckle").battle.energy, 1, "Star Buckle should grant one starting energy");
 assert.equal(keepsakeRun("shellButton").battle.playerBarrier, 10, "Shell Button should grant ten starting barrier");
-assert.equal(keepsakeRun("boltBead").battle.recallBoltCharge, 1, "Bolt Bead should grant one Recall Bolt charge");
+assert.equal(keepsakeRun("boltBead").battle.recallBoltCharge, 1, "Focus Bead should grant one Focus mark");
 assert.equal(keepsakeRun("nurseryBell").battle.units.filter(unit => unit.kind === "piplet").length, 1, "Nursery Bell should hatch one starting Piplet");
 assert.equal(keepsakeRun("moonTreaty").battle.energy, 2, "Moon Treaty should grant two starting energy");
 assert.equal(keepsakeRun("moonTreaty").battle.rally, 1, "Moon Treaty should disclose its one-pip Rally risk");
+
+const studyDifficultyRun = createInitialCastleRun("difficulty", "quick", "quadratic", [], 42, "balanced", null, "study");
+const standardDifficultyRun = createInitialCastleRun("difficulty", "quick", "quadratic", [], 42, "balanced", null, "standard");
+const siegeDifficultyRun = createInitialCastleRun("difficulty", "quick", "quadratic", [], 42, "balanced", null, "siege");
+assert.ok(studyDifficultyRun.battle.enemyCastleMaxHp < standardDifficultyRun.battle.enemyCastleMaxHp, "Study First should reduce enemy keep health");
+assert.equal(siegeDifficultyRun.battle.enemyCastleMaxHp, standardDifficultyRun.battle.enemyCastleMaxHp, "Moonstorm should add pressure without creating inflated keep-health stalemates");
+assert.equal(CASTLE_DIFFICULTIES.siege.enemyDamageBonus, 1, "Moonstorm should add one enemy damage");
+assert.ok(CASTLE_DIFFICULTIES.siege.enemySpeedMultiplier > 1, "Moonstorm should accelerate enemy pressure");
+assert.equal(siegeDifficultyRun.battle.difficultyId, "siege", "battle state should carry the selected pressure profile");
+const studyRewardResult = applyCastleStudyOutcome(studyDifficultyRun, outcome(500, { reward: 1.25 }));
+const standardRewardResult = applyCastleStudyOutcome(standardDifficultyRun, outcome(500, { reward: 1.25 }));
+const siegeRewardResult = applyCastleStudyOutcome(siegeDifficultyRun, outcome(500, { reward: 1.25 }));
+assert.equal(studyRewardResult.battle.energy, standardRewardResult.battle.energy, "Study First must not change recall rewards");
+assert.equal(siegeRewardResult.battle.energy, standardRewardResult.battle.energy, "Moonstorm must not change recall rewards");
 
 const mossRoute = chooseCastleRoute({
   ...keepsakeRun("mossPatch"),
@@ -119,16 +156,17 @@ let run = freshRun();
 const startingEnemyHp = run.battle.enemyCastleHp;
 for (let index = 0; index < 4; index += 1) run = applyCastleStudyOutcome(run, outcome(index));
 assert.equal(run.battle.recallBoltCharge, 4, "four correct seen recalls should charge four bolt pips");
-assert.equal(run.battle.enemyCastleHp, startingEnemyHp, "Recall Bolt should not fire early");
+assert.equal(run.battle.enemyCastleHp, startingEnemyHp, "Focus bonus should never deal automatic castle damage");
 run = applyCastleStudyOutcome(run, outcome(4));
 assert.equal(run.battle.recallBoltCharge, 0, "fifth correct seen recall should consume the bolt charge");
-assert.equal(run.battle.enemyCastleHp, startingEnemyHp - 8, "Recall Bolt should deal eight keep damage");
+assert.equal(run.battle.enemyCastleHp, startingEnemyHp, "focus rewards should not bypass tactical combat with automatic damage");
+assert.equal(run.battle.energy, 6, "the fifth correct recall should grant one bonus Goo");
 
 const unseen = applyCastleStudyOutcome(freshRun(), outcome(0, { isExposure: true, wasUnseen: true, reward: 0.25 }));
-assert.equal(unseen.battle.recallBoltCharge, 0, "first exposure must not charge Recall Bolt");
+assert.equal(unseen.battle.recallBoltCharge, 0, "first exposure must not charge the Focus bonus");
 assert.equal(unseen.correct, 0, "an ungraded first exposure must not count as a correct answer");
 assert.equal(unseen.wrong, 0, "an ungraded first exposure must not count as a miss");
-assert.equal(unseen.battle.energy, 0.25, "a completed first exposure should grant only its small learning bonus");
+assert.equal(unseen.battle.energy, 0, "a completed first exposure should not grant battle Goo");
 assert.equal(unseen.studySummary.exposures, 1, "the learning report should count safe first exposures");
 assert.equal(unseen.studySummary.gradedReviews, 0, "safe first exposures must stay out of graded accuracy");
 assert.equal(unseen.studySummary.responseMs.length, 0, "reading time for first exposures must stay out of recall pace");
@@ -162,7 +200,7 @@ const bankedEnergyLesson = getCastleBattleLesson({
   phase: "lost",
   battle: { ...freshRun().battle, energy: 5, telemetry: { ...freshRun().battle.telemetry, energyEarned: 8, energySpent: 2 } },
 });
-assert.match(bankedEnergyLesson, /energy still banked/i, "a loss with hoarded energy should produce actionable spending guidance");
+assert.match(bankedEnergyLesson, /Goo still banked/i, "a loss with hoarded Goo should produce actionable spending guidance");
 const rallyLesson = getCastleBattleLesson({
   ...freshRun(),
   phase: "lost",
@@ -210,20 +248,81 @@ const stackedTwoWay = completeTwoWayRecall(["twoWayTreat", "echoCheeks"]);
 assert.equal(stackedTwoWay.battle.units.filter(unit => unit.kind === "piplet").length, 1, "the two rare two-way upgrades should stack without duplicating the same reward");
 assert.equal(stackedTwoWay.battle.energy, 2.5, "stacking the two-way upgrades should preserve Echo Cheeks' energy bonus");
 
-let live = resumeCastleBattle({ ...freshRun(), battle: { ...freshRun().battle, energy: 12 } });
-live = summonCastleUnit(live, "dartlet");
-assert.equal(live.battle.telemetry.summons, 1, "summoning must work while combat is live");
-assert.equal(live.battle.units.some(unit => unit.kind === "dartlet"), true, "live summon should enter the lane immediately");
-live = activateCastlePower(live, "bubbleGate");
-assert.equal(live.battle.playerBarrier, 24, "castle powers must work while combat is live");
+const minionEvolutionUpgrades = ["splitNursery", "bubbleBrood", "stretchyLegs"];
+assert.equal(getCastleSynergyProgress(minionEvolutionUpgrades).minion, 3, "three minion mutations should fill the minion evolution track");
+assert.equal(getActiveCastleSynergies(minionEvolutionUpgrades).some(synergy => synergy.id === "broodHeart"), true, "three minion mutations should evolve Brood Heart");
+let broodHeartRun = readyCommand({ ...freshRun(), upgrades: minionEvolutionUpgrades, battle: { ...freshRun().battle, energy: 12 } }, "dartlet");
+broodHeartRun = summonCastleUnit(broodHeartRun, "dartlet");
+assert.equal(broodHeartRun.battle.units.find(unit => unit.kind === "dartlet").maxHp, 9, "Brood Heart should hatch friendly units with twelve percent more health");
 
-let slingshot = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
+const engineUpgrades = ["snackCannon", "gooMoat", "nurseryChimney"];
+const engineTarget = testUnit("nibbleImp", "enemy", "engine-target", { position: 20 });
+let engineRun = {
+  ...freshRun(),
+  upgrades: engineUpgrades,
+  battle: { ...freshRun().battle, mode: "study", combatBeatRemainingMs: 4_000, units: [engineTarget], playerTurretTimerMs: 0, autoSpawnTimerMs: 999_999, enemySpawnTimerMs: 999_999, enemyTurretTimerMs: 999_999 },
+};
+engineRun = tickCastleRun(engineRun, 100, 1);
+assert.equal(engineRun.battle.playerTurretTimerMs, 2_500, "Nursery Engine should reduce the keep turret reload to 2.6 seconds");
+
+const instinctUpgrades = ["impHorns", "springTail", "crabClaws"];
+const instinctUnit = testUnit("dartlet", "player", "instinct-unit", { position: 20 });
+const instinctBase = { ...freshRun(), upgrades: instinctUpgrades, battle: { ...freshRun().battle, mode: "study", combatBeatRemainingMs: 4_000, units: [instinctUnit], autoSpawnTimerMs: 999_999, enemySpawnTimerMs: 999_999, playerTurretTimerMs: 999_999, enemyTurretTimerMs: 999_999 } };
+const instinctRun = tickCastleRun(instinctBase, 250, 1);
+assert.ok(instinctRun.battle.units.find(unit => unit.id === "instinct-unit").position > 22.5, "Keeper Instinct should stack a visible movement bonus with trait builds");
+
+let memoryBloomRun = { ...freshRun(), upgrades: ["firstRecall", "dueDew", "deepRecall"], battle: { ...freshRun().battle, playerBarrier: 0 } };
+for (let index = 0; index < 5; index += 1) memoryBloomRun = applyCastleStudyOutcome(memoryBloomRun, outcome(700 + index, { reward: 0 }));
+assert.equal(memoryBloomRun.battle.playerBarrier, 19, "Memory Bloom should add four barrier on the fifth correct recall alongside Due Dew");
+assert.match(memoryBloomRun.notice, /Memory Bloom raised 4 keep barrier/, "Memory Bloom should announce its fifth-recall shield payoff");
+assert.equal(memoryBloomRun.battle.fxEvents.some(effect => effect.kind === "shield" && effect.label === "+4 Bloom"), true, "Memory Bloom should create a visible keep shield burst");
+
+const evolutionClaim = claimCastleUpgrade({ ...freshRun(), phase: "reward", upgrades: ["splitNursery", "bubbleBrood"], rewardChoices: ["stretchyLegs"] }, "stretchyLegs");
+assert.match(evolutionClaim.notice, /Brood Heart evolved/, "claiming a third category mutation should announce its evolution");
+
+let live = readyCommand({ ...freshRun(), battle: { ...freshRun().battle, energy: 12 } }, "dartlet");
+live = summonCastleUnit(live, "dartlet");
+assert.equal(live.battle.telemetry.summons, 1, "summoning must work during the command window");
+assert.equal(live.battle.units.some(unit => unit.kind === "dartlet"), true, "live summon should enter the lane immediately");
+live = activateCastlePower(readyCommand(live, "bubbleGate"), "bubbleGate");
+assert.equal(live.battle.playerBarrier, 24, "castle powers must work during the command window");
+
+let refreshedHand = readyCommand(freshRun(), "dartlet");
+const handBeforeRefresh = [...refreshedHand.battle.commandHand];
+const totalCardsBeforeRefresh = refreshedHand.battle.commandHand.length + refreshedHand.battle.commandDrawPile.length + refreshedHand.battle.commandDiscardPile.length;
+refreshedHand = refreshCastleCommandHand(refreshedHand);
+assert.notDeepEqual(refreshedHand.battle.commandHand, handBeforeRefresh, "refreshing should replace a stale command hand");
+assert.equal(refreshedHand.battle.commandRefreshUsedThisWindow, true, "the free refresh should be limited to once per answer");
+assert.equal(refreshedHand.battle.commandHand.length + refreshedHand.battle.commandDrawPile.length + refreshedHand.battle.commandDiscardPile.length, totalCardsBeforeRefresh, "refreshing must preserve the complete command deck");
+assert.equal(refreshCastleCommandHand(refreshedHand), refreshedHand, "a second hand refresh in the same command window must be rejected");
+
+let commandRules = readyCommand({ ...freshRun(), battle: { ...freshRun().battle, energy: 12 } }, "dartlet");
+const originalHand = [...commandRules.battle.commandHand];
+commandRules = summonCastleUnit(commandRules, "dartlet");
+assert.equal(commandRules.battle.summonPlayedThisWindow, true, "one summon should consume the summon action for this answer");
+assert.notDeepEqual(commandRules.battle.commandHand, originalHand, "a played command card should rotate out of the four-card hand");
+const afterFirstSummon = commandRules;
+commandRules = summonCastleUnit(commandRules, "bubbleBud");
+assert.equal(commandRules.battle.telemetry.summons, afterFirstSummon.battle.telemetry.summons, "a second summon in one command window must be rejected");
+assert.equal(refreshCastleCommandHand(commandRules), commandRules, "the hand cannot be refreshed after a command card has been played");
+
+let beat = startCastleCombatBeat(readyCommand(freshRun(), "dartlet"));
+assert.equal(beat.battle.combatBeatRemainingMs, 4_000, "marching should start one four-second battle beat");
+for (let index = 0; index < 16; index += 1) beat = tickCastleRun(beat, 250, 1);
+assert.equal(beat.battle.combatBeatRemainingMs, 0, "a battle beat should end after exactly four simulated seconds");
+assert.equal(beat.battle.mode, "command", "the lane should freeze when its battle beat ends");
+
+let capped = { ...freshRun(), battle: { ...freshRun().battle, energy: 12, units: Array.from({ length: CASTLE_ARMY_CAPACITY }, (_, index) => testUnit("dartlet", "player", `cap-${index}`)) } };
+capped = summonCastleUnit(readyCommand(capped, "dartlet"), "dartlet");
+assert.equal(getCastleArmyPopulation(capped.battle), CASTLE_ARMY_CAPACITY, "the army cap must reject summons that would exceed ten spaces");
+
+let slingshot = readyCommand({ ...freshRun(), battle: { ...freshRun().battle, energy: 12 } }, "slingshot");
 const slingshotCastleHp = slingshot.battle.enemyCastleHp;
 slingshot = activateCastlePower(slingshot, "slingshot");
 assert.equal(slingshot.battle.enemyCastleHp, slingshotCastleHp - 8, "Slingshot should strike the rival keep when the lane is empty");
 assert.equal(slingshot.battle.energy, 9.5, "Slingshot should spend its disclosed energy cost");
 
-const lockedSnack = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
+const lockedSnack = readyCommand({ ...freshRun(), upgrades: [], battle: { ...freshRun().battle, energy: 12 } }, "snackCannon");
 assert.equal(activateCastlePower(lockedSnack, "snackCannon"), lockedSnack, "locked castle powers must reject activation without spending energy");
 
 let snack = {
@@ -236,7 +335,7 @@ let snack = {
     units: [testUnit("dartlet", "player", "snack-ally", { hp: 1 })],
   },
 };
-snack = activateCastlePower(snack, "snackCannon");
+snack = activateCastlePower(readyCommand(snack, "snackCannon"), "snackCannon");
 assert.equal(snack.battle.playerCastleHp, 70, "Snack Cannon should repair ten keep HP");
 assert.equal(snack.battle.units[0].hp, CASTLE_UNIT_DEFS.dartlet.hp, "Snack Cannon should heal allies without exceeding max HP");
 
@@ -245,7 +344,7 @@ let moat = {
   upgrades: ["gooMoat", "puddlePaws"],
   battle: { ...freshRun().battle, energy: 12, units: [testUnit("nibbleImp", "enemy", "moat-target")] },
 };
-moat = activateCastlePower(moat, "gooMoat");
+moat = activateCastlePower(readyCommand(moat, "gooMoat"), "gooMoat");
 assert.equal(moat.battle.units[0].slowMs, 6_000, "Goo Moat plus Puddle Paws should apply the upgraded lane slow");
 
 let timewobble = {
@@ -253,14 +352,14 @@ let timewobble = {
   upgrades: ["timewobbleClock"],
   battle: { ...freshRun().battle, energy: 12, units: [testUnit("nibbleImp", "enemy", "frozen-attacker", { position: 3, attackCooldownMs: 0 })] },
 };
-timewobble = activateCastlePower(timewobble, "timewobble");
+timewobble = activateCastlePower(readyCommand(timewobble, "timewobble"), "timewobble");
 assert.equal(timewobble.battle.enemySlowMs, 4_000, "Timewobble should freeze enemy movement and attacks for four seconds");
 const frozenCastleHp = timewobble.battle.playerCastleHp;
 timewobble = tickCastleRun(resumeCastleBattle(timewobble), 100, 1);
 assert.equal(timewobble.battle.playerCastleHp, frozenCastleHp, "an enemy already in range must not attack during Timewobble");
 
 const emptySnatch = { ...freshRun(), upgrades: ["tongueCrane"], battle: { ...freshRun().battle, energy: 12 } };
-const refundedSnatch = activateCastlePower(emptySnatch, "tongueSnatch");
+const refundedSnatch = activateCastlePower(readyCommand(emptySnatch, "tongueSnatch"), "tongueSnatch");
 assert.equal(refundedSnatch.battle.energy, 12, "Tongue Snatch should refund all energy when no target qualifies");
 assert.equal(refundedSnatch.battle.telemetry.powersUsed, 0, "a refunded Tongue Snatch should not count as a used power");
 
@@ -269,7 +368,7 @@ let snatch = {
   upgrades: ["tongueCrane", "nibbleTeeth", "digestor"],
   battle: { ...freshRun().battle, energy: 12, units: [testUnit("nibbleImp", "enemy", "snatch-target", { hp: 4 })] },
 };
-snatch = activateCastlePower(snatch, "tongueSnatch");
+snatch = activateCastlePower(readyCommand(snatch, "tongueSnatch"), "tongueSnatch");
 assert.equal(snatch.battle.units.length, 0, "Tongue Snatch should remove a weakened non-guardian enemy");
 assert.equal(snatch.battle.energy, 6.75, "Digestor should return a small energy drip after a successful snatch");
 
@@ -287,17 +386,16 @@ let mortar = {
     ],
   },
 };
-mortar = activateCastlePower(mortar, "sporeMortar");
+mortar = activateCastlePower(readyCommand(mortar, "sporeMortar"), "sporeMortar");
 assert.deepEqual(mortar.battle.units.map(unit => unit.hp), [10, 10, 10, 18], "Spore Mortar should damage only the three front enemies");
 assert.equal(mortar.battle.telemetry.powersUsed, 1, "successful castle powers should be represented in telemetry");
 
 let lockedMendlet = { ...freshRun(), upgrades: [], battle: { ...freshRun().battle, energy: 12 } };
-const lockedMendletSnapshot = lockedMendlet;
-lockedMendlet = summonCastleUnit(lockedMendlet, "mendlet");
-assert.equal(lockedMendlet, lockedMendletSnapshot, "Mendlet should not be summonable before its egg mutation is chosen");
+lockedMendlet = summonCastleUnit(readyCommand(lockedMendlet, "mendlet"), "mendlet");
+assert.equal(lockedMendlet.battle.units.some(unit => unit.kind === "mendlet"), false, "Mendlet should not be summonable before its egg mutation is chosen");
 
 let hatchedMendlet = { ...freshRun(), upgrades: ["mendletEgg"], battle: { ...freshRun().battle, energy: 12 } };
-hatchedMendlet = summonCastleUnit(hatchedMendlet, "mendlet");
+hatchedMendlet = summonCastleUnit(readyCommand(hatchedMendlet, "mendlet"), "mendlet");
 assert.equal(hatchedMendlet.battle.energy, 8, "Mendlet should cost four energy");
 assert.equal(hatchedMendlet.battle.units.some(unit => unit.kind === "mendlet"), true, "Mendlet Egg should add Mendlet to the command tray summon roster");
 assert.equal(canDraftCastleUpgrade("dewSatchel", []), false, "a Mendlet evolution should stay out of drafts before Mendlet Egg is active");
@@ -347,8 +445,8 @@ assert.equal(evolvedSupport.battle.units.find(unit => unit.id === "evolved-patie
 assert.equal(evolvedSupport.battle.fxEvents.some(event => event.kind === "shield" && event.label === "+2"), true, "Pollen Puff should have distinct shield feedback");
 
 let support = { ...freshRun(), battle: { ...freshRun().battle, energy: 12 } };
-support = summonCastleUnit(support, "dartlet");
-support = summonCastleUnit(support, "bubbleBud");
+support = summonCastleUnit(readyCommand(support, "dartlet"), "dartlet");
+support = summonCastleUnit(readyCommand(support, "bubbleBud"), "bubbleBud");
 support = resumeCastleBattle(support);
 for (let index = 0; index < 20; index += 1) support = tickCastleRun(support, 100, 1);
 assert.equal(
@@ -455,6 +553,19 @@ let openBranchDraft = {
 };
 openBranchDraft = tickCastleRun(openBranchDraft, 100, 1);
 assert.deepEqual(new Set(openBranchDraft.rewardChoices), new Set(["springTail", "dewSatchel", "pollenPuff"]), "owning Mendlet Egg should open both of its evolution choices in later drafts");
+
+let evolutionFinisherDraft = {
+  ...freshRun(),
+  upgrades: ["splitNursery", "bubbleBrood"],
+  draftPoolIds: ["springTail", "firstRecall", "stretchyLegs"],
+  battle: branchDraftBattle,
+};
+evolutionFinisherDraft = tickCastleRun(evolutionFinisherDraft, 100, 1);
+assert.equal(
+  evolutionFinisherDraft.rewardChoices.includes("stretchyLegs"),
+  true,
+  "a draft should guarantee an eligible category finisher when an evolution is one mutation away",
+);
 
 let echoMoth = {
   ...freshRun(),
@@ -600,7 +711,7 @@ assert.equal(encounterProfile.discoveredEnemyKinds.includes("echoMoth"), true, "
 
 let hasted = { ...freshRun(), upgrades: ["cleanStreak"], battle: { ...freshRun().battle, energy: 12 } };
 for (let index = 0; index < 5; index += 1) hasted = applyCastleStudyOutcome(hasted, outcome(index));
-hasted = summonCastleUnit(hasted, "dartlet");
+hasted = summonCastleUnit(readyCommand(hasted, "dartlet"), "dartlet");
 hasted = resumeCastleBattle(hasted);
 hasted = tickCastleRun(hasted, 100, 1);
 const hastedDartlet = hasted.battle.units.find(unit => unit.kind === "dartlet");
@@ -621,6 +732,8 @@ reviewProgress = saveCastleRun("mechanics", { ...freshRun(), reviews: 3 });
 assert.equal(reviewProgress.totalReviews, startingTotalReviews + 7, "review totals should accumulate across separate runs");
 const legacyStudySave = JSON.parse(localStorage.getItem("lexicon_labyrinth_castle_runs_v1"));
 delete legacyStudySave.mechanics.run.studySummary;
+delete legacyStudySave.mechanics.run.difficultyId;
+delete legacyStudySave.mechanics.run.battle.difficultyId;
 legacyStudySave.mechanics.run.recallMode = "typed";
 delete legacyStudySave.mechanics.run.upgrades;
 delete legacyStudySave.mechanics.run.draftPoolIds;
@@ -630,8 +743,11 @@ delete legacyStudySave.mechanics.run.battle.recalledDirectionKeys;
 delete legacyStudySave.mechanics.run.battle.fxEvents;
 delete legacyStudySave.mechanics.run.battle.telemetry.responseMs;
 legacyStudySave.mechanics.run.battle.units.push({ kind: "retired-prototype-enemy", side: "enemy" });
+legacyStudySave.mechanics.run.battle.units.push(testUnit("nibbleImp", "enemy", "legacy-affix", { affix: "retired-affix" }));
 localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify(legacyStudySave));
 const restoredLegacyRun = loadCastleRun("mechanics");
+assert.equal(restoredLegacyRun.difficultyId, "standard", "legacy runs should migrate to Standard Siege");
+assert.equal(restoredLegacyRun.battle.difficultyId, "standard", "legacy battle state should inherit the migrated difficulty");
 assert.equal(restoredLegacyRun.recallMode, "balanced", "legacy typing runs should migrate to non-typing Balanced Recall");
 assert.deepEqual(
   restoredLegacyRun.studySummary,
@@ -642,6 +758,7 @@ assert.deepEqual(restoredLegacyRun.battle.missedDirectionKeys, [], "old runs sho
 assert.deepEqual(restoredLegacyRun.battle.recalledDirectionKeys, [], "old runs should recover a safe recalled-direction list");
 assert.deepEqual(restoredLegacyRun.battle.telemetry.responseMs, [], "old runs should recover a safe response-time list");
 assert.equal(restoredLegacyRun.battle.units.some(unit => unit.kind === "retired-prototype-enemy"), false, "unknown prototype units should be discarded during recovery");
+assert.equal(restoredLegacyRun.battle.units.find(unit => unit.id === "legacy-affix").affix, null, "unknown enemy affixes should be cleared during recovery");
 assert.doesNotThrow(
   () => applyCastleStudyOutcome(restoredLegacyRun, outcome(99)),
   "a repaired prototype run should accept the next study outcome without crashing",
@@ -656,14 +773,17 @@ saveCastleRun("mechanics", {
     ...preBriefingGuardianSave.battle,
     guardian: true,
     guardianPhase: 1,
+    guardianAbilityTimerMs: 999_999,
     guardianPowerId: "shellReprisal",
     activeTimeMs: 0,
   },
 });
 const preBriefingSaveFile = JSON.parse(localStorage.getItem("lexicon_labyrinth_castle_runs_v1"));
 delete preBriefingSaveFile.mechanics.run.battle.guardianBriefingPending;
+delete preBriefingSaveFile.mechanics.run.battle.guardianAbilityTimerMs;
 localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify(preBriefingSaveFile));
 assert.equal(loadCastleRun("mechanics").battle.guardianBriefingPending, true, "an untouched legacy guardian should recover with its safety briefing pending");
+assert.equal(loadCastleRun("mechanics").battle.guardianAbilityTimerMs, 8_000, "a legacy guardian should recover with a fully telegraphed first signature");
 clearCastleRun("mechanics");
 
 let progressionRun = freshRun();
@@ -812,8 +932,8 @@ const exhaustedMutationEvent = eventState("rootOracle", 50, 5, {
 });
 assert.equal(
   getCastleEventChoiceEffect(exhaustedMutationEvent, "oracleListen"),
-  "Lose 8 HP; no new mutation remains, so gain 3 energy.",
-  "an exhausted mutation event should disclose its energy fallback before the player chooses",
+  "Lose 8 HP; no new mutation remains, so gain 3 Goo.",
+  "an exhausted mutation event should disclose its Goo fallback before the player chooses",
 );
 const exhaustedOracle = resolveCastleEvent(exhaustedMutationEvent, "oracleListen");
 assert.equal(exhaustedOracle.battle.playerCastleHp, 42, "the exhausted Oracle fallback should still charge the disclosed HP cost");
@@ -857,7 +977,9 @@ guardian = {
     ...guardian.battle,
     guardian: true,
     guardianPhase: 1,
+    guardianAbilityTimerMs: 999_999,
     mode: "study",
+    combatBeatRemainingMs: 4_000,
     enemyCastleMaxHp: 100,
     enemyCastleHp: 60,
     autoSpawnTimerMs: 999_999,
@@ -892,6 +1014,11 @@ assert.equal(getCastleBattleProgress(endlessStart), "Moon Ascension 1 · Castle 
 assert.equal(getCastleBattleProgress({ ...freshRun(), targetRegions: 1, region: 2 }), "Deep run · Region 2 · Castle 1/3", "continuing beyond a short contract should label the deeper named region clearly");
 assert.equal(getCastleGuardianPower(4).id, "rootQuake", "the first endless region should introduce the Root Quake guardian stance");
 assert.equal(getCastleGuardianPower(5).id, "broodCall", "the second endless region should introduce the Brood Call guardian stance");
+for (let region = 1; region <= 5; region += 1) {
+  const guardianIdentity = getCastleGuardianPower(region);
+  assert.match(guardianIdentity.epithet, /^Mallow, /, "every guardian stance should have a named Mallow form");
+  assert.ok(guardianIdentity.counterplay.length >= 40, "every guardian briefing should teach concrete counterplay");
+}
 
 let scaledWave = {
   ...endlessStart,
@@ -912,6 +1039,72 @@ assert.ok(ascendedShell, "an endless wave should still spawn its announced unit"
 assert.equal(ascendedShell.maxHp, 20, "Moon Ascension 1 should add ten percent enemy health");
 assert.equal(ascendedShell.damageBonus, 1, "Moon Ascension 1 should add its first attack bonus");
 assert.equal(ascendedShell.shield, 8, "ascended armored enemies should gain two barrier per early tier");
+assert.equal(getCastleEnemyAffix(0, 1), null, "named regions should never create Moon Marks");
+assert.equal(getCastleEnemyAffix(1, 1), "armored", "Moon Ascension 1 should introduce Shell-marked waves");
+assert.equal(getCastleEnemyAffix(2, 3), "frenzied", "Moon Ascension 2 should introduce Rush-marked waves");
+assert.equal(getCastleEnemyAffix(3, 5), "giant", "Moon Ascension 3 should introduce Crown-marked waves");
+assert.match(CASTLE_ENEMY_AFFIX_DEFS.frenzied.description, /22% faster/, "Moon Mark rules should disclose their exact combat effect");
+
+function spawnedAffixUnit(tier, spawnIndex, kind = "nibbleImp") {
+  const base = freshRun();
+  const spawned = tickCastleRun({
+    ...base,
+    region: 3 + tier,
+    battle: {
+      ...base.battle,
+      enemyThreatTier: tier,
+      enemySpawnCount: spawnIndex,
+      mode: "study",
+      enemySpawnTimerMs: 0,
+      nextEnemyKind: kind,
+      afterNextEnemyKind: kind,
+      autoSpawnTimerMs: 999_999,
+      playerTurretTimerMs: 999_999,
+      enemyTurretTimerMs: 999_999,
+    },
+  }, 100, 1);
+  return spawned.battle.units.find(unit => unit.side === "enemy");
+}
+
+const armoredElite = spawnedAffixUnit(1, 1);
+assert.equal(armoredElite.affix, "armored", "the previewed Shell mark should be attached to the spawned enemy");
+assert.equal(armoredElite.shield, 6, "Shell-marked enemies should arrive with six extra barrier");
+const frenziedElite = spawnedAffixUnit(2, 3);
+assert.equal(frenziedElite.affix, "frenzied", "the previewed Rush mark should be attached to the spawned enemy");
+assert.equal(frenziedElite.damageBonus, 2, "Rush-marked enemies should stack one bonus damage with ascension damage");
+const giantElite = spawnedAffixUnit(3, 5);
+assert.equal(giantElite.affix, "giant", "the previewed Crown mark should be attached to the spawned enemy");
+assert.equal(giantElite.maxHp, 15, "Crown-marked Nibble Imps should stack 35% health with Ascension 3 health");
+
+let affixTimingRun = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [testUnit("nibbleImp", "enemy", "rush-timing", { affix: "frenzied", position: 2, attackCooldownMs: 0 })],
+  },
+};
+affixTimingRun = tickCastleRun(affixTimingRun, 100, 1);
+assert.equal(affixTimingRun.battle.units.find(unit => unit.id === "rush-timing").attackCooldownMs, CASTLE_UNIT_DEFS.nibbleImp.attackMs * 0.78, "Rush-marked enemies should recover attacks 22% faster");
+
+let giantMovementRun = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [testUnit("nibbleImp", "enemy", "giant-movement", { affix: "giant", position: 80 })],
+  },
+};
+giantMovementRun = tickCastleRun(giantMovementRun, 250, 1);
+assert.ok(giantMovementRun.battle.units.find(unit => unit.id === "giant-movement").position > 78.5, "Crown-marked enemies should move 22% slower than ordinary Nibble Imps");
 
 function guardianAtThreat(tier, phase, enemyCastleHp, playerBarrier = 0) {
   const base = freshRun();
@@ -923,6 +1116,7 @@ function guardianAtThreat(tier, phase, enemyCastleHp, playerBarrier = 0) {
       ...base.battle,
       guardian: true,
       guardianPhase: phase,
+      guardianAbilityTimerMs: 999_999,
       enemyThreatTier: tier,
       mode: "study",
       enemyCastleMaxHp: 100,
@@ -975,7 +1169,7 @@ const moonStance = tickCastleRun({
   battle: { ...moonStanceBase.battle, guardianPowerId: "moonTax", energy: 2 },
 }, 100, 1);
 assert.equal(moonStance.battle.energy, 1, "Moon Tax should drain one stored energy at a phase change");
-assert.match(moonStance.battle.notice, /Moon Tax drained 1 energy/, "Moon Tax should explain the exact energy loss");
+assert.match(moonStance.battle.notice, /Moon Tax drained 1 Goo/, "Moon Tax should explain the exact Goo loss");
 
 const quakeStanceBase = guardianAtThreat(1, 1, 60);
 const quakeStance = tickCastleRun({
@@ -1007,5 +1201,51 @@ const finalBroodStance = tickCastleRun({
   battle: { ...finalBroodStanceBase.battle, guardianPowerId: "broodCall" },
 }, 100, 1);
 assert.ok(finalBroodStance.battle.units.some(unit => unit.kind === "shellSlime"), "Brood Call should add an armored Shell Slime at phase three");
+
+function triggerSignature(powerId, units = [], energy = 2, phase = 1) {
+  const base = guardianAtThreat(0, phase, 100);
+  return tickCastleRun({
+    ...base,
+    battle: {
+      ...base.battle,
+      guardianPowerId: powerId,
+      guardianAbilityTimerMs: 0,
+      energy,
+      units,
+    },
+  }, 100, 1);
+}
+
+const chorusTarget = testUnit("shellSlime", "enemy", "chorus-target", { shield: 1 });
+const chorusSignature = triggerSignature("shellReprisal", [chorusTarget]);
+assert.equal(chorusSignature.battle.units.find(unit => unit.id === "chorus-target").shield, 3, "Shell Chorus should grant two recurring barrier");
+assert.match(chorusSignature.battle.notice, /Shell Chorus/, "Shell Chorus should announce its target count");
+
+const squallTarget = testUnit("piplet", "player", "squall-target");
+const squallSignature = triggerSignature("sporeWeather", [squallTarget]);
+assert.equal(squallSignature.battle.units.find(unit => unit.id === "squall-target").slowMs, 2_500, "Spore Squall should slow the formation for 2.5 seconds");
+
+const titheSignature = triggerSignature("moonTax", [], 2);
+assert.equal(titheSignature.battle.energy, 1.5, "Moon Tithe should drain half a stored Goo");
+
+const tremorTarget = testUnit("piplet", "player", "tremor-target", { shield: 1 });
+const tremorSignature = triggerSignature("rootQuake", [tremorTarget]);
+assert.equal(tremorSignature.battle.units.find(unit => unit.id === "tremor-target").hp, CASTLE_UNIT_DEFS.piplet.hp - 1, "Root Tremor damage should be shieldable");
+
+const drumSignature = triggerSignature("broodCall");
+assert.equal(drumSignature.battle.units.some(unit => unit.kind === "nibbleImp"), true, "Brood Drum should hatch a recurring attacker");
+assert.ok(drumSignature.battle.guardianAbilityTimerMs >= 8_500, "every guardian signature should reset to a visible planning interval");
+
+const markedBroodBase = guardianAtThreat(3, 1, 100);
+const unmarkedBroodBonus = tickCastleRun({
+  ...markedBroodBase,
+  battle: {
+    ...markedBroodBase.battle,
+    guardianPowerId: "broodCall",
+    guardianAbilityTimerMs: 0,
+    enemySpawnCount: 1,
+  },
+}, 100, 1);
+assert.equal(unmarkedBroodBonus.battle.units.find(unit => unit.kind === "nibbleImp").affix, null, "unpreviewed guardian bonus summons should never inherit a Moon Mark");
 
 process.stdout.write("Castle mechanics assertions passed.\n");

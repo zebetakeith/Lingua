@@ -227,6 +227,17 @@ export function getCorrectAnswerReward(
   return roundAp(Math.max(0.1, Math.min(3.5, baseReward * repeatReward * questionReward * dueReward)));
 }
 
+export const STUDY_COMBAT_RECALL_STIPEND = 0.25;
+
+export function getCorrectAnswerCombatReward(
+  progress: DirectionStudyProgress,
+  questionType: StudyQuestionType,
+  curve: StudyRewardCurve,
+  now = Date.now(),
+): number {
+  return roundAp(getCorrectAnswerReward(progress, questionType, curve, now) + STUDY_COMBAT_RECALL_STIPEND);
+}
+
 export function getStudyPressureProfile(progress: DirectionStudyProgress): StudyPressureProfile {
   if (progress.mastery < 0.22) return { label: "Struggling", graceMs: 4_000, combatSpeed: 0.75 };
   if (progress.mastery < 0.48) return { label: "Learning", graceMs: 3_500, combatSpeed: 0.9 };
