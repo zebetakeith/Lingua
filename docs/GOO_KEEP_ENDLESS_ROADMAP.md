@@ -1,48 +1,53 @@
 # Goo Keep endless progression roadmap
 
-This document keeps the intended long-run shape visible while Goo Keep grows beyond its first complete contract.
+This document records the current long-run design and the remaining work. The game code and automated balance suite are authoritative when numbers differ.
 
 ## Shipped foundation
 
-- Every region after the three-region contract becomes a Moon Ascension.
-- Each ascension adds 10% enemy health and grants +1 attack every two tiers.
-- Armored enemy families gain extra barrier.
-- Ascension guardians add an Echo Moth escort in phase 2, Spore support from tier 2, and a barrier-aware Moon Pulse from tier 3.
-- Guardian regions rotate three disclosed stances: Shell Reprisal, Spore Weather, and Moon Tax.
-- Armies have no hard population cap. Three melee and two ranged units can engage one target at once; reserves replace defeated frontliners.
+- Every region after the three named regions becomes a Moon Ascension with a retire-or-continue checkpoint after its guardian.
+- Each ascension adds 10% enemy health and +1 attack every two tiers.
+- Scheduled endless waves gain previewed Moon Marks: Shell-marked enemies arrive with extra barrier, Rush-marked enemies attack faster, and Crown-marked enemies become slower heavyweights.
+- Bonus guardian summons never receive an untelegraphed Moon Mark.
+- Six animated enemy families cover armor, rushing, ranged slow, death burst, Goo siphon, and siege roles.
+- Guardian phases add reinforcements at 66% and 33% health. Ascension phases add Echo Moths, Spore Buds, and Moon Pulse at disclosed tiers.
+- Five named Mallow forms rotate distinct stances and recurring signatures: Shell Reprisal, Spore Weather, Moon Tax, Root Quake, and Brood Call. Every briefing teaches explicit counterplay.
+- The army has ten population spaces. Three melee and two ranged units can engage one target at once; reserves replace defeated frontliners.
+- The command deck offers four rotating cards, one free pre-play refresh, and at most one summon plus one keep power per answer.
+- Four category evolutions fuse three compatible mutations into Brood Heart, Nursery Engine, Keeper Instinct, or Memory Bloom. A 2/3 build is guaranteed an eligible finisher in a future draft.
+- Endless checkpoints show the carried build, next threat, permanent safety, and the risk of losing temporary mutations.
+- Persistent deck-world progress records deepest region, completed runs, guardian clears, discoveries, and keepsake unlocks.
 
-## Next content layers
+## Remaining content layers
 
-1. **Guardian identities and affixes**
-   - Grow the three initial stances into multiple named guardians instead of repeating one character and stat curve.
-   - Give each guardian a visible combination of stance powers, such as Nursery Lock alongside the shipped Shell Reprisal, Spore Weather, and Moon Tax rules.
-   - Telegraph every power before it resolves and record it in the field guide after discovery.
+1. **Major guardian characters**
+   - The five Mallow forms now have distinct rules, names, animated accessories, auras, phase displays, and counterplay, but they still share one character rig.
+   - A later art pass can introduce separate major-boss characters on a longer cadence without changing the existing stance contracts.
+   - Any new boss power must be previewed before combat and added to the field guide.
 
-2. **Regional enemy families**
-   - Add themed enemy pools with complementary jobs: tanks, divers, healers, summoners, siege units, and formation disruptors.
-   - Let later ascensions combine families, not merely inflate numbers.
-   - Give each family readable silhouettes, full movement/attack/hurt/pop animation, and an explicit counter in the guide.
+2. **More regional combinations**
+   - The current six-family roster is mechanically complete enough for the core game.
+   - Future families should fill genuinely new jobs such as enemy healing, summoning, or backline diving and require full movement, attack, hurt, and pop animation before shipping.
+   - Later ascensions should remix family combinations and Moon Marks before adding more raw stat growth.
 
-3. **Player arsenal growth**
-   - Unlock new minions, castle attacks, defensive spells, and economy powers through permanent deck-world milestones.
-   - Keep each summon tactically distinct so mixed formations beat cheap-unit spam without invalidating swarm builds.
-   - Add pre-run loadout choices once the available roster is larger than the command panel can clearly hold.
+3. **Player loadouts**
+   - Permanent milestones already unlock keepsakes, mutations, Mendlet, and keep powers.
+   - Add pre-run roster/loadout choices only when the available command deck becomes too large to remain legible.
+   - Preserve mixed-formation incentives and the ten-space army cap.
 
-4. **Mutation evolution**
-   - Let compatible run mutations fuse into named advanced forms.
-   - Add minion mutations that visibly change art and behavior, not only stats.
-   - Use controlled draft pools and duplicate protection so builds develop a recognizable identity during long runs.
+4. **Mutation art states**
+   - Category evolutions now change mechanics and add visible battlefield auras or keep effects.
+   - A future asset pass can give individual minion branches changed silhouettes while retaining clear base-unit recognition.
 
-5. **Endless run structure**
-   - Insert a guardian every third castle and a major boss on a longer cadence.
-   - Offer a retire-or-continue checkpoint after each guardian, with the next threat rules shown before committing.
-   - Add score, deepest ascension, guardian history, and study-quality summaries without rewarding rushed or careless answers.
+5. **Long-run records**
+   - Deepest region and study-quality summaries already persist.
+   - Remaining optional metagame work includes guardian history, personal best comparisons, and a score that never rewards rushed or careless answers.
 
 ## Balance principles
 
-- Difficulty should come from new decisions and enemy combinations before raw stat growth.
+- Difficulty comes from new decisions and enemy combinations before raw stat growth.
 - New-card lessons always freeze combat and remain ungraded.
-- Seen-card pressure may escalate, but menus, interruptions, correction steps, and accessibility pauses must never count against response time.
-- Harder recalled cards may pay substantially more energy, but no curve should make deliberate forgetting or repeated failure profitable.
-- Wrong answers create recoverable pressure: faster waves, Rally, and visible enemy actions—not lost flashcard progress.
-- Every boss rule, cost, cap, and exception must be communicated before it can punish the player.
+- Seen-card pressure may escalate, but menus, interruptions, correction steps, guardian briefings, and accessibility pauses never count against response time.
+- Harder recalled cards pay substantially more Goo, but no curve makes deliberate forgetting or repeated failure profitable.
+- Wrong answers create recoverable pressure through faster waves, Rally, and visible enemy actions—not lost flashcard progress.
+- Every boss rule, elite mark, cost, cap, and exception is communicated before it can punish the player.
+- High-mastery seeded balance runs must reach endless play, and at least one must reach Ascension 2; ordinary long runs may still be lost.

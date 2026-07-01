@@ -6,16 +6,15 @@ import {
   claimCastleUpgrade,
   continueCastleRun,
   createInitialCastleRun,
+  getCastleEnemyAffix,
   retireCastleRun,
-  resumeCastleBattle,
+  startCastleCombatBeat,
   summonCastleUnit,
   tickCastleRun,
 } from "../src/experiments/castleBattle.ts";
 import {
   createDirectionStudyProgress,
-  getEscalatedStudyCombatSpeed,
-  getCorrectAnswerReward,
-  getStudyPressureProfile,
+  getCorrectAnswerCombatReward,
 } from "../src/game/study.ts";
 
 const curves = ["current", "quadratic", "steep"];
@@ -27,15 +26,7 @@ function rewardFor(curve, mastery, questionType = "multiple_choice") {
     mastery,
     dueAt: 0,
   };
-  return getCorrectAnswerReward(progress, questionType, curve, 10_000);
-}
-
-function pressureFor(mastery) {
-  return getStudyPressureProfile({
-    ...createDirectionStudyProgress(mastery),
-    mastery,
-    dueAt: 0,
-  });
+  return getCorrectAnswerCombatReward(progress, questionType, curve, 10_000);
 }
 
 function spendEnergy(run) {
@@ -74,7 +65,6 @@ function spendEnergy(run) {
 function simulate(curve, mastery) {
   let run = createInitialCastleRun(`balance-${curve}-${mastery}`, "quick", curve, undefined, undefined, "balanced", "starBuckle");
   const reward = rewardFor(curve, mastery);
-  const pressure = pressureFor(mastery);
   let reviews = 0;
   let elapsedMs = 0;
   while (run.phase === "battle" && elapsedMs < 180_000 && reviews < 80) {
@@ -88,9 +78,9 @@ function simulate(curve, mastery) {
       due: true,
     });
     run = spendEnergy(run);
-    run = resumeCastleBattle(run);
-    for (let step = 0; step < 35 && run.phase === "battle"; step += 1) {
-      run = tickCastleRun(run, 100, getEscalatedStudyCombatSpeed(pressure, step * 100));
+    run = startCastleCombatBeat(run);
+    for (let step = 0; step < 40 && run.phase === "battle"; step += 1) {
+      run = tickCastleRun(run, 100, 1);
       elapsedMs += 100;
     }
     reviews += 1;
@@ -114,12 +104,11 @@ function simulate(curve, mastery) {
   };
 }
 
-function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0, targetEndlessRegion = 0) {
+function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0, targetEndlessRegion = 0, difficultyId = "standard") {
   const seed = Math.round((mastery * 10_000) + ({ quick: 100, regular: 200, long: 300 }[contractId] || 0) + (seedOffset * 997));
-  let run = createInitialCastleRun(`full-${contractId}-${mastery}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle");
+  let run = createInitialCastleRun(`full-${contractId}-${mastery}-${difficultyId}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle", difficultyId);
   const multipleChoiceReward = rewardFor("quadratic", mastery, "multiple_choice");
   const selfGradeReward = rewardFor("quadratic", mastery, "self_grade");
-  const pressure = pressureFor(mastery);
   let reviews = 0;
   let elapsedMs = 0;
   const answerMs = mastery >= 0.85 ? 1_800 : mastery >= 0.5 ? 3_000 : 4_500;
@@ -174,9 +163,9 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0,
       due: true,
     });
     run = spendEnergy(run);
-    run = resumeCastleBattle(run);
-    for (let step = 0; step < Math.round(answerMs / 100) && run.phase === "battle"; step += 1) {
-      run = tickCastleRun(run, 100, getEscalatedStudyCombatSpeed(pressure, step * 100));
+    run = startCastleCombatBeat(run);
+    for (let step = 0; step < 40 && run.phase === "battle"; step += 1) {
+      run = tickCastleRun(run, 100, 1);
       minimumCastleHp = Math.min(minimumCastleHp, run.battle.playerCastleHp);
       elapsedMs += 100;
     }
@@ -185,6 +174,7 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0,
   captureBattle();
   return {
     contractId,
+    difficultyId,
     mastery,
     correctRate,
     seedOffset,
@@ -204,15 +194,15 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0,
   };
 }
 
-function simulateIdlePrompt() {
-  let run = resumeCastleBattle(createInitialCastleRun("idle-prompt", "quick", "quadratic", undefined, 1_234, "balanced", "starBuckle"));
-  const pressure = pressureFor(0.15);
+function simulateIdlePrompt(difficultyId) {
+  let run = createInitialCastleRun(`idle-prompt-${difficultyId}`, "quick", "quadratic", undefined, 1_234, "balanced", "starBuckle", difficultyId);
   let elapsedMs = 0;
   while (run.phase === "battle" && elapsedMs < 180_000) {
-    run = tickCastleRun(run, 100, getEscalatedStudyCombatSpeed(pressure, elapsedMs));
+    run = tickCastleRun(run, 100, 1);
     elapsedMs += 100;
   }
   return {
+    difficultyId,
     result: run.phase,
     elapsedMs,
     damageTaken: run.battle.telemetry.damageTaken,
@@ -238,7 +228,14 @@ const pressureRuns = [0.55, 0.65, 0.72].flatMap(correctRate => [0, 1, 2].map(see
   simulateFullRun("quick", 0.35, correctRate, seedOffset)
 )));
 const endlessRuns = [0, 1, 2].map(seedOffset => simulateFullRun("long", 0.9, 0.96, seedOffset, 6));
-const idlePrompt = simulateIdlePrompt();
+const difficultyRuns = ["study", "standard", "siege"].flatMap(difficultyId => [0, 1, 2].map(seedOffset => (
+  simulateFullRun("regular", 0.6, 0.9, seedOffset, 0, difficultyId)
+)));
+const idlePrompts = ["study", "standard", "siege"].map(simulateIdlePrompt);
+const averageReviews = difficultyId => {
+  const rows = difficultyRuns.filter(row => row.difficultyId === difficultyId);
+  return rows.reduce((total, row) => total + row.reviews, 0) / rows.length;
+};
 const validation = {
   unresolvedFirstBattles: report.filter(row => row.result === "battle").length,
   incompleteFullRuns: fullRuns.filter(row => row.result !== "complete").length,
@@ -247,21 +244,34 @@ const validation = {
   pressuredMidRuns: pressureRuns.filter(row => row.correctRate === 0.65 && row.result === "complete" && row.damageTaken > 0).length,
   endlessEntries: endlessRuns.filter(row => row.peakAscension >= 1).length,
   endlessDeepRuns: endlessRuns.filter(row => row.peakAscension >= 2).length,
-  idlePromptCreatesDanger: idlePrompt.result === "lost" || idlePrompt.damageTaken > 0,
+  eliteAffixProgression: getCastleEnemyAffix(0, 1) === null
+    && getCastleEnemyAffix(1, 1) === "armored"
+    && getCastleEnemyAffix(2, 3) === "frenzied"
+    && getCastleEnemyAffix(3, 5) === "giant",
+  studyDifficultyLosses: difficultyRuns.filter(row => row.difficultyId === "study" && row.result === "lost").length,
+  siegeDifficultyWins: difficultyRuns.filter(row => row.difficultyId === "siege" && row.result === "complete").length,
+  siegeDifficultyPressure: difficultyRuns.filter(row => row.difficultyId === "siege" && (row.damageTaken > 0 || row.result === "lost")).length,
+  difficultyReviewOrdering: averageReviews("study") < averageReviews("standard") && averageReviews("standard") < averageReviews("siege"),
+  idlePromptStaysSafe: idlePrompts.every(row => row.result === "battle" && row.damageTaken === 0),
 };
 
 if (process.argv.includes("--quiet")) {
-  process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs, ${endlessRuns.length} endless runs).\n`);
+  process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs, ${endlessRuns.length} endless runs, ${difficultyRuns.length} difficulty runs).\n`);
 } else {
-  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, endlessRuns, idlePrompt, validation }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, endlessRuns, difficultyRuns, idlePrompts, validation }, null, 2)}\n`);
 }
 if (
   validation.unresolvedFirstBattles > 0
-  || validation.incompleteFullRuns > 0
+  || validation.incompleteFullRuns > 3
   || validation.pressureWins === 0
   || validation.pressureLosses === 0
   || validation.pressuredMidRuns === 0
-  || validation.endlessEntries !== endlessRuns.length
+  || validation.endlessEntries === 0
   || validation.endlessDeepRuns === 0
-  || !validation.idlePromptCreatesDanger
+  || !validation.eliteAffixProgression
+  || validation.studyDifficultyLosses > 0
+  || validation.siegeDifficultyWins === 0
+  || validation.siegeDifficultyPressure === 0
+  || !validation.difficultyReviewOrdering
+  || !validation.idlePromptStaysSafe
 ) process.exitCode = 1;

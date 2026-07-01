@@ -9,10 +9,15 @@ globalThis.localStorage = {
 };
 
 const { answerStudyQuestion, completeStudyExposure, drawStudyQuestion, getStudyDecks, getStudyDirectionLabel, introduceStudyCards, isStudyQuestionUnavailableError, selectStudyDeck, tryDrawStudyQuestion } = await import("../src/game/studyBridge.ts");
-const { createDirectionStudyProgress, getActiveStudyResponseMs, getEscalatedStudyCombatSpeed, updateDirectionStudyProgress } = await import("../src/game/study.ts");
+const { createDirectionStudyProgress, getActiveStudyResponseMs, getCorrectAnswerCombatReward, getEscalatedStudyCombatSpeed, updateDirectionStudyProgress } = await import("../src/game/study.ts");
 const { JAPANESE_STARTER_DECK_ID, STARTER_JAPANESE } = await import("../src/data/starterJapanese.ts");
 const { parseJapaneseFlashcardImport } = await import("../src/game/japaneseImport.ts");
 const { createJapaneseTileChoices } = await import("../src/game/japaneseTiles.ts");
+
+const fluentCombatReward = getCorrectAnswerCombatReward({ ...createDirectionStudyProgress(0.95), dueAt: 0 }, "multiple_choice", "quadratic", 10_000);
+const strugglingCombatReward = getCorrectAnswerCombatReward({ ...createDirectionStudyProgress(0.15), dueAt: 0 }, "multiple_choice", "quadratic", 10_000);
+assert.ok(fluentCombatReward >= 0.65, "fluent recalls should still fund a viable command economy");
+assert.ok(strugglingCombatReward >= fluentCombatReward * 2.5, "difficult recalls should retain a much larger combat reward");
 
 assert.equal(STARTER_JAPANESE.length, 0, "Japanese-first should provide study tools without authoring the learner's deck");
 const tabImport = parseJapaneseFlashcardImport("Written\tReading\tMeaning\n美味しい\tおいしい\tdelicious\n食べる\tたべる\tto eat", []);
@@ -110,6 +115,7 @@ assert.equal(builderQuestion.direction, "reading_to_term", "three-sided Japanese
 assert.equal(builderQuestion.questionType, "tile_builder", "reading-to-written recall should use tiles instead of a keyboard or guessable whole-word choice");
 assert.equal(builderQuestion.prompt, "おいしい", "the tile prompt should be the imported kana reading");
 assert.equal(builderQuestion.answer, "美味しい", "the tile target should be the imported written form");
+assert.deepEqual(builderQuestion.referenceSide, { label: "Meaning", value: "delicious", referenceOnly: true }, "a reading-to-written lesson should expose meaning as clearly marked reference data");
 assert.ok(builderQuestion.tiles.length > 4, "a tile question should include script-matched distractors");
 completeStudyExposure("japanese-builder", builderQuestion, "hard");
 const hardRatedDeck = JSON.parse(values.get("lexicon_labyrinth_save")).decks.find(deck => deck.id === "japanese-builder");

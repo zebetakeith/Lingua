@@ -9,7 +9,7 @@ import STARTER_JAPANESE, {
 import {
   DEFAULT_STUDY_SETTINGS,
   chooseQuestionType,
-  getCorrectAnswerReward,
+  getCorrectAnswerCombatReward,
   getEnabledStudyDirections,
   getInitialMastery,
   getMasteryLabel,
@@ -113,6 +113,11 @@ export interface StudyQuestion {
   prompt: string;
   answer: string;
   definition: string;
+  referenceSide: {
+    label: string;
+    value: string;
+    referenceOnly: true;
+  } | null;
   direction: StudyDirection;
   questionType: StudyQuestionType;
   options: string[];
@@ -416,13 +421,18 @@ export function drawStudyQuestion(
         : selected.card.definition,
     answer: selected.direction === "term_to_definition" ? selected.card.definition : selected.card.word,
     definition: selected.card.definition,
+    referenceSide: selected.card.reading
+      ? selected.direction === "reading_to_term"
+        ? { label: "Meaning", value: selected.card.definition, referenceOnly: true }
+        : { label: "Reading", value: selected.card.reading, referenceOnly: true }
+      : null,
     direction: selected.direction,
     questionType: effectiveQuestionType,
     options: effectiveQuestionType === "multiple_choice" ? candidateOptions : [],
     tiles,
     masteryBefore: selected.progress.mastery,
     masteryLabel: getMasteryLabel(selected.progress.mastery),
-    reward: seenBefore ? getCorrectAnswerReward(selected.progress, effectiveQuestionType, rewardCurve, now) : 0.25,
+    reward: seenBefore ? getCorrectAnswerCombatReward(selected.progress, effectiveQuestionType, rewardCurve, now) : 0.25,
     due: selected.progress.dueAt <= now,
     seenBefore,
     pressure: getStudyPressureProfile(selected.progress),

@@ -3,8 +3,10 @@ import {
   ALL_CASTLE_KEEPSAKE_IDS,
   ALL_CASTLE_GUARDIAN_POWER_IDS,
   CASTLE_CONTRACTS,
+  CASTLE_DIFFICULTIES,
   CASTLE_EVENT_DEFS,
   CASTLE_KEEPSAKE_DEFS,
+  CASTLE_POWER_DEFS,
   CASTLE_RUN_VERSION,
   CASTLE_UNIT_DEFS,
   STARTER_CASTLE_KEEPSAKE_IDS,
@@ -12,6 +14,9 @@ import {
   createInitialCastleRun,
   normalizeCastleRunStudySummary,
   type CastleContractId,
+  type CastleDifficultyId,
+  type CastleEnemyAffixId,
+  type CastleCommandCardId,
   type CastleEventId,
   type CastleKeepsakeId,
   type CastleRouteChoice,
@@ -44,10 +49,14 @@ interface CastleDeckRecord {
 type CastleSaveFile = Record<string, CastleDeckRecord>;
 const CASTLE_PHASES: CastleRunState["phase"][] = ["battle", "reward", "route", "event", "retire", "complete", "lost"];
 const CASTLE_ROUTES: CastleRouteChoice[] = ["battle", "rest", "workshop", "event"];
+const CASTLE_ENEMY_AFFIXES: CastleEnemyAffixId[] = ["armored", "frenzied", "giant"];
 
 function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunState | null {
   if (saved.version !== CASTLE_RUN_VERSION || !saved.battle) return null;
   const contractId: CastleContractId = saved.contractId in CASTLE_CONTRACTS ? saved.contractId : "regular";
+  const difficultyId: CastleDifficultyId = typeof saved.difficultyId === "string" && saved.difficultyId in CASTLE_DIFFICULTIES
+    ? saved.difficultyId as CastleDifficultyId
+    : "standard";
   const rewardCurve = ["current", "quadratic", "steep"].includes(saved.rewardCurve) ? saved.rewardCurve : "quadratic";
   const recallMode = saved.recallMode === "deck" ? "deck" : "balanced";
   const keepsakeId = saved.keepsakeId && ALL_CASTLE_KEEPSAKE_IDS.includes(saved.keepsakeId) ? saved.keepsakeId : null;
@@ -63,6 +72,7 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
     Number.isFinite(saved.rngState) ? saved.rngState : undefined,
     recallMode,
     keepsakeId,
+    difficultyId,
   );
   const battle = saved.battle;
   const telemetry = battle.telemetry || base.battle.telemetry;
@@ -73,12 +83,14 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
     ...(Array.isArray(battle.encounteredEnemyKinds) ? battle.encounteredEnemyKinds : []),
     ...(Array.isArray(battle.units) ? battle.units.filter(unit => unit?.side === "enemy").map(unit => unit.kind) : []),
   ].filter(kind => kind in CASTLE_UNIT_DEFS))) as CastleUnitKind[];
+  const validCommandCard = (id: unknown): id is CastleCommandCardId => typeof id === "string" && (id in CASTLE_UNIT_DEFS || id in CASTLE_POWER_DEFS);
   return {
     ...base,
     ...saved,
     version: CASTLE_RUN_VERSION,
     deckId,
     contractId,
+    difficultyId,
     rewardCurve,
     recallMode,
     keepsakeId,
@@ -93,6 +105,15 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
     battle: {
       ...base.battle,
       ...battle,
+      difficultyId,
+      combatBeatRemainingMs: Number.isFinite(battle.combatBeatRemainingMs) ? Math.max(0, battle.combatBeatRemainingMs) : 0,
+      commandWindowReady: Boolean(battle.commandWindowReady),
+      summonPlayedThisWindow: Boolean(battle.summonPlayedThisWindow),
+      powerPlayedThisWindow: Boolean(battle.powerPlayedThisWindow),
+      commandRefreshUsedThisWindow: Boolean(battle.commandRefreshUsedThisWindow),
+      commandHand: Array.isArray(battle.commandHand) ? battle.commandHand.filter(validCommandCard).slice(0, 4) : base.battle.commandHand,
+      commandDrawPile: Array.isArray(battle.commandDrawPile) ? battle.commandDrawPile.filter(validCommandCard) : base.battle.commandDrawPile,
+      commandDiscardPile: Array.isArray(battle.commandDiscardPile) ? battle.commandDiscardPile.filter(validCommandCard) : base.battle.commandDiscardPile,
       guardianPhase: battle.guardianPhase || (battle.guardian ? 1 : 0),
       guardianPowerId: battle.guardian
         ? battle.guardianPowerId && ALL_CASTLE_GUARDIAN_POWER_IDS.includes(battle.guardianPowerId)
@@ -104,6 +125,9 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
           ? battle.guardianBriefingPending
           : battle.activeTimeMs === 0
         : false,
+      guardianAbilityTimerMs: battle.guardian
+        ? Number.isFinite(battle.guardianAbilityTimerMs) ? Math.max(0, battle.guardianAbilityTimerMs) : 8_000
+        : 0,
       nextEnemyKind,
       afterNextEnemyKind,
       recallBoltCharge: battle.recallBoltCharge || 0,
@@ -114,7 +138,12 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
         : base.battle.enemyThreatTier,
       encounteredEnemyKinds,
       units: Array.isArray(battle.units)
-        ? battle.units.filter(unit => unit && unit.kind in CASTLE_UNIT_DEFS && (unit.side === "player" || unit.side === "enemy"))
+        ? battle.units
+          .filter(unit => unit && unit.kind in CASTLE_UNIT_DEFS && (unit.side === "player" || unit.side === "enemy"))
+          .map(unit => ({
+            ...unit,
+            affix: unit.side === "enemy" && unit.affix && CASTLE_ENEMY_AFFIXES.includes(unit.affix) ? unit.affix : null,
+          }))
         : [],
       fxEvents: Array.isArray(battle.fxEvents) ? battle.fxEvents : [],
       nextFxId: battle.nextFxId || 1,
