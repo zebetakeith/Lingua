@@ -1697,13 +1697,25 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       ) : current);
       setFeedback(nextFeedback);
     } else {
+      const previousKey = getStudyQuestionKey(question);
+      const nextQuestion = tryDrawStudyQuestion(selectedDeckId, run.rewardCurve, previousKey, run.recallMode);
       setFeedback(nextFeedback);
-      setQuestion(null);
+      setQuestion(nextQuestion);
       setReveal(false);
       setInterrupted(false);
-      setPanelMode("army");
-      setStudyBlocked(false);
-      setRun(current => current ? applyCastleStudyOutcome(current, outcome) : current);
+      setPanelMode("study");
+      setStudyBlocked(!nextQuestion);
+      if (nextQuestion) startQuestionTimer();
+      setRun(current => {
+        if (!current) return current;
+        const resolved = applyCastleStudyOutcome(current, outcome);
+        if (!nextQuestion) {
+          return pauseCastleBattle(resolved, "No active cards remain. Your reviews are safe; return to setup to choose a study world.");
+        }
+        return nextQuestion.seenBefore
+          ? resumeCastleBattle(resolved)
+          : pauseCastleBattle(resolved, "First exposure protected: combat remains paused while you learn this direction.");
+      });
     }
     setDecks(getStudyDecks());
   };
