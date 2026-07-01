@@ -42,7 +42,6 @@ import { splitJapaneseWrittenForm, type JapaneseStudyTile } from "../game/japane
 import {
   CASTLE_CONTRACTS,
   CASTLE_ARMY_CAPACITY,
-  CASTLE_COMBAT_BEAT_MS,
   CASTLE_DIFFICULTIES,
   CASTLE_ENEMY_AFFIX_DEFS,
   CASTLE_EVENT_DEFS,
@@ -81,7 +80,7 @@ import {
   recordCastleIntroductions,
   refreshCastleCommandHand,
   resolveCastleEvent,
-  startCastleCombatBeat,
+  resumeCastleBattle,
   retireCastleRun,
   summonCastleUnit,
   tickCastleRun,
@@ -480,7 +479,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
   const enemyUnits = battle.units.length - friendlyUnits;
   return (
     <section
-      className={`castle-scene ${battle.mode === "study" ? "is-live is-beat" : "is-paused"} ${battle.playerCastleHp <= battle.playerCastleMaxHp * 0.3 ? "is-low-health" : ""} ${battle.enemySpawnTimerMs <= 3_000 ? "is-wave-imminent" : ""} ${battle.guardian ? `is-guardian phase-${battle.guardianPhase}` : ""}`}
+      className={`castle-scene ${battle.mode === "study" ? "is-live" : "is-paused"} ${battle.playerCastleHp <= battle.playerCastleMaxHp * 0.3 ? "is-low-health" : ""} ${battle.enemySpawnTimerMs <= 3_000 ? "is-wave-imminent" : ""} ${battle.guardian ? `is-guardian phase-${battle.guardianPhase}` : ""}`}
       style={{
         "--region-sky-top": region.skyTop,
         "--region-sky-bottom": region.skyBottom,
@@ -500,11 +499,10 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
         <i className="is-left-mushroom" /><i className="is-right-mushroom" />
         <i className="is-grass-one" /><i className="is-grass-two" /><i className="is-grass-three" />
       </div>
-      {battle.mode === "study" && battle.combatBeatRemainingMs > 0 && (
+      {battle.mode === "study" && (
         <div className="castle-beat-banner" aria-hidden="true">
-          <span>Battle beat</span>
-          <b>{Math.max(1, Math.ceil(battle.combatBeatRemainingMs / 1_000))}</b>
-          <i><em style={{ width: `${Math.max(0, Math.min(100, ((CASTLE_COMBAT_BEAT_MS - battle.combatBeatRemainingMs) / CASTLE_COMBAT_BEAT_MS) * 100))}%` }} /></i>
+          <span>Battle live</span>
+          <b>●</b>
         </div>
       )}
       <div className="castle-scene-status">
@@ -513,7 +511,7 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
           <span>{getCastleBattleProgress(run)}</span>
           <b>{region.shortName}{endlessThreat.tier > 0 ? ` · A${endlessThreat.tier}` : ""}</b>
           <small>{difficulty.shortName} · {battle.guardian ? `Phase ${battle.guardianPhase}/3 · ${guardianPower?.name || "Guardian"}` : "Lane battle"}</small>
-          {battle.guardian && guardianPower && <em className={battle.guardianAbilityTimerMs <= CASTLE_COMBAT_BEAT_MS ? "is-imminent" : ""}>{battle.guardianBriefingPending ? "Signature paused" : `${guardianPower.signatureName} · ${Math.max(0, Math.ceil(battle.guardianAbilityTimerMs / 1_000))}s`}</em>}
+          {battle.guardian && guardianPower && <em className={battle.guardianAbilityTimerMs <= 4_000 ? "is-imminent" : ""}>{battle.guardianBriefingPending ? "Signature paused" : `${guardianPower.signatureName} · ${Math.max(0, Math.ceil(battle.guardianAbilityTimerMs / 1_000))}s`}</em>}
         </div>
         <CastleHealth current={battle.enemyCastleHp} max={battle.enemyCastleMaxHp} enemy />
       </div>
@@ -863,7 +861,7 @@ function StudyCard({
     ? "Ungraded first exposure · combat safely paused"
     : interrupted
       ? "Interrupted · combat paused"
-      : "Recall phase · battle waits for your answer";
+      : "Live recall · battle keeps moving";
   const directionLabel = question.direction === "term_to_definition"
     ? "Term → Meaning"
     : question.direction === "reading_to_term"
@@ -1184,9 +1182,9 @@ const CASTLE_TUTORIAL_STEPS = [
   },
   {
     icon: Clock3,
-    eyebrow: "Recall beat",
-    title: "Answer first, then command",
-    copy: "Seen cards pause the lane while you recall. Every correct recall earns a small command stipend, while harder cards still pay much more. Then one four-second battle beat runs.",
+    eyebrow: "Live recall",
+    title: "The battle moves while you remember",
+    copy: "Seen cards never stop the lane. Correct recalls earn Goo and refresh your command allowance, while harder cards still pay much more.",
   },
   {
     icon: Swords,
@@ -1276,7 +1274,6 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const latestRun = useRef<CastleRunState | null>(initial.run);
   const previousPhase = useRef<CastleRunState["phase"] | null>(initial.run?.phase || null);
   const pipploAnimationTimer = useRef<number | null>(null);
-  const battleBeatTimer = useRef<number | null>(null);
   const activeDialogRef = useRef<HTMLElement | null>(null);
   const dialogReturnFocus = useRef<HTMLElement | null>(null);
 
@@ -1385,7 +1382,6 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
   useEffect(() => () => {
     if (pipploAnimationTimer.current !== null) window.clearTimeout(pipploAnimationTimer.current);
-    if (battleBeatTimer.current !== null) window.clearTimeout(battleBeatTimer.current);
   }, []);
 
   useEffect(() => {
@@ -1586,11 +1582,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setInterrupted(showTutorial);
     setPanelMode("study");
     startQuestionTimer();
-    setRun(pauseCastleBattle(next, showTutorial
-      ? "Welcome to Goo Keep. Combat is paused during the tutorial."
+    setRun(showTutorial
+      ? pauseCastleBattle(next, "Welcome to Goo Keep. Combat is paused during the tutorial.")
       : nextQuestion.seenBefore
-        ? "Recall phase: the lane waits for your answer."
-        : "First exposure protected: combat remains paused while you learn this direction."));
+        ? resumeCastleBattle(next)
+        : pauseCastleBattle(next, "First exposure protected: combat remains paused while you learn this direction."));
     setDecks(getStudyDecks());
   };
 
@@ -1618,9 +1614,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setInterrupted(false);
     setPanelMode("study");
     startQuestionTimer();
-    setRun(pauseCastleBattle(baseRun, nextQuestion.seenBefore
-      ? "Recall phase: the lane waits for your answer."
-      : "First exposure protected: combat remains paused while you learn this direction."));
+    setRun(nextQuestion.seenBefore
+      ? resumeCastleBattle(baseRun)
+      : pauseCastleBattle(baseRun, "First exposure protected: combat remains paused while you learn this direction."));
   };
 
   const beginGuardianBattle = () => {
@@ -1633,18 +1629,20 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       return;
     }
     startQuestionTimer();
-    setRun(pauseCastleBattle(prepared, question.seenBefore
-      ? "Recall phase: the lane waits for your answer."
-      : "First exposure protected: combat remains paused while you learn this direction."));
+    setRun(question.seenBefore
+      ? resumeCastleBattle(prepared)
+      : pauseCastleBattle(prepared, "First exposure protected: combat remains paused while you learn this direction."));
   };
 
   const resumeInterruptedQuestion = () => {
     if (!question) return;
     setInterrupted(false);
     startQuestionTimer();
-    setRun(current => current ? pauseCastleBattle(current, question.seenBefore
-      ? "Recall phase resumed. The lane waits for your answer."
-      : "First exposure protected: combat remains paused.") : current);
+    setRun(current => current
+      ? question.seenBefore
+        ? resumeCastleBattle(current)
+        : pauseCastleBattle(current, "First exposure protected: combat remains paused.")
+      : current);
   };
 
   const finishReview = (correct: boolean) => {
@@ -1749,24 +1747,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       if (!current) return current;
       const resolved = applyCastleStudyOutcome(current, outcome);
       if (!nextQuestion) return pauseCastleBattle(resolved, "No active cards remain. Your reviews are safe; return to setup to choose a study world.");
-      return pauseCastleBattle(resolved, nextQuestion.seenBefore
-        ? "Recall phase: the lane waits for your answer."
-        : "New direction: combat remains paused while you learn both sides.");
+      return nextQuestion.seenBefore
+        ? resumeCastleBattle(resolved)
+        : pauseCastleBattle(resolved, "New direction: combat remains paused while you learn both sides.");
     });
     setDecks(getStudyDecks());
-  };
-
-  const marchBattleBeat = () => {
-    if (!run?.battle.commandWindowReady) return;
-    setFeedback(null);
-    setPanelMode("army");
-    setRun(current => current ? startCastleCombatBeat(current) : current);
-    if (battleBeatTimer.current !== null) window.clearTimeout(battleBeatTimer.current);
-    battleBeatTimer.current = window.setTimeout(() => {
-      battleBeatTimer.current = null;
-      const current = latestRun.current;
-      if (current?.phase === "battle" && current.battle.combatBeatRemainingMs === 0) beginQuestion(current);
-    }, 4_150);
   };
 
   const revealAnswer = () => {
@@ -1798,9 +1783,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setTutorialOpen(false);
     setInterrupted(false);
     startQuestionTimer();
-    setRun(current => current ? pauseCastleBattle(current, question?.seenBefore
-      ? "Recall phase: the lane waits for your answer."
-      : "New direction: combat remains paused while you learn both sides.") : current);
+    setRun(current => current
+      ? question?.seenBefore
+        ? resumeCastleBattle(current)
+        : pauseCastleBattle(current, "New direction: combat remains paused while you learn both sides.")
+      : current);
   };
 
   const summonUnit = (kind: CastleUnitKind) => {
@@ -1908,14 +1895,14 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
           : run.battle.guardianBriefingPending
             ? "Guardian briefing"
             : run.battle.mode === "study"
-              ? "Battle beat"
+              ? "Battle live"
               : question && !question.seenBefore ? "New card pause" : "Paused"}</b>
         <span>{run.battle.notice || run.notice}</span>
       </section>
 
       {run.phase === "battle" && (
         <nav className="castle-mode-switch" aria-label="Battle panel">
-          <button disabled={!question && (run.battle.commandWindowReady || simulationReady)} aria-pressed={panelMode === "study"} className={panelMode === "study" ? "is-active" : ""} onClick={() => changePanelMode("study")}><BookOpen />Flashcards</button>
+          <button aria-pressed={panelMode === "study"} className={panelMode === "study" ? "is-active" : ""} onClick={() => changePanelMode("study")}><BookOpen />Flashcards</button>
           <button aria-pressed={panelMode === "army"} className={panelMode === "army" ? "is-active" : ""} onClick={() => changePanelMode("army")}><Swords />Army & powers <b>{formatCastleEnergy(run.battle.energy)}</b></button>
         </nav>
       )}
@@ -1981,12 +1968,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
           <div className="castle-army-status">
             <Swords />
             <div>
-              <b>{simulationReady ? "Battle beat in motion" : run.battle.commandWindowReady ? "Your command window" : question && !question.seenBefore ? "An unseen direction is protecting the lane" : "The lane is waiting"}</b>
+              <b>{simulationReady ? "Battle is live" : question && !question.seenBefore ? "An unseen direction is protecting the lane" : "The lane is paused"}</b>
               <span>{simulationReady
-                ? `${Math.ceil(run.battle.combatBeatRemainingMs / 1_000)} seconds until the next recall.`
-                : run.battle.commandWindowReady
-                  ? "Play up to one summon and one keep power, then march."
-                  : question ? `Waiting flashcard: ${question.prompt}` : "The next recall is being prepared."}</span>
+                ? run.battle.commandWindowReady
+                  ? "Your latest answer unlocked one summon and one keep power. Both armies keep moving."
+                  : question ? "Recall while both armies fight. Switch panels whenever you need to command." : "Start the next card whenever you are ready; combat keeps moving."
+                : question ? `Protected lesson: ${question.prompt}` : "Combat resumes with the next familiar card."}</span>
             </div>
             <button className="castle-guide-button" onClick={() => { pauseForInterruption(); setGuideOpen(true); }}><CircleHelp />Field guide<small>safe pause</small></button>
           </div>
@@ -1996,15 +1983,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             onPower={usePower}
             onRefresh={refreshCommandHand}
           />
-          {run.battle.commandWindowReady ? (
-            <button className="castle-march-button" onClick={marchBattleBeat}><Play />March now<small>Run one 4-second battle beat</small></button>
-          ) : simulationReady ? (
-            <div className="castle-beat-progress" role="progressbar" aria-label="Battle beat" aria-valuemin={0} aria-valuemax={CASTLE_COMBAT_BEAT_MS} aria-valuenow={CASTLE_COMBAT_BEAT_MS - run.battle.combatBeatRemainingMs}>
-              <i style={{ width: `${Math.max(0, Math.min(100, ((CASTLE_COMBAT_BEAT_MS - run.battle.combatBeatRemainingMs) / CASTLE_COMBAT_BEAT_MS) * 100))}%` }} />
-            </div>
-          ) : question ? (
+          {question ? (
             <button className="castle-back-to-study" onClick={() => changePanelMode("study")}><BookOpen />Back to flashcard</button>
-          ) : null}
+          ) : (
+            <button className="castle-march-button" onClick={() => beginQuestion(run)}><BookOpen />Continue studying<small>Combat stays live</small></button>
+          )}
         </section>
       )}
 
@@ -2259,7 +2242,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Sparkles /><b>Goo</b><small>Correct recalls fund summons and keep powers; difficult cards pay more.</small></span>
               <span><Zap /><b>Focus bonus</b><small>Five correct seen recalls grant one extra Goo instead of automatic damage.</small></span>
               <span><Swords /><b>Enemy Rally</b><small>A miss pulls the next wave closer and adds a pip. Recall that direction later to clear one; three pips fire a 3-damage Moon Volley and summon a bonus squad.</small></span>
-              <span><Clock3 /><b>Battle beat</b><small>After each answer, command your hand and march the lane for four seconds.</small></span>
+              <span><Clock3 /><b>Live recall</b><small>Familiar cards keep the lane moving. Only a first-time lesson freezes combat.</small></span>
               <span><Route /><b>Formation lanes</b><small>Up to {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged units strike one target at once. Extra units queue as reserves.</small></span>
               <span><Castle /><b>Guardian phases</b><small>A pre-fight briefing freezes combat and response timing. At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
               <span><Sparkles /><b>Moon Ascension</b><small>After the three named regions, enemy stats climb, scheduled waves gain previewed Moon Marks, and guardians add new escorts and Moon Pulse.</small></span>
@@ -2362,9 +2345,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <p className="castle-eyebrow">How Goo Keep works</p>
             <h2 id="castle-help-title">Recall powers the nursery</h2>
             <p>A new direction is an ungraded lesson. Its prompt and answer are dominant; an optional third panel is visibly marked as reference only and is not tested in that direction.</p>
-            <p>Seen cards freeze combat while you recall. Every correct answer includes a small command stipend, difficult cards earn much more, and every five correct recalls grant one bonus Goo. A miss fills Enemy Surge; three pips strengthen the next battle beat.</p>
+            <p>Seen cards keep combat live while you recall. Every correct answer includes a small command stipend, difficult cards earn much more, and every five correct recalls grant one bonus Goo. A miss fills Enemy Surge; three pips strengthen the enemy pressure.</p>
             <p>Balanced Recall uses multiple choice for meaning recognition, kana-to-written tile building for three-sided Japanese cards, then reveal and self-grade for free recall. Japanese self-grade prompts include an optional mouse, pen, or finger scratchpad that never attempts handwriting recognition. Choices accept 1–4; self-grade accepts Space or Enter to reveal, then 1 for Not yet or 2 for Got it. Typing stays disabled.</p>
-            <p>Every seen answer opens a command window with a rotating four-card hand. Before playing a card, you may refresh the entire hand once. Play at most one summon and one keep power, then March to run exactly four seconds of combat.</p>
+            <p>Every seen answer refreshes a command allowance for the rotating four-card hand. Before playing a card, you may refresh the whole hand once, then play at most one summon and one keep power. The battle never waits for those choices.</p>
             <p>Battle pressure is chosen before a run. Study First, Standard Siege, and Moonstorm change only enemy combat strength and pacing; card grading, rewards, and protected first exposures remain identical.</p>
             <p>Your army has {CASTLE_ARMY_CAPACITY} spaces. Small units use one, specialists use two, and tanks use three. Formation space still limits each target to {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged attackers.</p>
             <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>

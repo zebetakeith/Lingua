@@ -8,7 +8,6 @@ import {
   createInitialCastleRun,
   getCastleEnemyAffix,
   retireCastleRun,
-  startCastleCombatBeat,
   summonCastleUnit,
   tickCastleRun,
 } from "../src/experiments/castleBattle.ts";
@@ -78,8 +77,7 @@ function simulate(curve, mastery) {
       due: true,
     });
     run = spendEnergy(run);
-    run = startCastleCombatBeat(run);
-    for (let step = 0; step < 40 && run.phase === "battle"; step += 1) {
+    for (let step = 0; step < 35 && run.phase === "battle"; step += 1) {
       run = tickCastleRun(run, 100, 1);
       elapsedMs += 100;
     }
@@ -163,8 +161,7 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0,
       due: true,
     });
     run = spendEnergy(run);
-    run = startCastleCombatBeat(run);
-    for (let step = 0; step < 40 && run.phase === "battle"; step += 1) {
+    for (let step = 0; step < Math.ceil(answerMs / 100) && run.phase === "battle"; step += 1) {
       run = tickCastleRun(run, 100, 1);
       minimumCastleHp = Math.min(minimumCastleHp, run.battle.playerCastleHp);
       elapsedMs += 100;

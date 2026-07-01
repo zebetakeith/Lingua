@@ -30,7 +30,6 @@ import {
   refreshCastleCommandHand,
   resolveCastleEvent,
   resumeCastleBattle,
-  startCastleCombatBeat,
   summonCastleUnit,
   tickCastleRun,
 } from "../src/experiments/castleBattle.ts";
@@ -171,6 +170,7 @@ assert.equal(unseen.studySummary.exposures, 1, "the learning report should count
 assert.equal(unseen.studySummary.gradedReviews, 0, "safe first exposures must stay out of graded accuracy");
 assert.equal(unseen.studySummary.responseMs.length, 0, "reading time for first exposures must stay out of recall pace");
 assert.equal(unseen.battle.telemetry.responseMs.length, 0, "balance telemetry must not mislabel first-exposure reading time as recall latency");
+assert.equal(unseen.battle.mode, "command", "a first exposure must keep combat paused until the lesson is acknowledged");
 
 const selfGradedRecall = applyCastleStudyOutcome(freshRun(), outcome(0, {
   reward: 1.8,
@@ -306,11 +306,13 @@ commandRules = summonCastleUnit(commandRules, "bubbleBud");
 assert.equal(commandRules.battle.telemetry.summons, afterFirstSummon.battle.telemetry.summons, "a second summon in one command window must be rejected");
 assert.equal(refreshCastleCommandHand(commandRules), commandRules, "the hand cannot be refreshed after a command card has been played");
 
-let beat = startCastleCombatBeat(readyCommand(freshRun(), "dartlet"));
-assert.equal(beat.battle.combatBeatRemainingMs, 4_000, "marching should start one four-second battle beat");
-for (let index = 0; index < 16; index += 1) beat = tickCastleRun(beat, 250, 1);
-assert.equal(beat.battle.combatBeatRemainingMs, 0, "a battle beat should end after exactly four simulated seconds");
-assert.equal(beat.battle.mode, "command", "the lane should freeze when its battle beat ends");
+let liveCombat = applyCastleStudyOutcome(freshRun(), outcome(99));
+assert.equal(liveCombat.battle.mode, "study", "a familiar-card answer should leave combat live");
+assert.equal(liveCombat.battle.commandWindowReady, true, "a familiar-card answer should refresh the command allowance without pausing");
+const liveStart = liveCombat.battle.activeTimeMs;
+for (let index = 0; index < 20; index += 1) liveCombat = tickCastleRun(liveCombat, 250, 1);
+assert.equal(liveCombat.battle.activeTimeMs, liveStart + 5_000, "live combat should continue beyond the retired four-second beat");
+assert.equal(liveCombat.battle.mode, "study", "live combat must not stop on an arbitrary timer");
 
 let capped = { ...freshRun(), battle: { ...freshRun().battle, energy: 12, units: Array.from({ length: CASTLE_ARMY_CAPACITY }, (_, index) => testUnit("dartlet", "player", `cap-${index}`)) } };
 capped = summonCastleUnit(readyCommand(capped, "dartlet"), "dartlet");

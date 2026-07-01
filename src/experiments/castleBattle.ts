@@ -6,7 +6,6 @@ export const CASTLE_RALLY_LIMIT = 3;
 export const CASTLE_RECALL_BOLT_LIMIT = 5;
 export const CASTLE_MAX_ENERGY = 12;
 export const CASTLE_ARMY_CAPACITY = 10;
-export const CASTLE_COMBAT_BEAT_MS = 4_000;
 export const CASTLE_MELEE_ENGAGEMENT_SLOTS = 3;
 export const CASTLE_RANGED_ENGAGEMENT_SLOTS = 2;
 
@@ -1640,15 +1639,7 @@ function drawUpgradeChoices(run: CastleRunState): { choices: CastleUpgradeId[]; 
 export function tickCastleRun(run: CastleRunState, deltaMs: number, combatSpeed = 1): CastleRunState {
   if (run.phase !== "battle" || run.battle.mode !== "study") return run;
   const safeDelta = clamp(deltaMs, 0, 250);
-  let battle = resolveBattleStep(run.battle, safeDelta, run.upgrades, run.region, run.battleInRegion, clamp(combatSpeed, 0.25, 1.5));
-  const remaining = Math.max(0, run.battle.combatBeatRemainingMs - safeDelta);
-  const resolvedNotice = battle.notice;
-  battle = {
-    ...battle,
-    combatBeatRemainingMs: remaining,
-    mode: remaining > 0 ? "study" : "command",
-    notice: remaining > 0 || resolvedNotice !== run.battle.notice ? resolvedNotice : "Battle beat complete. Your next recall is ready.",
-  };
+  const battle = resolveBattleStep(run.battle, safeDelta, run.upgrades, run.region, run.battleInRegion, clamp(combatSpeed, 0.25, 1.5));
   if (battle.playerCastleHp <= 0) {
     return {
       ...run,
@@ -1935,7 +1926,7 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
   }
   battle.notice = notice;
   if (graded) {
-    battle.mode = "command";
+    battle.mode = "study";
     battle.commandWindowReady = true;
     battle.combatBeatRemainingMs = 0;
     battle.summonPlayedThisWindow = false;
@@ -1960,21 +1951,6 @@ export function getCastleArmyPopulation(battle: CastleBattleState): number {
     .reduce((total, unit) => total + CASTLE_UNIT_DEFS[unit.kind].population, 0);
 }
 
-export function startCastleCombatBeat(run: CastleRunState): CastleRunState {
-  if (run.phase !== "battle" || !run.battle.commandWindowReady) return run;
-  return {
-    ...run,
-    savedAt: Date.now(),
-    battle: {
-      ...run.battle,
-      mode: "study",
-      commandWindowReady: false,
-      combatBeatRemainingMs: CASTLE_COMBAT_BEAT_MS,
-      notice: "March! The lane advances for one battle beat.",
-    },
-  };
-}
-
 export function resumeCastleBattle(run: CastleRunState): CastleRunState {
   if (run.phase !== "battle") return run;
   if (run.battle.guardianBriefingPending) {
@@ -1987,7 +1963,7 @@ export function resumeCastleBattle(run: CastleRunState): CastleRunState {
   return {
     ...run,
     savedAt: Date.now(),
-    battle: { ...run.battle, mode: "study", combatBeatRemainingMs: CASTLE_COMBAT_BEAT_MS, notice: "A four-second battle beat begins." },
+    battle: { ...run.battle, mode: "study", combatBeatRemainingMs: 0, notice: "Combat is live. Recall while both armies keep moving." },
   };
 }
 
