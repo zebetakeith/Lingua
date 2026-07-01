@@ -739,12 +739,17 @@ function JapaneseScratchpad({ revealed }: { revealed: boolean }) {
   }, []);
 
   useEffect(() => {
-    sizeCanvas();
+    const frame = window.requestAnimationFrame(sizeCanvas);
     const canvas = canvasRef.current;
-    if (!canvas || typeof ResizeObserver === "undefined") return;
+    if (!canvas || typeof ResizeObserver === "undefined") {
+      return () => window.cancelAnimationFrame(frame);
+    }
     const observer = new ResizeObserver(sizeCanvas);
     observer.observe(canvas);
-    return () => observer.disconnect();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [sizeCanvas]);
 
   const pointFor = (event: ReactPointerEvent<HTMLCanvasElement>) => {
