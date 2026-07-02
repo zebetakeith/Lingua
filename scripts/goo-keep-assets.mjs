@@ -12,6 +12,10 @@ const battlefieldSource = await readFile(path.join(repoRoot, "src", "experiments
 assert.ok(battlefieldSource.includes("FLAT_LEADER_STYLES"), "battlefield leaders should use the flat articulated rig");
 assert.ok(!battlefieldSource.includes("const PUPPET_SPECS"), "leaders must not return to rectangular crops of complete painted characters");
 assert.ok(!battlefieldSource.includes("leaderTextureKey"), "moving leader bodies must not be assembled from raster master crops");
+assert.ok(battlefieldSource.includes("maxDisplacement"), "articulated unit pieces need hard movement limits so they cannot tear away");
+assert.ok(battlefieldSource.includes('get("rigAction")'), "leader action poses need a deterministic visual-QA route");
+assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses need a deterministic visual-QA route");
+assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {

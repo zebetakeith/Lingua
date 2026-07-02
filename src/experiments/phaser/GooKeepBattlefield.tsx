@@ -32,6 +32,8 @@ const UNIT_TEXTURES: Partial<Record<CastleUnitKind, string>> = {
   rootLump: "units/enemy/rootLump/seed-v2.png",
 };
 
+const FRIENDLY_UNIT_KINDS = new Set<CastleUnitKind>(["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]);
+
 type LeaderForm = "pipplo" | "mallow" | "clackback" | "puffmaestro" | "thumblestump" | "broodle";
 
 interface FlatLeaderStyle {
@@ -250,6 +252,16 @@ class PuppetBone {
     this.x += this.vx * deltaSeconds;
     this.y += this.vy * deltaSeconds;
     this.angle += this.angularVelocity * deltaSeconds;
+    const maxDisplacement = this.motion === "body" ? 3.5 : this.motion === "prop" ? 6 : 5;
+    const clampedX = Phaser.Math.Clamp(this.x, this.baseX - maxDisplacement, this.baseX + maxDisplacement);
+    const clampedY = Phaser.Math.Clamp(this.y, this.baseY - maxDisplacement, this.baseY + maxDisplacement);
+    const clampedAngle = Phaser.Math.Clamp(this.angle, -24, 24);
+    if (clampedX !== this.x) this.vx = 0;
+    if (clampedY !== this.y) this.vy = 0;
+    if (clampedAngle !== this.angle) this.angularVelocity = 0;
+    this.x = clampedX;
+    this.y = clampedY;
+    this.angle = clampedAngle;
     this.node.setPosition(this.x, this.y).setAngle(this.angle);
   }
 
@@ -302,7 +314,7 @@ class PuppetLeader {
     this.style = FLAT_LEADER_STYLES[this.form];
     const edge = Math.max(72, Math.min(104, viewportWidth * 0.095));
     this.homeX = side === "player" ? edge : viewportWidth - edge;
-    this.visualScale = Phaser.Math.Clamp(viewportWidth / 620, 0.78, 1);
+    this.visualScale = Phaser.Math.Clamp(viewportWidth / 620, 0.64, 1);
     this.shadow = scene.add.ellipse(this.homeX, GROUND_Y + 3, this.form === "pipplo" ? 108 : 96, 18, 0x244c4f, 0.2).setDepth(14);
     this.root = scene.add.container(this.homeX, GROUND_Y).setDepth(18);
     this.buildCharacter(scene);
@@ -684,6 +696,7 @@ class GooKeepScene extends Phaser.Scene {
   private viewWidth = 1_000;
   private viewHeight = WORLD_HEIGHT;
   private lastPhase: CastleRunState["phase"];
+  private debugActionBeat = -1;
 
   constructor(snapshot: CastleRunState, reducedMotion: boolean) {
     super({ key: "goo-keep-battlefield" });
@@ -714,7 +727,7 @@ class GooKeepScene extends Phaser.Scene {
     this.rebuildLeaders();
   }
 
-  update(_time: number, delta: number): void {
+  update(time: number, delta: number): void {
     if (!this.background || !this.player || !this.enemy) return;
     const deltaSeconds = Phaser.Math.Clamp(delta / 1_000, 0, 0.05);
     if (Math.abs(this.viewWidth - this.scale.width) > 1) {
@@ -734,11 +747,28 @@ class GooKeepScene extends Phaser.Scene {
     this.drawBackground();
     this.player.setHp(this.snapshot.battle.playerCastleHp, this.snapshot.battle.playerCastleMaxHp);
     this.enemy.setHp(this.snapshot.battle.enemyCastleHp, this.snapshot.battle.enemyCastleMaxHp);
+    this.runDebugActions(time);
     const live = this.snapshot.battle.mode === "study";
     this.player.update(deltaSeconds, live, this.reducedMotion);
     this.enemy.update(deltaSeconds, live, this.reducedMotion);
     this.syncUnits(deltaSeconds, live);
     this.syncFx();
+  }
+
+  private runDebugActions(time: number): void {
+    if (!import.meta.env.DEV) return;
+    const action = new URLSearchParams(window.location.search).get("rigAction");
+    if (action !== "hit" && action !== "summon") return;
+    const beat = Math.floor(time / 1_100);
+    if (beat === this.debugActionBeat) return;
+    this.debugActionBeat = beat;
+    if (action === "hit") {
+      this.player?.hit();
+      this.enemy?.hit();
+    } else {
+      this.player?.summon();
+      this.enemy?.summon();
+    }
   }
 
   private rebuildLeaders(): void {
@@ -819,6 +849,48 @@ class GooKeepScene extends Phaser.Scene {
   }
 
   private syncUnits(deltaSeconds: number, live: boolean): void {
+    if (import.meta.env.DEV) {
+      const params = new URLSearchParams(window.location.search);
+      const debugKind = params.get("unit");
+      if (debugKind && debugKind in CASTLE_UNIT_DEFS) {
+        const kind = debugKind as CastleUnitKind;
+        const action = params.get("unitAction");
+        const id = "sprite-qa-unit";
+        for (const [existingId, rig] of this.unitRigs) {
+          if (existingId === id) continue;
+          rig.destroy();
+          this.unitRigs.delete(existingId);
+        }
+        const def = CASTLE_UNIT_DEFS[kind];
+        const cycleMs = this.time.now % 1_800;
+        const hitFrame = action === "hit" && cycleMs >= 800 && cycleMs < 1_550;
+        const attackFrame = action === "attack" && cycleMs >= 800 && cycleMs < 1_550;
+        const side: CastleSide = FRIENDLY_UNIT_KINDS.has(kind) ? "player" : "enemy";
+        const unit: CastleUnitState = {
+          id,
+          side,
+          kind,
+          affix: null,
+          hp: Math.max(1, def.hp - (hitFrame ? 1 : 0)),
+          maxHp: def.hp,
+          shield: action === "shield" ? 6 : 0,
+          position: 50,
+          attackCooldownMs: attackFrame ? Math.max(0, def.attackMs - 80) : 0,
+          slowMs: action === "slow" ? 2_000 : 0,
+          damageBonus: 0,
+          kills: 0,
+          origin: "paid",
+          overfed: action === "overfed",
+        };
+        let rig = this.unitRigs.get(id);
+        if (!rig) {
+          rig = new UnitRig(this, unit, this.leaderX(side));
+          this.unitRigs.set(id, rig);
+        }
+        rig.update(unit, this.laneX(50), deltaSeconds, true, this.reducedMotion);
+        return;
+      }
+    }
     const activeIds = new Set(this.snapshot.battle.units.map(unit => unit.id));
     for (const [id, rig] of this.unitRigs) {
       if (!activeIds.has(id)) {
@@ -1010,7 +1082,8 @@ export function GooKeepBattlefield({ run, reducedMotion = false, pipploPulseSeri
 
   useEffect(() => {
     if (!hostRef.current) return undefined;
-    const scene = new GooKeepScene(initialRunRef.current, reducedMotion);
+    const debugReducedMotion = import.meta.env.DEV && new URLSearchParams(window.location.search).get("reducedMotion") === "1";
+    const scene = new GooKeepScene(initialRunRef.current, reducedMotion || debugReducedMotion);
     sceneRef.current = scene;
     const game = new Phaser.Game({
       type: Phaser.CANVAS,
