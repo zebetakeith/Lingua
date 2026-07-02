@@ -17,6 +17,12 @@ function expectFrames(relativeRoot, animations, size) {
 }
 
 expectFrames(path.join("characters", "pipplo"), ["idle", "cast", "hurt", "cheer"], 192);
+expected.set(path.join("characters", "pipplo", "master", "pipplo-master-v2.png"), 1254);
+expected.set(path.join("characters", "generals", "clackback", "clackback-master-v1.png"), 1254);
+expected.set(path.join("characters", "generals", "puffmaestro", "puffmaestro-master-v1.png"), 1254);
+expected.set(path.join("characters", "generals", "thumblestump", "thumblestump-master-v1.png"), 1254);
+expected.set(path.join("characters", "generals", "broodle", "broodle-master-v1.png"), 1254);
+expected.set(path.join("characters", "generals", "mallow", "mallow-moon-master-v1.png"), 1254);
 expectFrames(path.join("characters", "mallow"), ["idle", "cast", "hurt", "cheer"], 160);
 
 for (const kind of ["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]) {

@@ -1101,12 +1101,12 @@ assert.equal(endlessStart.battle.enemyThreatTier, 1, "region four should begin M
 assert.equal(getCastleEndlessThreat(6).tier, 3, "each region after the core three should add one ascension tier");
 assert.equal(getCastleBattleProgress(endlessStart), "Moon Ascension 1 · Castle 1/3", "endless HUD progress should use its ascension name instead of an impossible region fraction");
 assert.equal(getCastleBattleProgress({ ...freshRun(), targetRegions: 1, region: 2 }), "Deep run · Region 2 · Castle 1/3", "continuing beyond a short contract should label the deeper named region clearly");
-assert.equal(getCastleGuardianPower(3).id, "rootQuake", "the third named region should belong to Orrum's Root Quake form");
+assert.equal(getCastleGuardianPower(3).id, "rootQuake", "the third named region should belong to Thumblestump's Root Quake form");
 assert.equal(getCastleGuardianPower(4).id, "moonTax", "the first endless region should introduce an empowered cross-family form");
 assert.equal(getCastleGuardianPower(5).id, "broodCall", "the second endless region should introduce the Brood Call guardian stance");
 for (let region = 1; region <= 5; region += 1) {
   const guardianIdentity = getCastleGuardianPower(region);
-  assert.match(guardianIdentity.epithet, /, (Shell Cantor|Mire Gardener|Spore Oracle|Rootbreaker|Brood Bellkeeper)$/, "every guardian stance should name its regional general and role");
+  assert.match(guardianIdentity.epithet, /, (Shell Cantor|Spore Conductor|Moon Tollkeeper|Root Drummer|Brood Bellkeeper)$/, "every guardian stance should name its regional general and role");
   assert.ok(guardianIdentity.counterplay.length >= 40, "every guardian briefing should teach concrete counterplay");
 }
 

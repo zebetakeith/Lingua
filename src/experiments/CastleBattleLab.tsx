@@ -161,24 +161,6 @@ const RECALL_MODE_HELP: Record<StudyRecallMode, string> = {
   deck: "Use the multiple-choice and self-grade rules saved with this deck. Typing stays disabled.",
 };
 const CASTLE_SOUND_KEY = "lexicon_labyrinth_castle_sound";
-const PIPPLO_ANIMATION_FRAMES: Record<PipploAnimationName, string[]> = Object.fromEntries(
-  (["idle", "cast", "hurt", "cheer"] as const).map(animation => [
-    animation,
-    Array.from(
-      { length: 4 },
-      (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/${animation}/0${index + 1}.png`,
-    ),
-  ]),
-) as Record<PipploAnimationName, string[]>;
-const MALLOW_ANIMATION_FRAMES: Record<MallowAnimationName, string[]> = Object.fromEntries(
-  (["idle", "cast", "hurt", "cheer"] as const).map(animation => [
-    animation,
-    Array.from(
-      { length: 4 },
-      (_, index) => `${import.meta.env.BASE_URL}assets/goo-keep/characters/mallow/${animation}/0${index + 1}.png`,
-    ),
-  ]),
-) as Record<MallowAnimationName, string[]>;
 const FRIENDLY_UNIT_ART: Partial<Record<CastleUnitKind, string>> = {
   piplet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/piplet/seed-v1.png`,
   dartlet: `${import.meta.env.BASE_URL}assets/goo-keep/units/friendly/dartlet/seed-v1.png`,
@@ -345,10 +327,8 @@ function PipploSprite({
 }) {
   const animationClass = animated ? (loop ?? animation === "idle") ? "is-looping" : "is-action" : "";
   return (
-    <div className={`goo-keeper-sprite goo-pipplo-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
-      {PIPPLO_ANIMATION_FRAMES[animation].map((src, index) => (
-        <img key={src} src={src} alt="" style={{ "--pipplo-frame": index } as CSSProperties} />
-      ))}
+    <div className={`goo-keeper-sprite goo-pipplo-sprite is-master ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
+      <img src={`${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/master/pipplo-master-v2.png`} alt="" />
     </div>
   );
 }
@@ -362,31 +342,26 @@ function MallowSprite({
 }) {
   const animationClass = animation === "idle" ? "is-looping" : "is-action";
   return (
-    <div className={`goo-keeper-sprite goo-mallow-sprite ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
-      {MALLOW_ANIMATION_FRAMES[animation].map((src, index) => (
-        <img
-          key={src}
-          src={src}
-          alt=""
-          style={{
-            "--pipplo-frame": index,
-            "--keeper-action-duration": "115ms",
-            "--keeper-action-delay": `${index * 110}ms`,
-          } as CSSProperties}
-        />
-      ))}
+    <div className={`goo-keeper-sprite goo-mallow-sprite is-master ${animationClass} ${className}`.trim()} data-animation={animation} aria-hidden="true">
+      <img src={`${import.meta.env.BASE_URL}assets/goo-keep/characters/generals/mallow/mallow-moon-master-v1.png`} alt="" />
     </div>
   );
 }
 
 function GeneralPortrait({ powerId, className = "" }: { powerId: CastleGuardianPowerId; className?: string }) {
-  const family = powerId === "shellReprisal" ? "shell" : powerId === "sporeWeather" || powerId === "moonTax" ? "mire" : "root";
+  const art = powerId === "shellReprisal"
+    ? "characters/generals/clackback/clackback-master-v1.png"
+    : powerId === "sporeWeather"
+      ? "characters/generals/puffmaestro/puffmaestro-master-v1.png"
+      : powerId === "moonTax"
+        ? "characters/generals/mallow/mallow-moon-master-v1.png"
+        : powerId === "broodCall"
+          ? "characters/generals/broodle/broodle-master-v1.png"
+          : "characters/generals/thumblestump/thumblestump-master-v1.png";
   return (
-    <div className={`castle-general-portrait is-${family} ${className}`} aria-hidden="true">
+    <div className={`castle-general-portrait is-production ${className}`} aria-hidden="true">
       <i className="general-shadow" />
-      <i className="general-limb is-one" /><i className="general-limb is-two" />
-      <span className="general-body"><b /><b /><em /></span>
-      <i className="general-accessory is-one" /><i className="general-accessory is-two" />
+      <img src={`${import.meta.env.BASE_URL}assets/goo-keep/${art}`} alt="" />
     </div>
   );
 }
@@ -479,8 +454,11 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
         className={`castle-scene is-phaser ${battle.mode === "study" ? "is-live" : "is-paused"} ${battle.playerCastleHp <= battle.playerCastleMaxHp * 0.3 ? "is-low-health" : ""} ${battle.enemySpawnTimerMs <= 3_000 ? "is-wave-imminent" : ""} ${battle.guardian ? `is-guardian phase-${battle.guardianPhase}` : ""}`}
         aria-label={`${region.name} battlefield. Pipplo has ${Math.ceil(battle.playerCastleHp)} health and the enemy general has ${Math.ceil(battle.enemyCastleHp)} health.`}
       >
-        <GooKeepBattlefield run={run} reducedMotion={window.matchMedia("(prefers-reduced-motion: reduce)").matches} />
-        {battle.mode === "study" && <div className="castle-beat-banner" aria-hidden="true"><span>Battle live</span><b>●</b></div>}
+        <GooKeepBattlefield
+          run={run}
+          reducedMotion={window.matchMedia("(prefers-reduced-motion: reduce)").matches}
+          pipploPulseSerial={pipploAnimation.serial}
+        />
         <div className="castle-scene-status">
           <CastleHealth current={battle.playerCastleHp} max={battle.playerCastleMaxHp} />
           <div className="castle-region-chip" title={`${difficulty.name}: ${difficulty.description} ${region.enemyTheme}. ${endlessThreat.description}${guardianPower ? ` ${guardianPower.name}: ${guardianPower.description}` : ""}`}>
@@ -1147,6 +1125,11 @@ function DeckSetup({
           <div><Castle /><span><b>3. Digest</b>Defeat rival generals and absorb their strangest traits.</span></div>
         </div>
 
+        <div className="castle-setup-rivals" aria-label="Regional rival generals">
+          <span><b>Five rival generals</b><small>Each brings a new silhouette, signature attack, phase pattern, and mutation family.</small></span>
+          <div>{Object.values(CASTLE_GUARDIAN_POWER_DEFS).map(power => <GeneralPortrait key={power.id} powerId={power.id} className="castle-setup-rival" />)}</div>
+        </div>
+
         <section className="castle-profile-summary" aria-label="Keeper chronicle">
           <header><Castle /><div><span>Keeper chronicle</span><b>This deck-world remembers every expedition</b></div></header>
           <div className="castle-profile-metrics">
@@ -1305,27 +1288,31 @@ const ENEMY_GUIDE_KINDS: CastleUnitKind[] = ["shellSlime", "nibbleImp", "sporeBu
 const CASTLE_TUTORIAL_STEPS = [
   {
     icon: BookOpen,
+    art: "lesson",
     eyebrow: "Study safety",
     title: "New directions are lessons first",
     copy: "The first time either direction appears, the lane freezes completely and both sides are shown together. It is not graded.",
   },
   {
     icon: Clock3,
+    art: "battle",
     eyebrow: "Live recall",
     title: "The battle moves while you remember",
     copy: "Seen cards never stop the lane. Correct recalls earn Goo and refresh your command allowance, while harder cards still pay much more.",
   },
   {
     icon: Swords,
+    art: "army",
     eyebrow: "Army command",
     title: "Build from a rotating hand",
     copy: `Choose from four command cards. Before playing one, you may refresh the whole hand once. You may play one summon and one keep power per answer, and your army has ${CASTLE_ARMY_CAPACITY} spaces.`,
   },
   {
     icon: Castle,
+    art: "general",
     eyebrow: "Run strategy",
     title: "Defeat generals and build a run",
-    copy: "Every five correct recalls grants bonus Goo. After each keep, choose a mutation and one of three drafted routes; story events reveal every consequence before you commit.",
+    copy: "Every five correct recalls grants bonus Goo. Outposts offer a small Morsel; regional generals offer a major Digestion. Then choose one of three routes toward the next fight.",
   },
 ] as const;
 
@@ -1346,7 +1333,13 @@ function CastleTutorial({
   return (
     <aside className="castle-overlay castle-tutorial-overlay">
       <section ref={dialogRef} tabIndex={-1} className="castle-tutorial-sheet" role="dialog" aria-modal="true" aria-labelledby="castle-tutorial-title">
-        <div className="castle-tutorial-art"><Icon /><PipploSprite className="castle-tutorial-pipplo" /></div>
+        <div className={`castle-tutorial-art is-${current.art}`}>
+          <Icon className="castle-tutorial-icon" />
+          {current.art === "battle" && <SlimeFace kind="nibbleImp" side="enemy" walking />}
+          {current.art === "army" && <div className="castle-tutorial-unit-row"><SlimeFace kind="piplet" side="player" walking /><SlimeFace kind="dartlet" side="player" walking /><SlimeFace kind="bigChonk" side="player" walking /></div>}
+          {current.art === "general" && <GeneralPortrait powerId="shellReprisal" className="castle-tutorial-general" />}
+          <PipploSprite className="castle-tutorial-pipplo" animation={current.art === "general" ? "cheer" : "idle"} loop />
+        </div>
         <p className="castle-eyebrow">{current.eyebrow}</p>
         <h2 id="castle-tutorial-title">{current.title}</h2>
         <p>{current.copy}</p>
@@ -1431,15 +1424,13 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     && run.phase === "battle"
     && run.battle.mode === "study",
   );
-  const runActive = Boolean(run);
-
   useEffect(() => {
     latestRun.current = run;
   }, [run]);
 
   useEffect(() => {
     const preloadedImages = [
-      ...PIPPLO_ANIMATION_FRAMES.idle,
+      `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/master/pipplo-master-v2.png`,
       ...Object.values(FRIENDLY_UNIT_ART),
       ...Object.values(ENEMY_UNIT_ART),
     ].map(src => {
@@ -1450,25 +1441,6 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     });
     return () => preloadedImages.forEach(image => { image.src = ""; });
   }, []);
-
-  useEffect(() => {
-    if (!runActive) return;
-    const preloadedImages: HTMLImageElement[] = [];
-    const preloadTimer = window.setTimeout(() => {
-      [
-      ...Object.entries(PIPPLO_ANIMATION_FRAMES).filter(([name]) => name !== "idle").flatMap(([, frames]) => frames),
-      ].forEach(src => {
-        const image = new Image();
-        image.decoding = "async";
-        image.src = src;
-        preloadedImages.push(image);
-      });
-    }, 250);
-    return () => {
-      window.clearTimeout(preloadTimer);
-      preloadedImages.forEach(image => { image.src = ""; });
-    };
-  }, [runActive]);
 
   useEffect(() => {
     if (!run) return;
@@ -2036,7 +2008,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         <span className="castle-header-stats"><BookOpen />{run.reviews} <Swords />{run.battlesWon} <span title={`${activeSynergies.length} active build evolutions`}><Sparkles />{activeSynergies.length}</span></span>
         <button disabled={!question || interrupted} onClick={pauseForInterruption} aria-label="Pause current prompt" title="Pause current prompt (Esc)"><Pause /></button>
         <button onClick={() => { pauseForInterruption(); setHelpOpen(true); }} aria-label="How to play"><CircleHelp /></button>
-        <button onClick={() => { pauseForInterruption(); setSettingsOpen(true); }} aria-label="Settings and balance"><Settings /></button>
+        <button onClick={() => { pauseForInterruption(); setSettingsOpen(true); }} aria-label="Expedition settings"><Settings /></button>
       </header>
 
       <CastleScene run={run} pipploAnimation={pipploAnimation} />
@@ -2538,18 +2510,37 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <button className="castle-drawer-close" aria-label="Close how to play" onClick={() => setHelpOpen(false)}><X /></button>
             <p className="castle-eyebrow">How Goo Keep works</p>
             <h2 id="castle-help-title">Recall powers the nursery</h2>
-            <p>A new direction is an ungraded lesson. Its prompt and answer are dominant; an optional third panel is visibly marked as reference only and is not tested in that direction.</p>
-            <p>Seen cards keep combat live while you recall. Every correct answer includes a small command stipend, difficult cards earn much more, and every five correct recalls grant one bonus Goo. A miss fills Enemy Surge; three pips strengthen the enemy pressure.</p>
-            <p>Balanced Recall uses multiple choice for meaning recognition, kana-to-written tile building for three-sided Japanese cards, then reveal and self-grade for free recall. Japanese self-grade prompts include an optional mouse, pen, or finger scratchpad that never attempts handwriting recognition. Choices accept 1–4; self-grade accepts Space or Enter to reveal, then 1 for Not yet or 2 for Got it. Typing stays disabled.</p>
-            <p>Every seen answer refreshes a command allowance for the rotating four-card hand. Before playing a card, you may refresh the whole hand once, then play at most one summon and one keep power. The battle never waits for those choices.</p>
-            <p>Battle pressure is chosen before a run. Study First, Standard Siege, and Moonstorm change only enemy combat strength and pacing; card grading, rewards, and protected first exposures remain identical.</p>
-            <p>Your army has {CASTLE_ARMY_CAPACITY} spaces. Small units use one, specialists use two, and tanks use three. Formation space still limits each target to {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged attackers.</p>
-            <p>Opening help, settings, or leaving the window pauses the current prompt so an interruption never costs your castle.</p>
-            <p>After each victory you draft one mutation, then choose from three routes. Detours open a story event with three visible outcomes; unaffordable bargains are disabled before you choose.</p>
-            <p>Drafting three mutations from one category evolves the run: Minion drafts unlock Brood Heart, Castle drafts unlock Nursery Engine, Trait drafts unlock Keeper Instinct, and Study drafts unlock Memory Bloom. Draft cards preview their evolution progress before you commit.</p>
-            <p>Each region has its own enemy mix and colors. Before a guardian, a required briefing freezes both combat and response timing and previews every phase. Guardian keeps change at 66% and 33% HP, while a visible countdown telegraphs recurring signature moves. Shell Reprisal grants enemy barrier, Spore Weather slows your formation, Moon Tax drains stored Goo, Root Quake punishes exposed formations, and Brood Call adds bonus attackers.</p>
-            <p>After the three named regions, endless Moon Ascensions add 10% enemy HP per tier and +1 attack every two tiers. Previewed Moon Marks begin mutating individual waves: Shell-marked enemies arrive armored, Rush-marked enemies attack faster, and Crown-marked enemies become slow heavyweights. Ascension guardians also add an Echo Moth in phase 2, a Spore Bud from tier 2, and a barrier-aware Moon Pulse from tier 3.</p>
-            <p>Your flashcard progress always survives. Run mutations disappear on defeat; deck-world discoveries and unlocked keepsakes remain.</p>
+            <div className="castle-help-hero">
+              <PipploSprite className="castle-help-pipplo" animation="cheer" loop />
+              <div><b>Learn. Summon. Devour.</b><span>New lessons are safe. Familiar recalls keep the lane moving. Your memory becomes Pipplo's army.</span></div>
+            </div>
+            <div className="castle-help-steps">
+              <article><BookOpen /><div><b>1 · Learn safely</b><span>A new direction freezes combat and is not graded. The optional third side is marked reference only.</span></div></article>
+              <article><Sparkles /><div><b>2 · Recall for Goo</b><span>Hard cards pay more. Five correct familiar recalls fill Focus for a bonus Goo. A miss adds one Rally pip.</span></div></article>
+              <article><Swords /><div><b>3 · Command when ready</b><span>Each familiar answer refreshes one summon and one power play. Army & powers opens only when you choose it.</span></div></article>
+            </div>
+            <h3>Japanese-first answers</h3>
+            <div className="castle-help-answer-grid">
+              <span><b>Meaning</b><small>Tap a choice or press 1–4.</small></span>
+              <span><b>Written form</b><small>Build kanji and kana from shuffled tiles.</small></span>
+              <span><b>Free recall</b><small>Reveal, optionally write in the scratchpad, then grade yourself.</small></span>
+            </div>
+            <details className="castle-help-details">
+              <summary><Shield />Battle rules</summary>
+              <p>Battle pressure changes only combat strength and pacing—not grading or first-exposure safety. Your army holds {CASTLE_ARMY_CAPACITY} mass: small units use one, specialists two, and tanks three. At one target, at most {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged units can engage.</p>
+            </details>
+            <details className="castle-help-details">
+              <summary><Route />The roguelite road</summary>
+              <p>Outpost victories grant a small Morsel. Regional generals grant a major Digestion. Then choose a route; detours reveal a story event before the next fight. Three mutations in one category awaken a build evolution.</p>
+            </details>
+            <details className="castle-help-details">
+              <summary><Castle />Generals and endless play</summary>
+              <p>Each general has a telegraphed signature and changes phase at 66% and 33% health. Beyond the named regions, Moon Ascensions add stronger waves, visible Moon Marks, extra escorts, and increasingly dangerous guardian phases.</p>
+            </details>
+            <details className="castle-help-details">
+              <summary><Heart />Progress is protected</summary>
+              <p>Opening a menu, leaving the window, or meeting a new card pauses danger. Study progress, discoveries, and keepsakes always survive; only temporary run mutations are lost on defeat.</p>
+            </details>
             <button className="castle-tutorial-replay" onClick={() => { setHelpOpen(false); setTutorialStep(0); setTutorialOpen(true); }}><Play />Replay tutorial</button>
           </section>
         </aside>
@@ -2557,29 +2548,39 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
 
       {settingsOpen && (
         <aside className="castle-drawer-backdrop" onClick={() => { setSettingsOpen(false); setAbandonConfirmOpen(false); }}>
-          <section ref={activeDialogRef} tabIndex={-1} className="castle-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-settings-title" onClick={event => event.stopPropagation()}>
+          <section ref={activeDialogRef} tabIndex={-1} className="castle-drawer castle-settings-drawer" role="dialog" aria-modal="true" aria-labelledby="castle-settings-title" onClick={event => event.stopPropagation()}>
             <button className="castle-drawer-close" aria-label="Close settings" onClick={() => { setSettingsOpen(false); setAbandonConfirmOpen(false); }}><X /></button>
-            <p className="castle-eyebrow">Balance lab</p>
-            <h2 id="castle-settings-title">Pressure and telemetry</h2>
-            <div className="castle-current-difficulty"><Swords /><span><b>{CASTLE_DIFFICULTIES[run.difficultyId].name}</b><small>{CASTLE_DIFFICULTIES[run.difficultyId].description} Difficulty is locked for this expedition.</small></span></div>
-            <label>Reward curve<select value={run.rewardCurve} onChange={event => {
-              const curve = event.target.value as StudyRewardCurve;
-              setRewardCurve(curve);
-              setRun(current => current ? { ...current, rewardCurve: curve } : current);
-            }}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select><small>{REWARD_CURVE_HELP[run.rewardCurve]}</small></label>
-            <label>Recall style<select value={run.recallMode} onChange={event => {
-              const mode = event.target.value as StudyRecallMode;
-              setRecallMode(mode);
-              setRun(current => current ? { ...current, recallMode: mode } : current);
-            }}>{(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}</select><small>{RECALL_MODE_HELP[run.recallMode]}</small></label>
-            <label className="castle-sound-toggle"><input type="checkbox" checked={soundEnabled} onChange={event => setSoundEnabled(event.target.checked)} />Sound cues</label>
-            <div className="castle-telemetry-grid">
-              <span><b>{formatCastleEnergy(run.battle.telemetry.energyEarned)}</b>Goo earned</span>
-              <span><b>{formatCastleEnergy(run.battle.telemetry.energySpent)}</b>Goo spent</span>
-              <span><b>{run.battle.telemetry.rallyTriggered}</b>enemy rallies</span>
-              <span><b>{Math.round(run.battle.telemetry.activeCombatMs / 1_000)}s</b>live combat</span>
+            <p className="castle-eyebrow">Expedition journal</p>
+            <h2 id="castle-settings-title">Study &amp; sound</h2>
+            <div className="castle-settings-hero">
+              <PipploSprite animation="idle" loop />
+              <span><b>Everything is safely paused.</b><small>Tune how recall feels, check this run, or rest here before returning to the lane.</small></span>
             </div>
-            <button className="castle-download" onClick={downloadBalance}><Download />Export local balance data</button>
+            <div className="castle-current-difficulty"><Swords /><span><b>{CASTLE_DIFFICULTIES[run.difficultyId].name}</b><small>{CASTLE_DIFFICULTIES[run.difficultyId].description} Difficulty is locked for this expedition.</small></span></div>
+            <section className="castle-settings-group">
+              <h3><BookOpen />Recall rules</h3>
+              <label>Reward curve<select value={run.rewardCurve} onChange={event => {
+                const curve = event.target.value as StudyRewardCurve;
+                setRewardCurve(curve);
+                setRun(current => current ? { ...current, rewardCurve: curve } : current);
+              }}>{(Object.keys(REWARD_CURVE_LABELS) as StudyRewardCurve[]).map(curve => <option key={curve} value={curve}>{REWARD_CURVE_LABELS[curve]}</option>)}</select><small>{REWARD_CURVE_HELP[run.rewardCurve]}</small></label>
+              <label>Recall style<select value={run.recallMode} onChange={event => {
+                const mode = event.target.value as StudyRecallMode;
+                setRecallMode(mode);
+                setRun(current => current ? { ...current, recallMode: mode } : current);
+              }}>{(Object.keys(RECALL_MODE_LABELS) as StudyRecallMode[]).map(mode => <option key={mode} value={mode}>{RECALL_MODE_LABELS[mode]}</option>)}</select><small>{RECALL_MODE_HELP[run.recallMode]}</small></label>
+              <label className="castle-sound-toggle"><input type="checkbox" checked={soundEnabled} onChange={event => setSoundEnabled(event.target.checked)} />Sound cues</label>
+            </section>
+            <details className="castle-run-notes">
+              <summary><Sparkles /><span><b>Run notes</b><small>Goo flow and battle time</small></span></summary>
+              <div className="castle-telemetry-grid">
+                <span><b>{formatCastleEnergy(run.battle.telemetry.energyEarned)}</b>Goo earned</span>
+                <span><b>{formatCastleEnergy(run.battle.telemetry.energySpent)}</b>Goo spent</span>
+                <span><b>{run.battle.telemetry.rallyTriggered}</b>enemy rallies</span>
+                <span><b>{Math.round(run.battle.telemetry.activeCombatMs / 1_000)}s</b>live combat</span>
+              </div>
+              <button className="castle-download" onClick={downloadBalance}><Download />Save run notes</button>
+            </details>
             <button className="castle-pause-button" onClick={() => { pauseForInterruption(); setSettingsOpen(false); setAbandonConfirmOpen(false); }}><Pause />Pause current prompt</button>
             {!abandonConfirmOpen ? (
               <button className="castle-abandon-button" onClick={() => setAbandonConfirmOpen(true)}><LogOut />End this expedition</button>

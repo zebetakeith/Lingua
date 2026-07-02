@@ -3,6 +3,7 @@ import Phaser from "phaser";
 import {
   CASTLE_ENEMY_AFFIX_DEFS,
   CASTLE_UNIT_DEFS,
+  getCastleGuardianPower,
   getCastleRegionDef,
   type CastleFxEvent,
   type CastleGuardianPowerId,
@@ -14,7 +15,7 @@ import {
 } from "../castleBattle";
 
 const WORLD_HEIGHT = 300;
-const GROUND_Y = 236;
+const GROUND_Y = 252;
 
 const UNIT_TEXTURES: Partial<Record<CastleUnitKind, string>> = {
   piplet: "units/friendly/piplet/seed-v1.png",
@@ -31,17 +32,229 @@ const UNIT_TEXTURES: Partial<Record<CastleUnitKind, string>> = {
   rootLump: "units/enemy/rootLump/seed-v2.png",
 };
 
-interface SpringPoint {
+type LeaderForm = "pipplo" | "mallow" | "clackback" | "puffmaestro" | "thumblestump" | "broodle";
+
+const LEADER_TEXTURES: Record<LeaderForm, string> = {
+  pipplo: "characters/pipplo/master/pipplo-master-v2.png",
+  mallow: "characters/generals/mallow/mallow-moon-master-v1.png",
+  clackback: "characters/generals/clackback/clackback-master-v1.png",
+  puffmaestro: "characters/generals/puffmaestro/puffmaestro-master-v1.png",
+  thumblestump: "characters/generals/thumblestump/thumblestump-master-v1.png",
+  broodle: "characters/generals/broodle/broodle-master-v1.png",
+};
+
+interface CropRect {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
-  angle: number;
+  width: number;
+  height: number;
 }
+
+interface PuppetPieceSpec extends CropRect {
+  id: string;
+  motion: "body" | "arm-left" | "arm-right" | "foot-left" | "foot-right" | "antenna" | "prop" | "crown" | "root";
+}
+
+interface PuppetSpec {
+  width: number;
+  height: number;
+  anchorX: number;
+  anchorY: number;
+  scale: number;
+  core: CropRect;
+  pieces: PuppetPieceSpec[];
+}
+
+const PUPPET_SPECS: Record<LeaderForm, PuppetSpec> = {
+  pipplo: {
+    width: 1_254,
+    height: 1_254,
+    anchorX: 627,
+    anchorY: 1_042,
+    scale: 0.15,
+    core: { x: 318, y: 302, width: 620, height: 702 },
+    pieces: [
+      { id: "left-arm", motion: "arm-left", x: 226, y: 625, width: 177, height: 205 },
+      { id: "right-arm", motion: "arm-right", x: 858, y: 625, width: 177, height: 205 },
+      { id: "left-foot", motion: "foot-left", x: 399, y: 910, width: 175, height: 151 },
+      { id: "right-foot", motion: "foot-right", x: 679, y: 910, width: 175, height: 151 },
+      { id: "antenna", motion: "antenna", x: 520, y: 178, width: 326, height: 210 },
+    ],
+  },
+  mallow: {
+    width: 1_254, height: 1_254, anchorX: 638, anchorY: 1_135, scale: 0.143,
+    core: { x: 429, y: 238, width: 494, height: 689 },
+    pieces: [
+      { id: "moon-mantle", motion: "crown", x: 352, y: 194, width: 562, height: 733 },
+      { id: "moon-tassel", motion: "antenna", x: 727, y: 235, width: 176, height: 160 },
+      { id: "moon-staff", motion: "prop", x: 106, y: 97, width: 333, height: 916 },
+      { id: "moon-ledger", motion: "arm-right", x: 852, y: 553, width: 321, height: 302 },
+      { id: "moon-hand", motion: "arm-left", x: 278, y: 586, width: 196, height: 186 },
+      { id: "moon-tail-left", motion: "foot-left", x: 505, y: 854, width: 201, height: 189 },
+      { id: "moon-tail-center", motion: "root", x: 616, y: 865, width: 210, height: 223 },
+      { id: "moon-tail-right", motion: "foot-right", x: 748, y: 851, width: 207, height: 194 },
+    ],
+  },
+  clackback: {
+    width: 1_254, height: 1_254, anchorX: 638, anchorY: 1_011, scale: 0.14,
+    core: { x: 344, y: 505, width: 566, height: 494 },
+    pieces: [
+      { id: "cantor-shell", motion: "crown", x: 596, y: 253, width: 557, height: 656 },
+      { id: "cantor-crown", motion: "antenna", x: 397, y: 317, width: 394, height: 302 },
+      { id: "cantor-baton", motion: "prop", x: 63, y: 343, width: 324, height: 550 },
+      { id: "cantor-claw-left", motion: "arm-left", x: 178, y: 642, width: 306, height: 263 },
+      { id: "cantor-claw-right", motion: "arm-right", x: 653, y: 647, width: 286, height: 278 },
+      { id: "cantor-foot-left", motion: "foot-left", x: 375, y: 891, width: 197, height: 126 },
+      { id: "cantor-foot-right", motion: "foot-right", x: 648, y: 893, width: 199, height: 126 },
+    ],
+  },
+  puffmaestro: {
+    width: 1_254, height: 1_254, anchorX: 632, anchorY: 1_139, scale: 0.137,
+    core: { x: 382, y: 548, width: 492, height: 584 },
+    pieces: [
+      { id: "weather-cap", motion: "crown", x: 285, y: 98, width: 829, height: 650 },
+      { id: "weather-fan", motion: "prop", x: 14, y: 458, width: 386, height: 533 },
+      { id: "weather-arm-left", motion: "arm-left", x: 226, y: 760, width: 253, height: 239 },
+      { id: "weather-arm-right", motion: "arm-right", x: 813, y: 748, width: 235, height: 233 },
+      { id: "weather-charms", motion: "antenna", x: 868, y: 772, width: 357, height: 360 },
+      { id: "weather-foot-left", motion: "foot-left", x: 398, y: 1_035, width: 199, height: 111 },
+      { id: "weather-foot-right", motion: "foot-right", x: 699, y: 1_031, width: 184, height: 114 },
+    ],
+  },
+  thumblestump: {
+    width: 1_254, height: 1_254, anchorX: 625, anchorY: 1_174, scale: 0.137,
+    core: { x: 302, y: 432, width: 650, height: 621 },
+    pieces: [
+      { id: "quake-crown", motion: "crown", x: 277, y: 82, width: 702, height: 453 },
+      { id: "quake-charms", motion: "antenna", x: 300, y: 276, width: 174, height: 265 },
+      { id: "quake-arm-left", motion: "arm-left", x: 116, y: 565, width: 365, height: 333 },
+      { id: "quake-arm-right", motion: "arm-right", x: 810, y: 427, width: 331, height: 468 },
+      { id: "quake-drum", motion: "prop", x: 382, y: 681, width: 339, height: 311 },
+      { id: "quake-roots-left", motion: "foot-left", x: 124, y: 860, width: 523, height: 312 },
+      { id: "quake-roots-right", motion: "foot-right", x: 580, y: 850, width: 552, height: 321 },
+    ],
+  },
+  broodle: {
+    width: 1_254, height: 1_254, anchorX: 628, anchorY: 1_151, scale: 0.14,
+    core: { x: 279, y: 387, width: 615, height: 693 },
+    pieces: [
+      { id: "brood-ear-left", motion: "antenna", x: 172, y: 86, width: 360, height: 485 },
+      { id: "brood-ear-right", motion: "crown", x: 607, y: 101, width: 470, height: 475 },
+      { id: "brood-horns", motion: "crown", x: 475, y: 345, width: 199, height: 135 },
+      { id: "brood-bell", motion: "prop", x: 96, y: 475, width: 286, height: 350 },
+      { id: "brood-arm-right", motion: "arm-right", x: 634, y: 596, width: 250, height: 310 },
+      { id: "brood-pouch", motion: "root", x: 298, y: 618, width: 452, height: 431 },
+      { id: "brood-tail", motion: "arm-left", x: 783, y: 661, width: 405, height: 430 },
+      { id: "brood-foot-left", motion: "foot-left", x: 295, y: 1_015, width: 201, height: 130 },
+      { id: "brood-foot-right", motion: "foot-right", x: 635, y: 1_017, width: 195, height: 130 },
+    ],
+  },
+};
+
+const UNIT_PUPPET_SPECS: Record<CastleUnitKind, PuppetSpec> = {
+  piplet: {
+    width: 160, height: 160, anchorX: 80, anchorY: 148, scale: 0.3,
+    core: { x: 33, y: 54, width: 98, height: 98 },
+    pieces: [
+      { id: "bud", motion: "crown", x: 53, y: 24, width: 58, height: 54 },
+      { id: "hand", motion: "arm-left", x: 20, y: 86, width: 56, height: 57 },
+    ],
+  },
+  dartlet: {
+    width: 160, height: 160, anchorX: 80, anchorY: 148, scale: 0.34,
+    core: { x: 49, y: 67, width: 102, height: 85 },
+    pieces: [
+      { id: "fins", motion: "root", x: 13, y: 36, width: 80, height: 118 },
+      { id: "goggles", motion: "crown", x: 62, y: 49, width: 65, height: 42 },
+    ],
+  },
+  bubbleBud: {
+    width: 160, height: 160, anchorX: 80, anchorY: 148, scale: 0.34,
+    core: { x: 32, y: 34, width: 108, height: 119 },
+    pieces: [
+      { id: "left-bubble", motion: "arm-left", x: 17, y: 86, width: 55, height: 57 },
+      { id: "right-bubble", motion: "arm-right", x: 112, y: 86, width: 47, height: 54 },
+      { id: "top-bubble", motion: "antenna", x: 20, y: 22, width: 45, height: 50 },
+    ],
+  },
+  mendlet: {
+    width: 160, height: 160, anchorX: 80, anchorY: 149, scale: 0.36,
+    core: { x: 34, y: 54, width: 120, height: 99 },
+    pieces: [
+      { id: "flower", motion: "antenna", x: 52, y: 4, width: 71, height: 72 },
+      { id: "pack", motion: "arm-left", x: 0, y: 63, width: 70, height: 80 },
+    ],
+  },
+  spitlet: {
+    width: 160, height: 160, anchorX: 80, anchorY: 149, scale: 0.35,
+    core: { x: 24, y: 54, width: 114, height: 99 },
+    pieces: [
+      { id: "snout", motion: "prop", x: 99, y: 70, width: 61, height: 64 },
+      { id: "fin", motion: "crown", x: 31, y: 41, width: 73, height: 53 },
+    ],
+  },
+  bigChonk: {
+    width: 160, height: 160, anchorX: 80, anchorY: 150, scale: 0.45,
+    core: { x: 24, y: 34, width: 114, height: 120 },
+    pieces: [
+      { id: "left-chonk-arm", motion: "arm-left", x: 9, y: 72, width: 58, height: 75 },
+      { id: "right-chonk-arm", motion: "arm-right", x: 105, y: 68, width: 54, height: 78 },
+    ],
+  },
+  shellSlime: {
+    width: 160, height: 160, anchorX: 80, anchorY: 151, scale: 0.38,
+    core: { x: 23, y: 79, width: 124, height: 75 },
+    pieces: [
+      { id: "shell", motion: "crown", x: 8, y: 10, width: 145, height: 112 },
+      { id: "claw", motion: "arm-left", x: 0, y: 76, width: 61, height: 70 },
+    ],
+  },
+  nibbleImp: {
+    width: 160, height: 160, anchorX: 80, anchorY: 149, scale: 0.34,
+    core: { x: 31, y: 52, width: 124, height: 101 },
+    pieces: [
+      { id: "tail", motion: "arm-left", x: 0, y: 45, width: 68, height: 101 },
+      { id: "horns", motion: "crown", x: 72, y: 25, width: 80, height: 57 },
+    ],
+  },
+  sporeBud: {
+    width: 160, height: 160, anchorX: 80, anchorY: 150, scale: 0.38,
+    core: { x: 35, y: 73, width: 111, height: 81 },
+    pieces: [
+      { id: "cap", motion: "crown", x: 8, y: 20, width: 145, height: 85 },
+      { id: "puff", motion: "prop", x: 104, y: 100, width: 56, height: 55 },
+    ],
+  },
+  boomcap: {
+    width: 160, height: 160, anchorX: 80, anchorY: 151, scale: 0.39,
+    core: { x: 29, y: 73, width: 112, height: 83 },
+    pieces: [
+      { id: "cap", motion: "crown", x: 3, y: 22, width: 154, height: 91 },
+      { id: "curl", motion: "antenna", x: 17, y: 0, width: 66, height: 73 },
+    ],
+  },
+  echoMoth: {
+    width: 160, height: 160, anchorX: 80, anchorY: 148, scale: 0.38,
+    core: { x: 63, y: 63, width: 93, height: 91 },
+    pieces: [
+      { id: "wings", motion: "arm-left", x: 9, y: 38, width: 99, height: 112 },
+      { id: "ears", motion: "antenna", x: 74, y: 17, width: 74, height: 67 },
+    ],
+  },
+  rootLump: {
+    width: 160, height: 160, anchorX: 80, anchorY: 153, scale: 0.44,
+    core: { x: 34, y: 38, width: 116, height: 116 },
+    pieces: [
+      { id: "roots", motion: "root", x: 0, y: 83, width: 85, height: 77 },
+      { id: "branch", motion: "crown", x: 74, y: 0, width: 86, height: 91 },
+    ],
+  },
+};
 
 interface BattlefieldProps {
   run: CastleRunState;
   reducedMotion?: boolean;
+  pipploPulseSerial?: number;
 }
 
 function parseHex(color: string, fallback: number): number {
@@ -54,22 +267,86 @@ function textureKey(kind: CastleUnitKind): string {
   return `goo-unit-${kind}`;
 }
 
-class SoftBodyLeader {
+function leaderTextureKey(form: LeaderForm): string {
+  return `goo-leader-${form}`;
+}
+
+function getLeaderForm(side: CastleSide, region: number, guardianPowerId: CastleGuardianPowerId | null): LeaderForm {
+  if (side === "player") return "pipplo";
+  const powerId = guardianPowerId ?? getCastleGuardianPower(region).id;
+  if (powerId === "shellReprisal") return "clackback";
+  if (powerId === "sporeWeather") return "puffmaestro";
+  if (powerId === "rootQuake") return "thumblestump";
+  if (powerId === "broodCall") return "broodle";
+  return "mallow";
+}
+
+class PuppetBone {
+  readonly node: Phaser.GameObjects.Container;
+  readonly motion: PuppetPieceSpec["motion"] | "body";
+  readonly baseX: number;
+  readonly baseY: number;
+  private x: number;
+  private y: number;
+  private angle = 0;
+  private vx = 0;
+  private vy = 0;
+  private angularVelocity = 0;
+
+  constructor(
+    scene: Phaser.Scene,
+    texture: string,
+    frameName: string,
+    rect: CropRect,
+    motion: PuppetBone["motion"],
+    spec: PuppetSpec,
+  ) {
+    const source = scene.textures.get(texture);
+    if (!source.has(frameName)) source.add(frameName, 0, rect.x, rect.y, rect.width, rect.height);
+    const image = scene.add.image(0, 0, texture, frameName).setScale(spec.scale);
+    this.baseX = ((rect.x + rect.width * 0.5) - spec.anchorX) * spec.scale;
+    this.baseY = ((rect.y + rect.height * 0.5) - spec.anchorY) * spec.scale;
+    this.x = this.baseX;
+    this.y = this.baseY;
+    this.motion = motion;
+    this.node = scene.add.container(this.x, this.y, [image]);
+  }
+
+  update(offsetX: number, offsetY: number, targetAngle: number, deltaSeconds: number, motionScale: number): void {
+    const targetX = this.baseX + offsetX * motionScale;
+    const targetY = this.baseY + offsetY * motionScale;
+    this.vx += (targetX - this.x) * 76 * deltaSeconds;
+    this.vy += (targetY - this.y) * 76 * deltaSeconds;
+    this.angularVelocity += (targetAngle * motionScale - this.angle) * 68 * deltaSeconds;
+    const damping = Math.pow(0.0008, deltaSeconds);
+    this.vx *= damping;
+    this.vy *= damping;
+    this.angularVelocity *= Math.pow(0.0015, deltaSeconds);
+    this.x += this.vx * deltaSeconds;
+    this.y += this.vy * deltaSeconds;
+    this.angle += this.angularVelocity * deltaSeconds;
+    this.node.setPosition(this.x, this.y).setAngle(this.angle);
+  }
+
+  impulse(x: number, y: number, angle: number): void {
+    this.vx += x;
+    this.vy += y;
+    this.angularVelocity += angle;
+  }
+
+  setSquash(x: number, y: number): void {
+    this.node.setScale(x, y);
+  }
+}
+
+class PuppetLeader {
   private readonly side: CastleSide;
-  private readonly form: "pipplo" | "shell" | "mire" | "root";
-  private readonly body: Phaser.GameObjects.Graphics;
-  private readonly detail: Phaser.GameObjects.Graphics;
-  private readonly face: Phaser.GameObjects.Container;
-  private readonly leftEye: Phaser.GameObjects.Ellipse;
-  private readonly rightEye: Phaser.GameObjects.Ellipse;
-  private readonly mouth: Phaser.GameObjects.Arc;
-  private readonly points: SpringPoint[];
+  private readonly form: LeaderForm;
+  private readonly root: Phaser.GameObjects.Container;
+  private readonly shadow: Phaser.GameObjects.Ellipse;
+  private readonly core: PuppetBone;
+  private readonly pieces: PuppetBone[];
   private readonly homeX: number;
-  private readonly homeY: number;
-  private readonly radiusX: number;
-  private readonly radiusY: number;
-  private readonly fill: number;
-  private readonly stroke: number;
   private reaction = 0;
   private summonPulse = 0;
   private phase = 0;
@@ -77,40 +354,18 @@ class SoftBodyLeader {
 
   constructor(scene: Phaser.Scene, side: CastleSide, region: number, viewportWidth: number, guardianPowerId: CastleGuardianPowerId | null = null) {
     this.side = side;
-    this.form = side === "player"
-      ? "pipplo"
-      : guardianPowerId === "shellReprisal"
-        ? "shell"
-        : guardianPowerId === "sporeWeather" || guardianPowerId === "moonTax"
-          ? "mire"
-          : guardianPowerId === "rootQuake" || guardianPowerId === "broodCall"
-            ? "root"
-            : region % 3 === 1 ? "shell" : region % 3 === 2 ? "mire" : "root";
-    const edge = Math.max(58, Math.min(82, viewportWidth * 0.09));
+    this.form = getLeaderForm(side, region, guardianPowerId);
+    const edge = Math.max(72, Math.min(104, viewportWidth * 0.095));
     this.homeX = side === "player" ? edge : viewportWidth - edge;
-    this.homeY = GROUND_Y - (this.form === "mire" ? 56 : 42);
-    this.radiusX = this.form === "mire" ? 50 : this.form === "root" ? 62 : 58;
-    this.radiusY = this.form === "mire" ? 72 : this.form === "root" ? 52 : 50;
-    this.fill = this.form === "pipplo" ? 0x86d96f : this.form === "shell" ? 0xe58c7a : this.form === "mire" ? 0xae7bc9 : 0xb9854f;
-    this.stroke = this.form === "pipplo" ? 0x276d70 : this.form === "shell" ? 0x744b63 : this.form === "mire" ? 0x68486f : 0x664733;
-    this.body = scene.add.graphics().setDepth(18);
-    this.detail = scene.add.graphics().setDepth(19);
-    this.leftEye = scene.add.ellipse(-15, -5, 12, 17, 0xffffff).setStrokeStyle(3, this.stroke);
-    this.rightEye = scene.add.ellipse(15, -5, 12, 17, 0xffffff).setStrokeStyle(3, this.stroke);
-    const leftPupil = scene.add.circle(-15 + (side === "player" ? 2 : -2), -3, 3.5, 0x183f44);
-    const rightPupil = scene.add.circle(15 + (side === "player" ? 2 : -2), -3, 3.5, 0x183f44);
-    this.mouth = scene.add.arc(0, 14, 10, 18, 162, false, 0x000000, 0).setStrokeStyle(3, this.stroke);
-    this.face = scene.add.container(this.homeX, this.homeY, [this.leftEye, this.rightEye, leftPupil, rightPupil, this.mouth]).setDepth(21);
-    this.points = Array.from({ length: 8 }, (_, index) => {
-      const angle = (Math.PI * 2 * index) / 8;
-      return {
-        x: this.homeX + Math.cos(angle) * this.radiusX,
-        y: this.homeY + Math.sin(angle) * this.radiusY,
-        vx: 0,
-        vy: 0,
-        angle,
-      };
-    });
+    const spec = PUPPET_SPECS[this.form];
+    const texture = leaderTextureKey(this.form);
+    const prefix = `leader-${this.form}`;
+    this.shadow = scene.add.ellipse(this.homeX, GROUND_Y + 2, this.form === "pipplo" ? 112 : 98, 18, 0x244c4f, 0.2).setDepth(14);
+    this.root = scene.add.container(this.homeX, GROUND_Y).setDepth(18);
+    this.core = new PuppetBone(scene, texture, `${prefix}-core`, spec.core, "body", spec);
+    this.pieces = spec.pieces.map(piece => new PuppetBone(scene, texture, `${prefix}-${piece.id}`, piece, piece.motion, spec));
+    this.root.add([this.core.node, ...this.pieces.map(piece => piece.node)]);
+    this.root.setScale(side === "enemy" ? -1 : 1, 1);
   }
 
   setHp(current: number, max: number): void {
@@ -119,89 +374,76 @@ class SoftBodyLeader {
 
   hit(): void {
     this.reaction = 1;
-    for (const point of this.points) {
-      point.vx += this.side === "player" ? -65 : 65;
-      point.vy += Phaser.Math.Between(-35, 18);
-    }
+    const shove = this.side === "player" ? -45 : 45;
+    this.core.impulse(shove, 12, -45);
+    this.pieces.forEach((piece, index) => piece.impulse(shove * (0.65 + index * 0.08), Phaser.Math.Between(-26, 18), Phaser.Math.Between(-150, 150)));
   }
 
   summon(): void {
     this.summonPulse = 1;
-    for (const point of this.points) {
-      point.vx += Math.cos(point.angle) * 42;
-      point.vy += Math.sin(point.angle) * 26;
-    }
+    this.core.impulse(0, -24, 0);
+    this.pieces.forEach((piece, index) => piece.impulse(index % 2 === 0 ? -24 : 24, -32, index % 2 === 0 ? -120 : 120));
   }
 
   setVisible(visible: boolean): void {
-    this.body.setVisible(visible);
-    this.detail.setVisible(visible);
-    this.face.setVisible(visible);
+    this.root.setVisible(visible);
+    this.shadow.setVisible(visible);
   }
 
   update(deltaSeconds: number, live: boolean, reducedMotion: boolean): void {
-    this.phase += deltaSeconds * (live ? 2.4 : 0.8);
+    this.phase += deltaSeconds * (live ? 2.75 : 0.9);
     this.reaction = Math.max(0, this.reaction - deltaSeconds * 2.5);
     this.summonPulse = Math.max(0, this.summonPulse - deltaSeconds * 2.8);
     const motionScale = reducedMotion ? 0.25 : 1;
-    const lean = this.side === "player" ? 1 : -1;
-    const healthDroop = (1 - this.hpRatio) * 8;
-    for (const point of this.points) {
-      const breathe = Math.sin(this.phase + point.angle * 2) * 2.6 * motionScale;
-      const pulse = this.summonPulse * 8;
-      const targetX = this.homeX + Math.cos(point.angle) * (this.radiusX + breathe + pulse);
-      const targetY = this.homeY + healthDroop + Math.sin(point.angle) * (this.radiusY - breathe + pulse * 0.6);
-      point.vx += (targetX - point.x) * 48 * deltaSeconds;
-      point.vy += (targetY - point.y) * 48 * deltaSeconds;
-      point.vx *= Math.pow(0.004, deltaSeconds);
-      point.vy *= Math.pow(0.004, deltaSeconds);
-      point.x += point.vx * deltaSeconds;
-      point.y += point.vy * deltaSeconds;
+    const healthDroop = (1 - this.hpRatio) * 9;
+    const bob = Math.sin(this.phase * 1.15) * 2.6 * motionScale;
+    const squash = Math.sin(this.phase * 2) * 0.025 * motionScale;
+    const facing = this.side === "enemy" ? -1 : 1;
+    this.root
+      .setPosition(this.homeX + facing * (this.summonPulse * 7 - this.reaction * 8), GROUND_Y + bob + healthDroop)
+      .setScale(facing * (1 + squash + this.summonPulse * 0.05), 1 - squash - this.summonPulse * 0.035 + this.reaction * 0.04)
+      .setAngle(Math.sin(this.phase * 0.55) * 1.2 * motionScale + facing * this.reaction * 5);
+    this.shadow.setPosition(this.homeX, GROUND_Y + 3).setScale(1 - Math.abs(bob) / 26 + this.summonPulse * 0.1, 1);
+    this.core.update(0, Math.sin(this.phase * 1.6) * 0.7, this.reaction * facing * 2.5, deltaSeconds, motionScale);
+    this.core.setSquash(1 + squash * 0.8, 1 - squash * 0.55);
+    for (const piece of this.pieces) {
+      const wave = Math.sin(this.phase + piece.baseX * 0.035);
+      switch (piece.motion) {
+        case "arm-left":
+          piece.update(-2 - this.summonPulse * 8, wave * 3 - this.summonPulse * 8, -8 - wave * 9 - this.summonPulse * 24, deltaSeconds, motionScale);
+          break;
+        case "arm-right":
+          piece.update(2 + this.summonPulse * 8, -wave * 3 - this.summonPulse * 8, 8 + wave * 9 + this.summonPulse * 24, deltaSeconds, motionScale);
+          break;
+        case "foot-left":
+          piece.update(-1.5, Math.max(0, wave) * 3, -wave * 4, deltaSeconds, motionScale);
+          piece.setSquash(1 + Math.max(0, -wave) * 0.06 * motionScale, 1 - Math.max(0, -wave) * 0.06 * motionScale);
+          break;
+        case "foot-right":
+          piece.update(1.5, Math.max(0, -wave) * 3, wave * 4, deltaSeconds, motionScale);
+          piece.setSquash(1 + Math.max(0, wave) * 0.06 * motionScale, 1 - Math.max(0, wave) * 0.06 * motionScale);
+          break;
+        case "antenna":
+          piece.update(wave * 2.5, -Math.abs(wave) * 2 - this.summonPulse * 5, wave * 7 + this.summonPulse * 8, deltaSeconds, motionScale);
+          break;
+        case "prop":
+          piece.update(wave * 2, -Math.abs(wave) * 1.5, wave * 5 - this.summonPulse * 13, deltaSeconds, motionScale);
+          break;
+        case "crown":
+          piece.update(wave * 1.4, -Math.abs(wave) * 3 - this.summonPulse * 4, wave * 3.5, deltaSeconds, motionScale);
+          break;
+        case "root":
+          piece.update(wave * 2, Math.max(0, wave) * 2, wave * 2.5, deltaSeconds, motionScale);
+          break;
+        default:
+          piece.update(0, 0, 0, deltaSeconds, motionScale);
+      }
     }
-    const faceBob = Math.sin(this.phase * 1.25) * 2.2 * motionScale;
-    this.face.setPosition(
-      this.homeX + lean * (this.summonPulse * 5 - this.reaction * 7),
-      this.homeY + faceBob + healthDroop,
-    );
-    this.face.setScale(1 + this.summonPulse * 0.08, 1 - this.summonPulse * 0.05 + this.reaction * 0.05);
-    this.mouth.setRadius(this.reaction > 0.25 ? 8 : this.summonPulse > 0.2 ? 14 : 10);
-    this.draw();
   }
 
   destroy(): void {
-    this.body.destroy();
-    this.detail.destroy();
-    this.face.destroy(true);
-  }
-
-  private draw(): void {
-    const smoothPoints = new Phaser.Curves.Spline(this.points.map(point => new Phaser.Math.Vector2(point.x, point.y))).getPoints(48);
-    this.body.clear();
-    this.body.fillStyle(this.fill, 1);
-    this.body.lineStyle(6, this.stroke, 1);
-    this.body.fillPoints(smoothPoints, true);
-    this.body.strokePoints(smoothPoints, true);
-    this.detail.clear();
-    if (this.form === "pipplo") {
-      this.detail.fillStyle(0xf7d65b, 1).fillCircle(this.homeX - 25, this.homeY - 37, 8);
-      this.detail.lineStyle(4, 0xffffff, 0.8).strokeCircle(this.homeX - 25, this.homeY - 37, 10);
-      this.detail.fillStyle(0x65b9a8, 0.85).fillCircle(this.homeX + 38, this.homeY + 22, 9 + this.summonPulse * 6);
-    } else if (this.form === "shell") {
-      this.detail.lineStyle(8, 0xf6c58e, 1).strokeCircle(this.homeX + 6, this.homeY + 3, 38);
-      this.detail.lineStyle(4, this.stroke, 0.7).beginPath().moveTo(this.homeX - 23, this.homeY + 2).lineTo(this.homeX + 36, this.homeY + 2).strokePath();
-      this.detail.fillStyle(0xf8d87c, 1).fillTriangle(this.homeX - 38, this.homeY - 40, this.homeX - 18, this.homeY - 54, this.homeX - 12, this.homeY - 32);
-    } else if (this.form === "mire") {
-      this.detail.lineStyle(11, 0x76577c, 1).lineBetween(this.homeX - 22, this.homeY + 45, this.homeX - 30, GROUND_Y);
-      this.detail.lineBetween(this.homeX + 22, this.homeY + 45, this.homeX + 30, GROUND_Y);
-      this.detail.fillStyle(0xe8a5ce, 1).fillEllipse(this.homeX, this.homeY - 62, 118, 45);
-      this.detail.lineStyle(5, this.stroke, 1).strokeEllipse(this.homeX, this.homeY - 62, 118, 45);
-      this.detail.fillStyle(0xf8d9ec, 0.8).fillCircle(this.homeX - 25, this.homeY - 66, 8);
-    } else {
-      this.detail.lineStyle(10, 0x7a5539, 1).beginPath().moveTo(this.homeX - 28, this.homeY - 38).lineTo(this.homeX - 50, this.homeY - 68).lineTo(this.homeX - 63, this.homeY - 55).strokePath();
-      this.detail.beginPath().moveTo(this.homeX + 28, this.homeY - 38).lineTo(this.homeX + 52, this.homeY - 68).lineTo(this.homeX + 66, this.homeY - 52).strokePath();
-      this.detail.fillStyle(0x8fc36e, 1).fillCircle(this.homeX - 58, this.homeY - 67, 9);
-      this.detail.fillCircle(this.homeX + 58, this.homeY - 65, 11);
-    }
+    this.root.destroy(true);
+    this.shadow.destroy();
   }
 }
 
@@ -209,13 +451,14 @@ class UnitRig {
   private readonly scene: Phaser.Scene;
   private readonly container: Phaser.GameObjects.Container;
   private readonly shadow: Phaser.GameObjects.Ellipse;
-  private readonly leftPart: Phaser.GameObjects.Ellipse;
-  private readonly rightPart: Phaser.GameObjects.Ellipse;
-  private readonly accessory: Phaser.GameObjects.Arc;
-  private readonly sprite: Phaser.GameObjects.Image;
+  private readonly artRoot: Phaser.GameObjects.Container;
+  private readonly core: PuppetBone;
+  private readonly pieces: PuppetBone[];
   private readonly hpBar: Phaser.GameObjects.Graphics;
   private readonly badge: Phaser.GameObjects.Text;
   private readonly side: CastleSide;
+  private readonly kind: CastleUnitKind;
+  private readonly barY: number;
   private x: number;
   private y: number;
   private vx = 0;
@@ -226,20 +469,22 @@ class UnitRig {
   constructor(scene: Phaser.Scene, unit: CastleUnitState, spawnX: number) {
     this.scene = scene;
     this.side = unit.side;
+    this.kind = unit.kind;
     this.x = spawnX;
-    this.y = GROUND_Y - 10;
+    this.y = GROUND_Y + 1;
     this.lastHp = unit.hp;
-    const accent = parseHex(CASTLE_UNIT_DEFS[unit.kind].accent, 0x8bcf78);
-    this.shadow = scene.add.ellipse(0, 8, 52, 14, 0x163f46, 0.2);
-    this.leftPart = scene.add.ellipse(-17, -17, 22, 15, accent, 0.88).setStrokeStyle(2, unit.side === "player" ? 0x285e63 : 0x71485e, 0.75);
-    this.rightPart = scene.add.ellipse(17, -17, 22, 15, accent, 0.88).setStrokeStyle(2, unit.side === "player" ? 0x285e63 : 0x71485e, 0.75);
-    this.accessory = scene.add.circle(0, -38, unit.kind === "bigChonk" || unit.kind === "rootLump" ? 9 : 6, accent, 0.9).setStrokeStyle(2, 0xffffff, 0.55);
-    this.sprite = scene.add.image(0, -16, textureKey(unit.kind));
-    const size = unit.kind === "rootLump" || unit.kind === "bigChonk" ? 72 : unit.kind === "nibbleImp" || unit.kind === "piplet" ? 43 : 56;
-    this.sprite.setDisplaySize(size, size).setFlipX(unit.side === "enemy");
+    const spec = UNIT_PUPPET_SPECS[unit.kind];
+    const texture = textureKey(unit.kind);
+    const prefix = `unit-${unit.kind}`;
+    this.shadow = scene.add.ellipse(0, 3, unit.kind === "rootLump" || unit.kind === "bigChonk" ? 58 : 45, 11, 0x163f46, 0.19);
+    this.artRoot = scene.add.container(0, 0);
+    this.core = new PuppetBone(scene, texture, `${prefix}-core`, spec.core, "body", spec);
+    this.pieces = spec.pieces.map(piece => new PuppetBone(scene, texture, `${prefix}-${piece.id}`, piece, piece.motion, spec));
+    this.artRoot.add([this.core.node, ...this.pieces.map(piece => piece.node)]).setScale(unit.side === "enemy" ? -1 : 1, 1);
     this.hpBar = scene.add.graphics();
-    this.badge = scene.add.text(0, -61, "", { fontFamily: "Nunito, sans-serif", fontSize: "12px", fontStyle: "bold", color: "#ffffff", stroke: "#194f53", strokeThickness: 4 }).setOrigin(0.5);
-    this.container = scene.add.container(this.x, this.y, [this.shadow, this.leftPart, this.rightPart, this.accessory, this.sprite, this.hpBar, this.badge]).setDepth(12);
+    this.barY = unit.kind === "rootLump" || unit.kind === "bigChonk" ? -76 : -61;
+    this.badge = scene.add.text(0, this.barY - 9, "", { fontFamily: "Nunito, sans-serif", fontSize: "9px", fontStyle: "bold", color: "#ffffff", stroke: "#194f53", strokeThickness: 3 }).setOrigin(0.5);
+    this.container = scene.add.container(this.x, this.y, [this.shadow, this.artRoot, this.hpBar, this.badge]).setDepth(12);
     this.container.setScale(0.18);
     scene.tweens.add({ targets: this.container, scaleX: 1, scaleY: 1, duration: 420, ease: "Back.Out" });
   }
@@ -251,8 +496,10 @@ class UnitRig {
     this.x += this.vx * deltaSeconds;
     this.phase += deltaSeconds * (live ? 5.2 : 1.1);
     if (unit.hp < this.lastHp) {
-      this.scene.tweens.add({ targets: this.sprite, tint: 0xffffff, alpha: 0.35, yoyo: true, duration: 70, repeat: 1, onComplete: () => this.sprite.clearTint().setAlpha(1) });
+      this.scene.tweens.add({ targets: this.artRoot, alpha: 0.25, yoyo: true, duration: 70, repeat: 1, onComplete: () => this.artRoot.setAlpha(1) });
       this.container.x += this.side === "player" ? -8 : 8;
+      this.core.impulse(this.side === "player" ? -32 : 32, 6, this.side === "player" ? -80 : 80);
+      this.pieces.forEach((piece, index) => piece.impulse(index % 2 ? 22 : -22, -14, index % 2 ? 90 : -90));
     }
     this.lastHp = unit.hp;
     if (unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - 170 && this.attackSignal <= 0) {
@@ -263,11 +510,21 @@ class UnitRig {
     const lunge = this.attackSignal > 0 ? Math.sin((this.attackSignal / 0.2) * Math.PI) * 12 * (this.side === "player" ? 1 : -1) : 0;
     const stretch = Math.min(0.12, Math.abs(this.vx) / 650) * motion;
     this.container.setPosition(this.x + lunge, this.y + bob);
-    this.sprite.setScale(1 + stretch + (this.attackSignal > 0 ? 0.1 : 0), 1 - stretch * 0.65 - (this.attackSignal > 0 ? 0.08 : 0));
-    this.sprite.setAngle(Math.sin(this.phase * 0.5) * 2.5 * motion + Phaser.Math.Clamp(this.vx / 75, -7, 7));
-    this.leftPart.setPosition(-17 - Math.sin(this.phase * 0.82) * 3 * motion, -17 + Math.cos(this.phase * 1.1) * 3 * motion).setAngle(-18 + Math.sin(this.phase) * 14 * motion);
-    this.rightPart.setPosition(17 + Math.sin(this.phase * 0.76) * 3 * motion, -17 + Math.cos(this.phase * 1.2 + 1) * 3 * motion).setAngle(18 - Math.sin(this.phase + 0.8) * 14 * motion);
-    this.accessory.setPosition(Math.sin(this.phase * 0.65) * 4 * motion, -38 + Math.cos(this.phase * 0.9) * 4 * motion).setScale(1 + Math.sin(this.phase) * 0.08 * motion);
+    const facing = this.side === "enemy" ? -1 : 1;
+    this.artRoot
+      .setScale(facing * (1 + stretch + (this.attackSignal > 0 ? 0.1 : 0)), 1 - stretch * 0.65 - (this.attackSignal > 0 ? 0.08 : 0))
+      .setAngle(Math.sin(this.phase * 0.5) * 2.5 * motion + Phaser.Math.Clamp(this.vx / 75, -7, 7));
+    this.core.update(0, Math.sin(this.phase * 1.4) * 0.7, 0, deltaSeconds, motion);
+    for (const piece of this.pieces) {
+      const wave = Math.sin(this.phase + piece.baseX * 0.08);
+      if (piece.motion === "arm-left") piece.update(-2.5, wave * 3, -wave * 11 - this.attackSignal * 42, deltaSeconds, motion);
+      else if (piece.motion === "arm-right") piece.update(2.5, -wave * 3, wave * 11 + this.attackSignal * 42, deltaSeconds, motion);
+      else if (piece.motion === "antenna") piece.update(wave * 2, -Math.abs(wave) * 2, wave * 9, deltaSeconds, motion);
+      else if (piece.motion === "prop") piece.update(this.attackSignal * 8, wave * 2, wave * 6 + this.attackSignal * 25, deltaSeconds, motion);
+      else if (piece.motion === "crown") piece.update(wave, -Math.abs(wave) * 2.5, wave * 4, deltaSeconds, motion);
+      else if (piece.motion === "root") piece.update(-Math.abs(wave) * 1.5, Math.max(0, wave) * 2, wave * 3, deltaSeconds, motion);
+      else piece.update(0, 0, 0, deltaSeconds, motion);
+    }
     this.shadow.setScale(1 - Math.abs(bob) / 18, 1);
     this.drawStatus(unit);
   }
@@ -280,11 +537,12 @@ class UnitRig {
     const width = 42;
     const hpRatio = Phaser.Math.Clamp(unit.hp / Math.max(1, unit.maxHp), 0, 1);
     this.hpBar.clear();
-    this.hpBar.fillStyle(0xffffff, 0.78).fillRoundedRect(-width / 2, -55, width, 5, 2);
-    this.hpBar.fillStyle(unit.side === "player" ? 0x62bd61 : 0xe96885, 1).fillRoundedRect(-width / 2, -55, width * hpRatio, 5, 2);
-    if (unit.shield > 0) this.hpBar.lineStyle(2, 0x79d5ef, 0.9).strokeCircle(0, -17, 31);
+    this.hpBar.fillStyle(0xffffff, 0.82).fillRoundedRect(-width / 2, this.barY, width, 5, 2);
+    this.hpBar.fillStyle(unit.side === "player" ? 0x62bd61 : 0xe96885, 1).fillRoundedRect(-width / 2, this.barY, width * hpRatio, 5, 2);
+    if (unit.shield > 0) this.hpBar.lineStyle(2, 0x79d5ef, 0.9).strokeEllipse(0, -27, this.kind === "rootLump" || this.kind === "bigChonk" ? 70 : 57, this.kind === "rootLump" || this.kind === "bigChonk" ? 75 : 60);
     const affix = unit.affix ? CASTLE_ENEMY_AFFIX_DEFS[unit.affix] : null;
-    const labels = [affix?.name.slice(0, 1) || "", unit.overfed ? "★" : "", unit.origin === "wild" ? "◌" : ""].filter(Boolean);
+    const labels = [unit.overfed ? "★" : "", unit.origin === "wild" ? "◌" : ""].filter(Boolean);
+    this.badge.setColor(affix?.accent || "#ffffff");
     this.badge.setText(labels.join(""));
   }
 }
@@ -293,8 +551,8 @@ class GooKeepScene extends Phaser.Scene {
   private snapshot: CastleRunState;
   private readonly reducedMotion: boolean;
   private background?: Phaser.GameObjects.Graphics;
-  private player?: SoftBodyLeader;
-  private enemy?: SoftBodyLeader;
+  private player?: PuppetLeader;
+  private enemy?: PuppetLeader;
   private unitRigs = new Map<string, UnitRig>();
   private handledFxIds = new Set<number>();
   private battleKey = "";
@@ -313,9 +571,16 @@ class GooKeepScene extends Phaser.Scene {
     this.snapshot = snapshot;
   }
 
+  pulsePipplo(): void {
+    this.player?.summon();
+  }
+
   preload(): void {
     for (const [kind, path] of Object.entries(UNIT_TEXTURES)) {
       this.load.image(textureKey(kind as CastleUnitKind), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
+    }
+    for (const [form, path] of Object.entries(LEADER_TEXTURES)) {
+      this.load.image(leaderTextureKey(form as LeaderForm), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
     }
   }
 
@@ -357,8 +622,8 @@ class GooKeepScene extends Phaser.Scene {
   private rebuildLeaders(): void {
     this.player?.destroy();
     this.enemy?.destroy();
-    this.player = new SoftBodyLeader(this, "player", this.snapshot.region, this.viewWidth);
-    this.enemy = new SoftBodyLeader(this, "enemy", this.snapshot.region, this.viewWidth, this.snapshot.battle.guardianPowerId);
+    this.player = new PuppetLeader(this, "player", this.snapshot.region, this.viewWidth);
+    this.enemy = new PuppetLeader(this, "enemy", this.snapshot.region, this.viewWidth, this.snapshot.battle.guardianPowerId);
     this.battleKey = `${this.snapshot.region}:${this.snapshot.battle.battleNumber}`;
     for (const rig of this.unitRigs.values()) rig.destroy();
     this.unitRigs.clear();
@@ -375,19 +640,59 @@ class GooKeepScene extends Phaser.Scene {
     const near = parseHex(region.hillNear, 0x83c36d);
     const road = parseHex(region.roadTop, 0xf3d395);
     const width = this.viewWidth;
+    const motif = ((this.snapshot.region - 1) % 3 + 3) % 3;
     this.background.clear();
     this.background.fillGradientStyle(skyTop, skyTop, skyBottom, skyBottom, 1).fillRect(0, 0, width, WORLD_HEIGHT);
-    this.background.fillStyle(parseHex(region.sun, 0xfff59a), 0.95).fillCircle(width * 0.5, 72, 42);
+    this.background.fillStyle(parseHex(region.sun, 0xfff59a), 0.18).fillCircle(width * 0.53, 76, 52);
+    this.background.fillStyle(parseHex(region.sun, 0xfff59a), 0.95).fillCircle(width * 0.53, 76, 34);
+    this.background.fillStyle(0xffffff, 0.34)
+      .fillEllipse(width * 0.2, 76, 82, 24)
+      .fillEllipse(width * 0.24, 70, 54, 31)
+      .fillEllipse(width * 0.78, 105, 94, 25)
+      .fillEllipse(width * 0.74, 99, 46, 28);
+    if (motif === 2) {
+      this.background.fillStyle(0x533f72, 0.28)
+        .fillTriangle(0, 0, width * 0.2, 0, width * 0.08, 58)
+        .fillTriangle(width * 0.73, 0, width, 0, width * 0.91, 68);
+      for (let index = 0; index < 6; index += 1) {
+        const glowX = width * (0.18 + index * 0.13);
+        this.background.fillStyle(index % 2 ? 0xf4a8d2 : 0xffdc72, 0.2).fillCircle(glowX, 138 + (index % 3) * 13, 13);
+        this.background.fillStyle(index % 2 ? 0xf4a8d2 : 0xffdc72, 0.72).fillCircle(glowX, 138 + (index % 3) * 13, 4);
+      }
+    }
     this.background.fillStyle(far, 1).fillEllipse(width * 0.25, 230, width * 0.64, 160).fillEllipse(width * 0.76, 226, width * 0.7, 165);
     this.background.fillStyle(near, 1).fillEllipse(width * 0.16, 259, width * 0.53, 155).fillEllipse(width * 0.82, 257, width * 0.62, 155);
+    if (motif === 0) {
+      for (const treeX of [width * 0.14, width * 0.86]) {
+        this.background.lineStyle(8, 0x52764f, 0.55).lineBetween(treeX, 223, treeX, 158);
+        this.background.fillStyle(treeX < width * 0.5 ? 0xf2a4c5 : 0x7ac8b7, 0.85)
+          .fillCircle(treeX - 15, 156, 22)
+          .fillCircle(treeX + 12, 151, 26)
+          .fillCircle(treeX + 3, 132, 20);
+      }
+    } else if (motif === 1) {
+      for (const treeX of [width * 0.18, width * 0.82]) {
+        this.background.lineStyle(7, 0x2d7a78, 0.62).beginPath().moveTo(treeX, 225).lineTo(treeX, 152).lineTo(treeX - 24, 127).strokePath();
+        this.background.lineBetween(treeX, 169, treeX + 29, 141);
+        this.background.fillStyle(0x80d6cf, 0.85).fillCircle(treeX - 25, 124, 13).fillCircle(treeX + 31, 138, 16).fillCircle(treeX, 145, 12);
+      }
+      this.background.fillStyle(0x4f8170, 0.7).fillEllipse(width * 0.5, 144, 94, 24);
+      this.background.fillStyle(0x8fd37a, 0.92).fillEllipse(width * 0.5, 137, 92, 21);
+      this.background.fillStyle(0xe8d072, 0.9).fillCircle(width * 0.48, 124, 4).fillCircle(width * 0.52, 128, 5);
+    } else {
+      for (const mushroomX of [width * 0.13, width * 0.89]) {
+        this.background.fillStyle(0xe5d6bd, 0.8).fillRoundedRect(mushroomX - 4, 184, 8, 39, 4);
+        this.background.fillStyle(mushroomX < width * 0.5 ? 0xd982b8 : 0x8a72bd, 0.9).fillEllipse(mushroomX, 181, 42, 19);
+      }
+    }
     this.background.fillStyle(ground, 1).fillRect(0, 215, width, 85);
     this.background.fillStyle(road, 1).fillEllipse(width * 0.5, 270, width * 0.84, 98);
     this.background.lineStyle(4, 0xffffff, 0.3).strokeEllipse(width * 0.5, 269, width * 0.84, 94);
     this.background.fillStyle(0x204f51, 0.14).fillEllipse(width * 0.08, 254, 130, 24).fillEllipse(width * 0.92, 254, 145, 25);
-    for (let index = 0; index < 10; index += 1) {
-      const x = width * (0.16 + index * 0.075);
+    for (let index = 0; index < 13; index += 1) {
+      const x = width * (0.11 + index * 0.065);
       const y = 231 + Math.sin(index * 2.2) * 6;
-      this.background.fillStyle(index % 2 === 0 ? 0xffffff : 0xf2e06d, 0.68).fillCircle(x, y, 2 + (index % 3));
+      this.background.fillStyle(index % 3 === 0 ? 0xf09cbd : index % 2 === 0 ? 0xffffff : 0xf2e06d, 0.72).fillCircle(x, y, 2 + (index % 3));
     }
   }
 
@@ -554,15 +859,18 @@ class GooKeepScene extends Phaser.Scene {
 
   private burst(x: number, y: number, color: number, count: number): void {
     for (let index = 0; index < count; index += 1) {
-      const particle = this.add.circle(x, y, Phaser.Math.Between(3, 7), color, 0.9).setDepth(36);
+      const size = Phaser.Math.Between(3, 7);
+      const particle = index % 3 === 0
+        ? this.add.star(x, y, 5, Math.max(1.5, size * 0.45), size, color, 0.92).setDepth(36)
+        : this.add.ellipse(x, y, size * 1.25, size * 1.7, color, 0.9).setDepth(36).setAngle(index * 37);
       const angle = (Math.PI * 2 * index) / count + Math.random() * 0.45;
       const distance = Phaser.Math.Between(22, 54);
-      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * distance, y: y + Math.sin(angle) * distance, scale: 0.1, alpha: 0, duration: this.reducedMotion ? 240 : 520, ease: "Quad.Out", onComplete: () => particle.destroy() });
+      this.tweens.add({ targets: particle, x: x + Math.cos(angle) * distance, y: y + Math.sin(angle) * distance, angle: particle.angle + (index % 2 ? 110 : -110), scale: 0.1, alpha: 0, duration: this.reducedMotion ? 240 : 520, ease: "Quad.Out", onComplete: () => particle.destroy() });
     }
   }
 
   private leaderX(side: CastleSide): number {
-    const edge = Math.max(58, Math.min(82, this.viewWidth * 0.09));
+    const edge = Math.max(72, Math.min(104, this.viewWidth * 0.095));
     return side === "player" ? edge : this.viewWidth - edge;
   }
 
@@ -572,10 +880,11 @@ class GooKeepScene extends Phaser.Scene {
   }
 }
 
-export function GooKeepBattlefield({ run, reducedMotion = false }: BattlefieldProps) {
+export function GooKeepBattlefield({ run, reducedMotion = false, pipploPulseSerial = 0 }: BattlefieldProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<GooKeepScene | null>(null);
   const initialRunRef = useRef(run);
+  const lastPipploPulseRef = useRef(pipploPulseSerial);
 
   useEffect(() => {
     if (!hostRef.current) return undefined;
@@ -603,6 +912,11 @@ export function GooKeepBattlefield({ run, reducedMotion = false }: BattlefieldPr
   useEffect(() => {
     sceneRef.current?.setSnapshot(run);
   }, [run]);
+
+  useEffect(() => {
+    if (pipploPulseSerial !== lastPipploPulseRef.current) sceneRef.current?.pulsePipplo();
+    lastPipploPulseRef.current = pipploPulseSerial;
+  }, [pipploPulseSerial]);
 
   const friendly = run.battle.units.filter(unit => unit.side === "player").length;
   const enemies = run.battle.units.length - friendly;

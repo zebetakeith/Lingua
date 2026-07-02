@@ -474,7 +474,7 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   sporeWeather: {
     id: "sporeWeather",
     name: "Spore Weather",
-    epithet: "Mycella, Mire Gardener",
+    epithet: "Puffmaestro, Spore Conductor",
     description: "At each phase change, friendly units are slowed for 3 seconds.",
     signatureName: "Spore Squall",
     signature: "Spore Squall periodically slows the whole friendly formation.",
@@ -484,8 +484,8 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   moonTax: {
     id: "moonTax",
     name: "Moon Tax",
-    epithet: "Mycella, Spore Oracle",
-    description: "At each phase change, the Spore Oracle drains up to 1 stored Goo.",
+    epithet: "Mallow, Moon Tollkeeper",
+    description: "At each phase change, the Moon Tollkeeper drains up to 1 stored Goo.",
     signatureName: "Moon Tithe",
     signature: "Moon Tithe periodically drains up to 0.5 stored Goo during combat.",
     counterplay: "Spend Goo before marching instead of banking it where the next tithe can reach it.",
@@ -494,7 +494,7 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   rootQuake: {
     id: "rootQuake",
     name: "Root Quake",
-    epithet: "Orrum, Rootbreaker",
+    epithet: "Thumblestump, Root Drummer",
     description: "At each phase change, every friendly unit takes 4 damage; unit shields absorb it first.",
     signatureName: "Root Tremor",
     signature: "Root Tremor periodically deals 2 shieldable damage to every friendly unit.",
@@ -504,7 +504,7 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   broodCall: {
     id: "broodCall",
     name: "Brood Call",
-    epithet: "Orrum, Brood Bellkeeper",
+    epithet: "Broodle, Brood Bellkeeper",
     description: "At each phase change, the Bellkeeper calls an extra Nibble Imp, then an armored Shell Slime.",
     signatureName: "Brood Drum",
     signature: "Brood Drum periodically hatches a bonus attacker, escalating to Boomcaps.",

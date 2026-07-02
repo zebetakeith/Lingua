@@ -5963,11 +5963,11 @@ export default function App() {
         
         <div className="relative z-10 flex flex-col items-center justify-center h-full px-4">
           {/* Goo Keep title */}
-          <div className="mb-3 flex items-end justify-center gap-1 sm:gap-3">
+          <div className="goo-menu-title-lockup mb-3 flex items-end justify-center gap-1 sm:gap-3">
             <img
-              src={assetUrl("assets/goo-keep/characters/pipplo/idle/01.png")}
+              src={assetUrl("assets/goo-keep/characters/pipplo/master/pipplo-master-v2.png")}
               alt="Pipplo, the Goo Keep keeper"
-              className="h-24 w-24 object-contain drop-shadow-[0_8px_0_rgba(24,103,105,0.18)] sm:h-32 sm:w-32"
+              className="goo-menu-pipplo object-contain"
             />
             <div className="pb-1 text-left sm:pb-2">
               <p className="mb-1 text-[9px] font-black tracking-[0.2em] text-teal-950/65 sm:text-xs">LEXICON LABYRINTH PRESENTS</p>

@@ -2479,6 +2479,38 @@ img[src*="enemy_"] {
   font-family: ui-rounded, "Arial Rounded MT Bold", Nunito, system-ui, sans-serif;
 }
 
+.goo-menu-title-lockup {
+  position: relative;
+  isolation: isolate;
+}
+
+.goo-menu-title-lockup::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 1.5rem;
+  bottom: -0.25rem;
+  width: clamp(7.5rem, 15vw, 11rem);
+  height: clamp(2.6rem, 5vw, 4rem);
+  background: rgba(39, 111, 112, 0.18);
+  border-radius: 50%;
+  filter: blur(2px);
+  transform: skewX(-8deg);
+}
+
+.goo-menu-pipplo {
+  width: clamp(8rem, 17vw, 11.5rem);
+  height: clamp(8rem, 17vw, 11.5rem);
+  filter: drop-shadow(0 10px 2px rgba(24, 103, 105, 0.2));
+  transform-origin: 50% 88%;
+  animation: goo-menu-pipplo-breathe 1.7s cubic-bezier(.44,.05,.42,.95) infinite alternate;
+}
+
+@keyframes goo-menu-pipplo-breathe {
+  from { transform: translateY(2px) rotate(-1.5deg) scale(.985,1.015); }
+  to { transform: translateY(-7px) rotate(1.5deg) scale(1.025,.975); }
+}
+
 .cute-theme img[src*="/cute/"] {
   filter: drop-shadow(0 8px 5px rgba(22, 107, 115, 0.2));
 }
