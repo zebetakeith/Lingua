@@ -34,13 +34,24 @@ const UNIT_TEXTURES: Partial<Record<CastleUnitKind, string>> = {
 
 type LeaderForm = "pipplo" | "mallow" | "clackback" | "puffmaestro" | "thumblestump" | "broodle";
 
-const LEADER_TEXTURES: Record<LeaderForm, string> = {
-  pipplo: "characters/pipplo/master/pipplo-master-v2.png",
-  mallow: "characters/generals/mallow/mallow-moon-master-v1.png",
-  clackback: "characters/generals/clackback/clackback-master-v1.png",
-  puffmaestro: "characters/generals/puffmaestro/puffmaestro-master-v1.png",
-  thumblestump: "characters/generals/thumblestump/thumblestump-master-v1.png",
-  broodle: "characters/generals/broodle/broodle-master-v1.png",
+interface FlatLeaderStyle {
+  bodyColor: number;
+  outlineColor: number;
+  accentColor: number;
+  bodyWidth: number;
+  bodyHeight: number;
+  bodyY: number;
+  faceY: number;
+  eyeSpacing: number;
+}
+
+const FLAT_LEADER_STYLES: Record<LeaderForm, FlatLeaderStyle> = {
+  pipplo: { bodyColor: 0xf2df28, outlineColor: 0xb49f16, accentColor: 0xf0648b, bodyWidth: 104, bodyHeight: 118, bodyY: -62, faceY: -70, eyeSpacing: 35 },
+  mallow: { bodyColor: 0xb8b2e5, outlineColor: 0x6f679f, accentColor: 0xf1cf62, bodyWidth: 88, bodyHeight: 104, bodyY: -58, faceY: -65, eyeSpacing: 28 },
+  clackback: { bodyColor: 0x8b78bd, outlineColor: 0x55477e, accentColor: 0xf1c65f, bodyWidth: 102, bodyHeight: 94, bodyY: -52, faceY: -59, eyeSpacing: 31 },
+  puffmaestro: { bodyColor: 0xf0dfbb, outlineColor: 0x76624f, accentColor: 0xcb5f91, bodyWidth: 78, bodyHeight: 92, bodyY: -49, faceY: -54, eyeSpacing: 25 },
+  thumblestump: { bodyColor: 0xa66d45, outlineColor: 0x67452f, accentColor: 0x8eb84c, bodyWidth: 100, bodyHeight: 104, bodyY: -57, faceY: -66, eyeSpacing: 30 },
+  broodle: { bodyColor: 0x8c6eb2, outlineColor: 0x554171, accentColor: 0xf08986, bodyWidth: 84, bodyHeight: 98, bodyY: -53, faceY: -61, eyeSpacing: 27 },
 };
 
 interface CropRect {
@@ -64,92 +75,6 @@ interface PuppetSpec {
   core: CropRect;
   pieces: PuppetPieceSpec[];
 }
-
-const PUPPET_SPECS: Record<LeaderForm, PuppetSpec> = {
-  pipplo: {
-    width: 1_254,
-    height: 1_254,
-    anchorX: 627,
-    anchorY: 1_042,
-    scale: 0.15,
-    core: { x: 318, y: 302, width: 620, height: 702 },
-    pieces: [
-      { id: "left-arm", motion: "arm-left", x: 226, y: 625, width: 177, height: 205 },
-      { id: "right-arm", motion: "arm-right", x: 858, y: 625, width: 177, height: 205 },
-      { id: "left-foot", motion: "foot-left", x: 399, y: 910, width: 175, height: 151 },
-      { id: "right-foot", motion: "foot-right", x: 679, y: 910, width: 175, height: 151 },
-      { id: "antenna", motion: "antenna", x: 520, y: 178, width: 326, height: 210 },
-    ],
-  },
-  mallow: {
-    width: 1_254, height: 1_254, anchorX: 638, anchorY: 1_135, scale: 0.143,
-    core: { x: 429, y: 238, width: 494, height: 689 },
-    pieces: [
-      { id: "moon-mantle", motion: "crown", x: 352, y: 194, width: 562, height: 733 },
-      { id: "moon-tassel", motion: "antenna", x: 727, y: 235, width: 176, height: 160 },
-      { id: "moon-staff", motion: "prop", x: 106, y: 97, width: 333, height: 916 },
-      { id: "moon-ledger", motion: "arm-right", x: 852, y: 553, width: 321, height: 302 },
-      { id: "moon-hand", motion: "arm-left", x: 278, y: 586, width: 196, height: 186 },
-      { id: "moon-tail-left", motion: "foot-left", x: 505, y: 854, width: 201, height: 189 },
-      { id: "moon-tail-center", motion: "root", x: 616, y: 865, width: 210, height: 223 },
-      { id: "moon-tail-right", motion: "foot-right", x: 748, y: 851, width: 207, height: 194 },
-    ],
-  },
-  clackback: {
-    width: 1_254, height: 1_254, anchorX: 638, anchorY: 1_011, scale: 0.14,
-    core: { x: 344, y: 505, width: 566, height: 494 },
-    pieces: [
-      { id: "cantor-shell", motion: "crown", x: 596, y: 253, width: 557, height: 656 },
-      { id: "cantor-crown", motion: "antenna", x: 397, y: 317, width: 394, height: 302 },
-      { id: "cantor-baton", motion: "prop", x: 63, y: 343, width: 324, height: 550 },
-      { id: "cantor-claw-left", motion: "arm-left", x: 178, y: 642, width: 306, height: 263 },
-      { id: "cantor-claw-right", motion: "arm-right", x: 653, y: 647, width: 286, height: 278 },
-      { id: "cantor-foot-left", motion: "foot-left", x: 375, y: 891, width: 197, height: 126 },
-      { id: "cantor-foot-right", motion: "foot-right", x: 648, y: 893, width: 199, height: 126 },
-    ],
-  },
-  puffmaestro: {
-    width: 1_254, height: 1_254, anchorX: 632, anchorY: 1_139, scale: 0.137,
-    core: { x: 382, y: 548, width: 492, height: 584 },
-    pieces: [
-      { id: "weather-cap", motion: "crown", x: 285, y: 98, width: 829, height: 650 },
-      { id: "weather-fan", motion: "prop", x: 14, y: 458, width: 386, height: 533 },
-      { id: "weather-arm-left", motion: "arm-left", x: 226, y: 760, width: 253, height: 239 },
-      { id: "weather-arm-right", motion: "arm-right", x: 813, y: 748, width: 235, height: 233 },
-      { id: "weather-charms", motion: "antenna", x: 868, y: 772, width: 357, height: 360 },
-      { id: "weather-foot-left", motion: "foot-left", x: 398, y: 1_035, width: 199, height: 111 },
-      { id: "weather-foot-right", motion: "foot-right", x: 699, y: 1_031, width: 184, height: 114 },
-    ],
-  },
-  thumblestump: {
-    width: 1_254, height: 1_254, anchorX: 625, anchorY: 1_174, scale: 0.137,
-    core: { x: 302, y: 432, width: 650, height: 621 },
-    pieces: [
-      { id: "quake-crown", motion: "crown", x: 277, y: 82, width: 702, height: 453 },
-      { id: "quake-charms", motion: "antenna", x: 300, y: 276, width: 174, height: 265 },
-      { id: "quake-arm-left", motion: "arm-left", x: 116, y: 565, width: 365, height: 333 },
-      { id: "quake-arm-right", motion: "arm-right", x: 810, y: 427, width: 331, height: 468 },
-      { id: "quake-drum", motion: "prop", x: 382, y: 681, width: 339, height: 311 },
-      { id: "quake-roots-left", motion: "foot-left", x: 124, y: 860, width: 523, height: 312 },
-      { id: "quake-roots-right", motion: "foot-right", x: 580, y: 850, width: 552, height: 321 },
-    ],
-  },
-  broodle: {
-    width: 1_254, height: 1_254, anchorX: 628, anchorY: 1_151, scale: 0.14,
-    core: { x: 279, y: 387, width: 615, height: 693 },
-    pieces: [
-      { id: "brood-ear-left", motion: "antenna", x: 172, y: 86, width: 360, height: 485 },
-      { id: "brood-ear-right", motion: "crown", x: 607, y: 101, width: 470, height: 475 },
-      { id: "brood-horns", motion: "crown", x: 475, y: 345, width: 199, height: 135 },
-      { id: "brood-bell", motion: "prop", x: 96, y: 475, width: 286, height: 350 },
-      { id: "brood-arm-right", motion: "arm-right", x: 634, y: 596, width: 250, height: 310 },
-      { id: "brood-pouch", motion: "root", x: 298, y: 618, width: 452, height: 431 },
-      { id: "brood-tail", motion: "arm-left", x: 783, y: 661, width: 405, height: 430 },
-      { id: "brood-foot-left", motion: "foot-left", x: 295, y: 1_015, width: 201, height: 130 },
-      { id: "brood-foot-right", motion: "foot-right", x: 635, y: 1_017, width: 195, height: 130 },
-    ],
-  },
-};
 
 const UNIT_PUPPET_SPECS: Record<CastleUnitKind, PuppetSpec> = {
   piplet: {
@@ -267,12 +192,12 @@ function textureKey(kind: CastleUnitKind): string {
   return `goo-unit-${kind}`;
 }
 
-function leaderTextureKey(form: LeaderForm): string {
-  return `goo-leader-${form}`;
-}
-
 function getLeaderForm(side: CastleSide, region: number, guardianPowerId: CastleGuardianPowerId | null): LeaderForm {
   if (side === "player") return "pipplo";
+  if (import.meta.env.DEV) {
+    const previewForm = new URLSearchParams(window.location.search).get("leader");
+    if (previewForm && previewForm in FLAT_LEADER_STYLES) return previewForm as LeaderForm;
+  }
   const powerId = guardianPowerId ?? getCastleGuardianPower(region).id;
   if (powerId === "shellReprisal") return "clackback";
   if (powerId === "sporeWeather") return "puffmaestro";
@@ -339,14 +264,33 @@ class PuppetBone {
   }
 }
 
+type FlatJointRole = "arm" | "leg" | "antenna" | "ear" | "prop" | "tail" | "crown";
+
+interface FlatJoint {
+  node: Phaser.GameObjects.Container;
+  role: FlatJointRole;
+  side: -1 | 0 | 1;
+  baseX: number;
+  baseY: number;
+  baseAngle: number;
+  phaseOffset: number;
+  angle: number;
+}
+
 class PuppetLeader {
   private readonly side: CastleSide;
   private readonly form: LeaderForm;
+  private readonly style: FlatLeaderStyle;
   private readonly root: Phaser.GameObjects.Container;
   private readonly shadow: Phaser.GameObjects.Ellipse;
-  private readonly core: PuppetBone;
-  private readonly pieces: PuppetBone[];
   private readonly homeX: number;
+  private readonly visualScale: number;
+  private readonly joints: FlatJoint[] = [];
+  private readonly eyeSockets: Phaser.GameObjects.Container[] = [];
+  private readonly pupils: Phaser.GameObjects.Ellipse[] = [];
+  private bodyRoot!: Phaser.GameObjects.Container;
+  private faceRoot!: Phaser.GameObjects.Container;
+  private mouthRoot!: Phaser.GameObjects.Container;
   private reaction = 0;
   private summonPulse = 0;
   private phase = 0;
@@ -355,17 +299,201 @@ class PuppetLeader {
   constructor(scene: Phaser.Scene, side: CastleSide, region: number, viewportWidth: number, guardianPowerId: CastleGuardianPowerId | null = null) {
     this.side = side;
     this.form = getLeaderForm(side, region, guardianPowerId);
+    this.style = FLAT_LEADER_STYLES[this.form];
     const edge = Math.max(72, Math.min(104, viewportWidth * 0.095));
     this.homeX = side === "player" ? edge : viewportWidth - edge;
-    const spec = PUPPET_SPECS[this.form];
-    const texture = leaderTextureKey(this.form);
-    const prefix = `leader-${this.form}`;
-    this.shadow = scene.add.ellipse(this.homeX, GROUND_Y + 2, this.form === "pipplo" ? 112 : 98, 18, 0x244c4f, 0.2).setDepth(14);
+    this.visualScale = Phaser.Math.Clamp(viewportWidth / 620, 0.78, 1);
+    this.shadow = scene.add.ellipse(this.homeX, GROUND_Y + 3, this.form === "pipplo" ? 108 : 96, 18, 0x244c4f, 0.2).setDepth(14);
     this.root = scene.add.container(this.homeX, GROUND_Y).setDepth(18);
-    this.core = new PuppetBone(scene, texture, `${prefix}-core`, spec.core, "body", spec);
-    this.pieces = spec.pieces.map(piece => new PuppetBone(scene, texture, `${prefix}-${piece.id}`, piece, piece.motion, spec));
-    this.root.add([this.core.node, ...this.pieces.map(piece => piece.node)]);
-    this.root.setScale(side === "enemy" ? -1 : 1, 1);
+    this.buildCharacter(scene);
+    this.root.setScale((side === "enemy" ? -1 : 1) * this.visualScale, this.visualScale);
+  }
+
+  private outlinedEllipse(scene: Phaser.Scene, x: number, y: number, width: number, height: number, color: number, outline = this.style.outlineColor): Phaser.GameObjects.Ellipse {
+    return scene.add.ellipse(x, y, width, height, color, 1).setStrokeStyle(3, outline, 0.94);
+  }
+
+  private outlinedCircle(scene: Phaser.Scene, x: number, y: number, radius: number, color: number, outline = this.style.outlineColor): Phaser.GameObjects.Arc {
+    return scene.add.circle(x, y, radius, color, 1).setStrokeStyle(3, outline, 0.94);
+  }
+
+  private addJoint(scene: Phaser.Scene, role: FlatJointRole, side: -1 | 0 | 1, x: number, y: number, baseAngle = 0, phaseOffset = 0): Phaser.GameObjects.Container {
+    const node = scene.add.container(x, y);
+    this.root.add(node);
+    this.joints.push({ node, role, side, baseX: x, baseY: y, baseAngle, phaseOffset, angle: baseAngle });
+    return node;
+  }
+
+  private addOvalLimb(scene: Phaser.Scene, role: FlatJointRole, side: -1 | 1, x: number, y: number, width: number, height: number, color = this.style.bodyColor, baseAngle = 0, phaseOffset = 0): Phaser.GameObjects.Container {
+    const node = this.addJoint(scene, role, side, x, y, baseAngle, phaseOffset);
+    const childX = role === "leg" ? side * 3 : side * width * 0.3;
+    const childY = role === "leg" ? height * 0.28 : height * 0.18;
+    node.add(this.outlinedEllipse(scene, childX, childY, width, height, color));
+    return node;
+  }
+
+  private buildCharacter(scene: Phaser.Scene): void {
+    const style = this.style;
+
+    if (this.form === "pipplo") {
+      this.addOvalLimb(scene, "arm", -1, -45, -72, 31, 24, style.bodyColor, -8, 0.4);
+      this.addOvalLimb(scene, "arm", 1, 45, -72, 31, 24, style.bodyColor, 8, 2.1);
+      this.addOvalLimb(scene, "leg", -1, -27, -9, 29, 20, style.bodyColor, -2, 0.2);
+      this.addOvalLimb(scene, "leg", 1, 27, -9, 29, 20, style.bodyColor, 2, 3.2);
+      const antenna = this.addJoint(scene, "antenna", 0, 0, -119, 0, 1.2);
+      antenna.add([
+        scene.add.rectangle(3, -13, 8, 31, style.bodyColor).setStrokeStyle(3, style.outlineColor, 0.94).setAngle(12),
+        this.outlinedCircle(scene, 12, -31, 12, style.accentColor),
+      ]);
+    } else if (this.form === "clackback") {
+      const shell = this.addJoint(scene, "crown", 1, 19, -68, 8, 0.7);
+      shell.add(this.outlinedEllipse(scene, 15, -5, 72, 84, 0xe9c79d, 0x9f6d62));
+      const spiral = scene.add.graphics().lineStyle(4, 0xc78875, 0.9);
+      spiral.beginPath().moveTo(11, -22).lineTo(28, -28).lineTo(40, -16).lineTo(39, 3).lineTo(23, 16).lineTo(8, 10).strokePath();
+      shell.add(spiral);
+      const leftClaw = this.addOvalLimb(scene, "arm", -1, -47, -61, 38, 27, style.bodyColor, -12, 0.3);
+      const rightClaw = this.addOvalLimb(scene, "arm", 1, 47, -61, 38, 27, style.bodyColor, 12, 2.3);
+      leftClaw.add(this.outlinedCircle(scene, -20, 4, 11, 0xa88dd5));
+      rightClaw.add(this.outlinedCircle(scene, 20, 4, 11, 0xa88dd5));
+      this.addOvalLimb(scene, "leg", -1, -28, -9, 30, 17, style.bodyColor, -2, 0.1);
+      this.addOvalLimb(scene, "leg", 1, 28, -9, 30, 17, style.bodyColor, 2, 3.1);
+      const crown = this.addJoint(scene, "crown", 0, -7, -102, -4, 1.6);
+      crown.add([
+        scene.add.triangle(-13, 4, 0, 22, 9, 0, 17, 22, style.accentColor).setStrokeStyle(3, 0x9c7424, 0.9),
+        scene.add.triangle(9, 3, 0, 21, 9, -2, 18, 21, style.accentColor).setStrokeStyle(3, 0x9c7424, 0.9),
+      ]);
+      const baton = this.addJoint(scene, "prop", -1, -56, -70, -13, 2.4);
+      baton.add([
+        scene.add.rectangle(-15, 21, 6, 58, 0x7e513d).setStrokeStyle(2, 0x523426, 1),
+        this.outlinedCircle(scene, -20, -10, 9, style.accentColor, 0x9c7424),
+      ]);
+    } else if (this.form === "puffmaestro") {
+      this.addOvalLimb(scene, "arm", -1, -35, -61, 27, 19, 0xb7c778, -9, 0.2);
+      this.addOvalLimb(scene, "arm", 1, 35, -61, 27, 19, 0xb7c778, 9, 2.4);
+      this.addOvalLimb(scene, "leg", -1, -22, -8, 25, 16, style.bodyColor, -2, 0.1);
+      this.addOvalLimb(scene, "leg", 1, 22, -8, 25, 16, style.bodyColor, 2, 3.2);
+      const cap = this.addJoint(scene, "crown", 0, 0, -91, 0, 1.4);
+      cap.add([
+        this.outlinedEllipse(scene, 0, -8, 116, 56, 0x7b4b92, 0x50345f),
+        this.outlinedCircle(scene, -28, -14, 9, 0xe96d7d, 0x9e3f57),
+        this.outlinedCircle(scene, 9, -23, 11, 0xe96d7d, 0x9e3f57),
+        this.outlinedCircle(scene, 32, -8, 7, 0xf0a16d, 0xa55c42),
+      ]);
+      const fan = this.addJoint(scene, "prop", -1, -42, -64, -12, 2.1);
+      const fanLeaf = scene.add.graphics().fillStyle(0x7bc2aa, 1).lineStyle(3, 0x42796c, 0.95);
+      fanLeaf.beginPath().moveTo(-7, 8).lineTo(-36, -8).lineTo(-31, 22).lineTo(-5, 31).closePath().fillPath().strokePath();
+      fan.add([fanLeaf, scene.add.rectangle(-5, 33, 5, 30, 0x74503b).setAngle(-10)]);
+      const charms = this.addJoint(scene, "antenna", 1, 40, -51, 4, 0.8);
+      charms.add([
+        scene.add.rectangle(8, 13, 3, 34, 0x735b47),
+        this.outlinedCircle(scene, 8, 31, 6, 0x69b9ac, 0x39746e),
+      ]);
+    } else if (this.form === "mallow") {
+      this.addOvalLimb(scene, "arm", -1, -40, -65, 29, 20, style.bodyColor, -8, 0.5);
+      this.addOvalLimb(scene, "arm", 1, 40, -65, 29, 20, style.bodyColor, 8, 2.5);
+      this.addOvalLimb(scene, "leg", -1, -26, -12, 31, 27, style.bodyColor, -2, 0.1);
+      this.addOvalLimb(scene, "leg", 1, 26, -12, 31, 27, style.bodyColor, 2, 3.2);
+      const tail = this.addJoint(scene, "tail", 0, 0, -10, 0, 1.8);
+      tail.add(this.outlinedEllipse(scene, 0, 12, 30, 33, style.bodyColor));
+      const tassel = this.addJoint(scene, "antenna", 1, 26, -111, 8, 1.1);
+      tassel.add([scene.add.rectangle(3, -12, 5, 26, style.accentColor), this.outlinedCircle(scene, 8, -28, 7, 0xf09b85, 0xa85853)]);
+      const staff = this.addJoint(scene, "prop", -1, -62, -64, -6, 2.4);
+      staff.add([
+        scene.add.rectangle(-13, 13, 6, 79, 0x765038).setStrokeStyle(2, 0x4c3328, 1),
+        scene.add.arc(-13, -31, 13, 62, 298, false).setStrokeStyle(5, style.accentColor, 1),
+      ]);
+      const ledger = this.addJoint(scene, "prop", 1, 43, -57, 9, 0.5);
+      ledger.add(scene.add.rectangle(15, 8, 26, 32, 0x6f5b9d).setStrokeStyle(3, 0x47396c, 1));
+    } else if (this.form === "thumblestump") {
+      this.addOvalLimb(scene, "arm", -1, -48, -66, 35, 23, style.bodyColor, -10, 0.3);
+      this.addOvalLimb(scene, "arm", 1, 48, -66, 35, 23, style.bodyColor, 10, 2.2);
+      this.addOvalLimb(scene, "leg", -1, -29, -11, 42, 20, 0x805438, -3, 0.1);
+      this.addOvalLimb(scene, "leg", 1, 29, -11, 42, 20, 0x805438, 3, 3.1);
+      const branches = this.addJoint(scene, "crown", 0, 0, -108, 0, 1.3);
+      const branchArt = scene.add.graphics().lineStyle(9, 0x6c4931, 1);
+      branchArt.beginPath().moveTo(0, 20).lineTo(-4, -26).lineTo(-25, -46).moveTo(-4, -20).lineTo(21, -39).moveTo(16, -35).lineTo(31, -57).strokePath();
+      branchArt.fillStyle(0x8eb84c, 1).fillCircle(-27, -48, 10).fillCircle(23, -41, 11).fillCircle(33, -59, 8);
+      branches.add(branchArt);
+    } else {
+      this.addOvalLimb(scene, "arm", -1, -40, -64, 29, 21, style.bodyColor, -9, 0.3);
+      this.addOvalLimb(scene, "arm", 1, 40, -64, 29, 21, style.bodyColor, 9, 2.3);
+      this.addOvalLimb(scene, "leg", -1, -23, -9, 27, 18, style.bodyColor, -2, 0.1);
+      this.addOvalLimb(scene, "leg", 1, 23, -9, 27, 18, style.bodyColor, 2, 3.2);
+      const leftEar = this.addJoint(scene, "ear", -1, -23, -99, -10, 0.2);
+      const rightEar = this.addJoint(scene, "ear", 1, 23, -99, 10, 2.5);
+      leftEar.add([this.outlinedEllipse(scene, -8, -31, 27, 69, style.bodyColor), scene.add.ellipse(-8, -32, 10, 43, 0xe9a1aa)]);
+      rightEar.add([this.outlinedEllipse(scene, 8, -31, 27, 69, style.bodyColor), scene.add.ellipse(8, -32, 10, 43, 0xe9a1aa)]);
+      const tail = this.addJoint(scene, "tail", 1, 40, -43, 15, 1.4);
+      tail.add(this.outlinedEllipse(scene, 19, 2, 40, 24, style.accentColor, 0xa6545d));
+      const bell = this.addJoint(scene, "prop", -1, -44, -64, -10, 2.1);
+      bell.add([this.outlinedCircle(scene, -15, 13, 12, style.accentColor, 0xa6545d), scene.add.circle(-15, 23, 4, 0xf1cf62)]);
+    }
+
+    const body = this.outlinedEllipse(scene, 0, 0, style.bodyWidth, style.bodyHeight, style.bodyColor);
+    this.bodyRoot = scene.add.container(0, style.bodyY, [body]);
+    this.root.add(this.bodyRoot);
+    this.decorateBody(scene);
+    this.buildFace(scene);
+  }
+
+  private decorateBody(scene: Phaser.Scene): void {
+    const style = this.style;
+    if (this.form === "pipplo") {
+      this.bodyRoot.add([
+        scene.add.circle(31, 17, 6, style.accentColor),
+        scene.add.circle(39, 1, 5, style.accentColor),
+      ]);
+    } else if (this.form === "mallow") {
+      this.bodyRoot.add(scene.add.arc(-22, 20, 10, 70, 290, false).setStrokeStyle(4, style.accentColor, 1));
+    } else if (this.form === "clackback") {
+      this.bodyRoot.add([
+        scene.add.circle(-31, 13, 7, 0xa690d4),
+        scene.add.circle(32, 14, 7, 0xa690d4),
+      ]);
+    } else if (this.form === "puffmaestro") {
+      this.bodyRoot.add([scene.add.circle(-22, 20, 5, 0xd9bd83), scene.add.circle(25, 13, 6, 0xb7c778)]);
+    } else if (this.form === "thumblestump") {
+      const rings = scene.add.graphics().lineStyle(3, 0x7a4e34, 0.72);
+      rings.lineBetween(-25, -34, 22, -37).lineBetween(-32, 7, 28, 4);
+      this.bodyRoot.add([
+        rings,
+        this.outlinedEllipse(scene, 0, 29, 48, 35, 0xd29b58, 0x765039),
+      ]);
+    } else if (this.form === "broodle") {
+      this.bodyRoot.add([
+        scene.add.ellipse(-17, 23, 24, 30, 0x72578f),
+        scene.add.circle(26, 13, 6, style.accentColor),
+      ]);
+    }
+  }
+
+  private buildFace(scene: Phaser.Scene): void {
+    const style = this.style;
+    this.faceRoot = scene.add.container(0, style.faceY);
+    const eyeWidth = this.form === "mallow" ? 12 : 14;
+    const eyeHeight = this.form === "mallow" ? 14 : 16;
+    for (const side of [-1, 1] as const) {
+      const socket = scene.add.container(side * style.eyeSpacing * 0.5, 0);
+      const white = this.outlinedEllipse(scene, 0, 0, eyeWidth, eyeHeight, 0xfffdf1, 0x514851);
+      const pupil = scene.add.ellipse(0, 1, 6, 8, 0x2d2933);
+      socket.add([white, pupil]);
+      this.faceRoot.add(socket);
+      this.eyeSockets.push(socket);
+      this.pupils.push(pupil);
+    }
+    const mouthWidth = this.form === "mallow" ? 13 : 21;
+    const mouthHeight = this.form === "mallow" ? 14 : 13;
+    const mouth = this.outlinedEllipse(scene, 0, 18, mouthWidth, mouthHeight, 0x49303d, 0x49303d);
+    const tongue = scene.add.ellipse(2, 22, mouthWidth * 0.55, mouthHeight * 0.42, 0xf1789b);
+    this.mouthRoot = scene.add.container(0, 0, [mouth, tongue]);
+    this.faceRoot.add(this.mouthRoot);
+    if (this.form !== "mallow") {
+      this.faceRoot.add([
+        scene.add.circle(-style.eyeSpacing * 0.72, 12, 4, 0xee8295, 0.78),
+        scene.add.circle(style.eyeSpacing * 0.72, 12, 4, 0xee8295, 0.78),
+      ]);
+    }
+    this.root.add(this.faceRoot);
   }
 
   setHp(current: number, max: number): void {
@@ -374,15 +502,10 @@ class PuppetLeader {
 
   hit(): void {
     this.reaction = 1;
-    const shove = this.side === "player" ? -45 : 45;
-    this.core.impulse(shove, 12, -45);
-    this.pieces.forEach((piece, index) => piece.impulse(shove * (0.65 + index * 0.08), Phaser.Math.Between(-26, 18), Phaser.Math.Between(-150, 150)));
   }
 
   summon(): void {
     this.summonPulse = 1;
-    this.core.impulse(0, -24, 0);
-    this.pieces.forEach((piece, index) => piece.impulse(index % 2 === 0 ? -24 : 24, -32, index % 2 === 0 ? -120 : 120));
   }
 
   setVisible(visible: boolean): void {
@@ -391,53 +514,55 @@ class PuppetLeader {
   }
 
   update(deltaSeconds: number, live: boolean, reducedMotion: boolean): void {
-    this.phase += deltaSeconds * (live ? 2.75 : 0.9);
-    this.reaction = Math.max(0, this.reaction - deltaSeconds * 2.5);
-    this.summonPulse = Math.max(0, this.summonPulse - deltaSeconds * 2.8);
-    const motionScale = reducedMotion ? 0.25 : 1;
-    const healthDroop = (1 - this.hpRatio) * 9;
-    const bob = Math.sin(this.phase * 1.15) * 2.6 * motionScale;
-    const squash = Math.sin(this.phase * 2) * 0.025 * motionScale;
+    this.phase += deltaSeconds * (live ? 2.45 : 0.82);
+    this.reaction = Math.max(0, this.reaction - deltaSeconds * 3.4);
+    this.summonPulse = Math.max(0, this.summonPulse - deltaSeconds * 3.2);
+    const motionScale = reducedMotion ? 0.24 : 1;
+    const healthDroop = (1 - this.hpRatio) * 7;
+    const bob = Math.sin(this.phase * 1.12) * 2.2 * motionScale;
+    const squash = Math.sin(this.phase * 1.9) * 0.018 * motionScale;
     const facing = this.side === "enemy" ? -1 : 1;
+    const reactionShove = this.reaction * 4 * facing;
     this.root
-      .setPosition(this.homeX + facing * (this.summonPulse * 7 - this.reaction * 8), GROUND_Y + bob + healthDroop)
-      .setScale(facing * (1 + squash + this.summonPulse * 0.05), 1 - squash - this.summonPulse * 0.035 + this.reaction * 0.04)
-      .setAngle(Math.sin(this.phase * 0.55) * 1.2 * motionScale + facing * this.reaction * 5);
-    this.shadow.setPosition(this.homeX, GROUND_Y + 3).setScale(1 - Math.abs(bob) / 26 + this.summonPulse * 0.1, 1);
-    this.core.update(0, Math.sin(this.phase * 1.6) * 0.7, this.reaction * facing * 2.5, deltaSeconds, motionScale);
-    this.core.setSquash(1 + squash * 0.8, 1 - squash * 0.55);
-    for (const piece of this.pieces) {
-      const wave = Math.sin(this.phase + piece.baseX * 0.035);
-      switch (piece.motion) {
-        case "arm-left":
-          piece.update(-2 - this.summonPulse * 8, wave * 3 - this.summonPulse * 8, -8 - wave * 9 - this.summonPulse * 24, deltaSeconds, motionScale);
-          break;
-        case "arm-right":
-          piece.update(2 + this.summonPulse * 8, -wave * 3 - this.summonPulse * 8, 8 + wave * 9 + this.summonPulse * 24, deltaSeconds, motionScale);
-          break;
-        case "foot-left":
-          piece.update(-1.5, Math.max(0, wave) * 3, -wave * 4, deltaSeconds, motionScale);
-          piece.setSquash(1 + Math.max(0, -wave) * 0.06 * motionScale, 1 - Math.max(0, -wave) * 0.06 * motionScale);
-          break;
-        case "foot-right":
-          piece.update(1.5, Math.max(0, -wave) * 3, wave * 4, deltaSeconds, motionScale);
-          piece.setSquash(1 + Math.max(0, wave) * 0.06 * motionScale, 1 - Math.max(0, wave) * 0.06 * motionScale);
-          break;
-        case "antenna":
-          piece.update(wave * 2.5, -Math.abs(wave) * 2 - this.summonPulse * 5, wave * 7 + this.summonPulse * 8, deltaSeconds, motionScale);
-          break;
-        case "prop":
-          piece.update(wave * 2, -Math.abs(wave) * 1.5, wave * 5 - this.summonPulse * 13, deltaSeconds, motionScale);
-          break;
-        case "crown":
-          piece.update(wave * 1.4, -Math.abs(wave) * 3 - this.summonPulse * 4, wave * 3.5, deltaSeconds, motionScale);
-          break;
-        case "root":
-          piece.update(wave * 2, Math.max(0, wave) * 2, wave * 2.5, deltaSeconds, motionScale);
-          break;
-        default:
-          piece.update(0, 0, 0, deltaSeconds, motionScale);
-      }
+      .setPosition(this.homeX + this.summonPulse * 3 * facing - reactionShove, GROUND_Y + bob + healthDroop - this.summonPulse * 3)
+      .setScale(
+        facing * this.visualScale * (1 + squash + this.summonPulse * 0.025),
+        this.visualScale * (1 - squash - this.summonPulse * 0.018 + this.reaction * 0.018),
+      )
+      .setAngle(Math.sin(this.phase * 0.5) * 0.8 * motionScale + this.reaction * 2.8 * facing);
+    this.shadow.setPosition(this.homeX, GROUND_Y + 3).setScale(this.visualScale * (1 - Math.abs(bob) / 28 + this.summonPulse * 0.05), this.visualScale);
+    this.bodyRoot.setScale(1 + squash * 0.8, 1 - squash * 0.6);
+
+    const turn = Math.sin(this.phase * 0.34) * motionScale;
+    const turnAmount = Math.abs(turn);
+    const eyeSpread = this.style.eyeSpacing * (1 - turnAmount * 0.24);
+    this.faceRoot.setPosition(turn * this.style.bodyWidth * 0.12, this.style.faceY + Math.sin(this.phase * 0.8) * 0.45 * motionScale);
+    this.faceRoot.setScale(1 - turnAmount * 0.08, 1);
+    this.eyeSockets[0].setPosition(-eyeSpread * 0.5 + turn * 1.8, 0).setAlpha(turn > 0 ? 1 - turnAmount * 0.42 : 1);
+    this.eyeSockets[1].setPosition(eyeSpread * 0.5 + turn * 1.8, 0).setAlpha(turn < 0 ? 1 - turnAmount * 0.42 : 1);
+    const blinkClock = this.phase % 6.2;
+    const blink = blinkClock > 5.92 ? Math.max(0.14, Math.abs(blinkClock - 6.06) / 0.14) : 1;
+    const expressionScale = blink * (1 - this.reaction * 0.48);
+    for (const pupil of this.pupils) pupil.setX(turn * 2.4).setY(1 + this.reaction * 1.2);
+    for (const socket of this.eyeSockets) socket.setScale(1, expressionScale);
+    this.mouthRoot.setScale(1 + this.summonPulse * 0.18, 1 + this.summonPulse * 0.3 + this.reaction * 0.28).setAngle(this.reaction * 8 * facing);
+
+    const settle = Math.min(1, deltaSeconds * (reducedMotion ? 18 : 12));
+    for (const joint of this.joints) {
+      const wave = Math.sin(this.phase * (joint.role === "leg" ? 1.7 : 1.05) + joint.phaseOffset);
+      let amplitude = joint.role === "arm" ? 5.5 : joint.role === "leg" ? 3.2 : joint.role === "ear" ? 6.5 : joint.role === "antenna" ? 5.2 : joint.role === "prop" ? 3.5 : 2.8;
+      if (joint.role === "crown") amplitude = 2.2;
+      let actionAngle = 0;
+      if (joint.role === "arm") actionAngle = -joint.side * this.summonPulse * 21 + joint.side * this.reaction * 9;
+      else if (joint.role === "ear" || joint.role === "antenna") actionAngle = joint.side * this.summonPulse * 8 + joint.side * this.reaction * 5;
+      else if (joint.role === "prop") actionAngle = -joint.side * this.summonPulse * 11 + joint.side * this.reaction * 6;
+      else if (joint.role === "leg") actionAngle = joint.side * this.reaction * 4;
+      const targetAngle = joint.baseAngle + wave * amplitude * motionScale + actionAngle;
+      joint.angle = Phaser.Math.Linear(joint.angle, targetAngle, settle);
+      const attachWobble = joint.role === "leg" ? Math.max(0, wave) * 0.7 : Math.sin(this.phase + joint.phaseOffset) * 0.45;
+      joint.node
+        .setPosition(joint.baseX, joint.baseY + attachWobble * motionScale - this.summonPulse * (joint.role === "arm" ? 1.4 : 0))
+        .setAngle(joint.angle);
     }
   }
 
@@ -578,9 +703,6 @@ class GooKeepScene extends Phaser.Scene {
   preload(): void {
     for (const [kind, path] of Object.entries(UNIT_TEXTURES)) {
       this.load.image(textureKey(kind as CastleUnitKind), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
-    }
-    for (const [form, path] of Object.entries(LEADER_TEXTURES)) {
-      this.load.image(leaderTextureKey(form as LeaderForm), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
     }
   }
 

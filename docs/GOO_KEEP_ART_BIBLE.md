@@ -31,12 +31,17 @@ Surfaces are clean and soft with restrained tactile shading. Highlights should s
 
 ## Articulated motion
 
-Characters are 2D puppets with false depth. The body, arms, feet, antennae, wings, caps, roots, horns, shells, and held props move as independent spring-driven pieces.
+Characters are flat 2D puppets with false depth. The body, arms, feet, antennae, wings, caps, roots, horns, shells, and held props are separate pieces attached at deliberate pivots.
+
+- Never animate rectangular crops cut from a complete painted character. Overlapping pixels and missing seams make the character tear apart in motion.
+- A limb may rotate and squash around its shoulder or hip, but its attachment point stays inside the body silhouette. Secondary motion is angle-limited.
+- Faces live on their own shallow plane. Eyes and pupils can slide, compress, and softly occlude toward the far edge to suggest a turn without changing to a 3D render.
+- Battlefield leaders use flat fills, simple contours, and the same shape language as minions and scenery. Detailed raster masters remain useful for large static portraits, not moving body parts.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.
 - Travel: body squash follows speed; feet, fins, roots, or wings alternate rather than bobbing as one rigid card.
-- Summon: body compresses, arms or props open, then secondary parts overshoot and settle.
-- Hit: the body absorbs the impact first; loose parts lag behind and rebound.
+- Summon: body compresses while arms or props open, then attached parts settle without separating.
+- Hit: the body absorbs the impact first; attached parts lag by a few degrees rather than flying away.
 - Reduced motion: keep state readability but reduce displacement and overshoot.
 
 Animation should not depend on a short looping strip for its smoothness. Raster frames may provide authored poses, but continuous spring motion supplies the life between poses.
