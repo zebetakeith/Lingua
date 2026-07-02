@@ -48,6 +48,8 @@ import {
   CASTLE_GUARDIAN_POWER_DEFS,
   CASTLE_KEEPSAKE_DEFS,
   CASTLE_MELEE_ENGAGEMENT_SLOTS,
+  CASTLE_MORSEL_DEFS,
+  CASTLE_NURSERY_INSTINCT_DEFS,
   CASTLE_POWER_DEFS,
   CASTLE_RANGED_ENGAGEMENT_SLOTS,
   CASTLE_RECALL_BOLT_LIMIT,
@@ -61,6 +63,7 @@ import {
   canChooseCastleEvent,
   chooseCastleRoute,
   claimCastleUpgrade,
+  claimCastleMorsel,
   continueCastleRun,
   createInitialCastleRun,
   formatCastleEnergy,
@@ -68,14 +71,19 @@ import {
   getActiveCastleSynergies,
   getCastleBattleProgress,
   getCastleArmyPopulation,
+  getCastlePowerCost,
+  getCastleWildBroodCount,
   getCastleBattleLesson,
   getCastleEventChoiceEffect,
   getCastleEndlessThreat,
+  getCastleEnemyFamily,
   getCastleEnemyAffix,
   getCastleRegionDef,
   getCastleStudyReport,
   getCastleSynergyProgress,
   getPlayerSummonKinds,
+  hatchCastlePiplet,
+  overfeedCastleUnit,
   pauseCastleBattle,
   recordCastleIntroductions,
   refreshCastleCommandHand,
@@ -87,7 +95,10 @@ import {
   type CastleContractId,
   type CastleDifficultyId,
   type CastleEventId,
+  type CastleGuardianPowerId,
   type CastleKeepsakeId,
+  type CastleMorselId,
+  type CastleNurseryInstinctId,
   type CastlePowerId,
   type CastleRouteChoice,
   type CastleRunState,
@@ -105,6 +116,7 @@ import {
   type CastleDeckProfile,
 } from "./castleStorage";
 import { playCastleSound } from "./castleAudio";
+import { GooKeepBattlefield } from "./phaser/GooKeepBattlefield";
 import "./CastleBattleLab.css";
 
 interface CastleBattleLabProps {
@@ -367,18 +379,30 @@ function MallowSprite({
   );
 }
 
+function GeneralPortrait({ powerId, className = "" }: { powerId: CastleGuardianPowerId; className?: string }) {
+  const family = powerId === "shellReprisal" ? "shell" : powerId === "sporeWeather" || powerId === "moonTax" ? "mire" : "root";
+  return (
+    <div className={`castle-general-portrait is-${family} ${className}`} aria-hidden="true">
+      <i className="general-shadow" />
+      <i className="general-limb is-one" /><i className="general-limb is-two" />
+      <span className="general-body"><b /><b /><em /></span>
+      <i className="general-accessory is-one" /><i className="general-accessory is-two" />
+    </div>
+  );
+}
+
 function CastleHealth({ current, max, enemy = false }: { current: number; max: number; enemy?: boolean }) {
   const percent = Math.max(0, Math.min(100, (current / Math.max(1, max)) * 100));
   return (
     <div
       className={`castle-health ${enemy ? "is-enemy" : ""}`}
       role="progressbar"
-      aria-label={`${enemy ? "Mallow's" : "Pipplo's"} Keep health`}
+      aria-label={`${enemy ? "Enemy general" : "Pipplo"} health`}
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={Math.ceil(current)}
     >
-      <span>{enemy ? "Mallow's Keep" : "Pipplo's Keep"}</span>
+      <span>{enemy ? "Enemy general" : "Pipplo"}</span>
       <div><i style={{ width: `${percent}%` }} /></div>
       <b>{Math.ceil(current)}/{max}</b>
     </div>
@@ -446,6 +470,48 @@ function CastleScene({ run, pipploAnimation }: { run: CastleRunState; pipploAnim
   const difficulty = CASTLE_DIFFICULTIES[run.difficultyId];
   const endlessThreat = getCastleEndlessThreat(run.region);
   const guardianPower = battle.guardianPowerId ? CASTLE_GUARDIAN_POWER_DEFS[battle.guardianPowerId] : null;
+  const usePhaserBattlefield = import.meta.env.PROD || import.meta.env.DEV;
+  if (usePhaserBattlefield) {
+    const nextEnemyAffix = getCastleEnemyAffix(battle.enemyThreatTier, battle.enemySpawnCount);
+    const afterNextEnemyAffix = getCastleEnemyAffix(battle.enemyThreatTier, battle.enemySpawnCount + 1);
+    return (
+      <section
+        className={`castle-scene is-phaser ${battle.mode === "study" ? "is-live" : "is-paused"} ${battle.playerCastleHp <= battle.playerCastleMaxHp * 0.3 ? "is-low-health" : ""} ${battle.enemySpawnTimerMs <= 3_000 ? "is-wave-imminent" : ""} ${battle.guardian ? `is-guardian phase-${battle.guardianPhase}` : ""}`}
+        aria-label={`${region.name} battlefield. Pipplo has ${Math.ceil(battle.playerCastleHp)} health and the enemy general has ${Math.ceil(battle.enemyCastleHp)} health.`}
+      >
+        <GooKeepBattlefield run={run} reducedMotion={window.matchMedia("(prefers-reduced-motion: reduce)").matches} />
+        {battle.mode === "study" && <div className="castle-beat-banner" aria-hidden="true"><span>Battle live</span><b>●</b></div>}
+        <div className="castle-scene-status">
+          <CastleHealth current={battle.playerCastleHp} max={battle.playerCastleMaxHp} />
+          <div className="castle-region-chip" title={`${difficulty.name}: ${difficulty.description} ${region.enemyTheme}. ${endlessThreat.description}${guardianPower ? ` ${guardianPower.name}: ${guardianPower.description}` : ""}`}>
+            <span>{getCastleBattleProgress(run)}</span>
+            <b>{region.shortName}{endlessThreat.tier > 0 ? ` · A${endlessThreat.tier}` : ""}</b>
+            <small>{difficulty.shortName} · {battle.guardian ? `Phase ${battle.guardianPhase}/3 · ${guardianPower?.name || "General"}` : "Field clash"}</small>
+            {battle.guardian && guardianPower && <em className={battle.guardianAbilityTimerMs <= 4_000 ? "is-imminent" : ""}>{battle.guardianBriefingPending ? "Signature paused" : `${guardianPower.signatureName} · ${Math.max(0, Math.ceil(battle.guardianAbilityTimerMs / 1_000))}s`}</em>}
+          </div>
+          <CastleHealth current={battle.enemyCastleHp} max={battle.enemyCastleMaxHp} enemy />
+        </div>
+        {battle.playerBarrier > 0 && <div className="castle-phaser-barrier"><Shield />{Math.ceil(battle.playerBarrier)}</div>}
+        {battle.guardian && guardianPower && <div className="castle-phaser-general"><Sparkles /><b>{guardianPower.epithet}</b><span>{guardianPower.signatureName}</span></div>}
+        <div className="castle-battle-strip">
+          <span className="castle-energy"><Sparkles />{formatCastleEnergy(battle.energy)} Goo</span>
+          <span className="castle-recall-bolt" title="Five correct familiar recalls grant one bonus Goo" role="progressbar" aria-label="Focus bonus charge" aria-valuemin={0} aria-valuemax={CASTLE_RECALL_BOLT_LIMIT} aria-valuenow={battle.recallBoltCharge}>
+            Focus {Array.from({ length: CASTLE_RECALL_BOLT_LIMIT }, (_, index) => <i key={index} className={index < battle.recallBoltCharge ? "is-filled" : ""} />)}
+          </span>
+          <span className="castle-rally" role="progressbar" aria-label="Enemy Rally charge" aria-valuemin={0} aria-valuemax={CASTLE_RALLY_LIMIT} aria-valuenow={battle.rally}>
+            Rally {Array.from({ length: CASTLE_RALLY_LIMIT }, (_, index) => <i key={index} className={index < battle.rally ? "is-filled" : ""} />)}
+          </span>
+          <span className={`castle-wave ${battle.enemySpawnTimerMs <= 3_000 ? "is-imminent" : ""}`} title={`Next enemy wave: ${CASTLE_UNIT_DEFS[battle.nextEnemyKind].name}`}>
+            <b className="castle-wave-countdown">{Math.max(0, Math.ceil(battle.enemySpawnTimerMs / 1_000))}s</b>
+            <SlimeFace kind={battle.nextEnemyKind} side="enemy" />
+            {nextEnemyAffix && <em className={`castle-wave-affix is-${nextEnemyAffix}`}>{CASTLE_ENEMY_AFFIX_DEFS[nextEnemyAffix].name.replace("-marked", "")}</em>}
+            {CASTLE_UNIT_DEFS[battle.nextEnemyKind].name}
+            {run.upgrades.includes("mothEars") && <> · then {afterNextEnemyAffix ? `${CASTLE_ENEMY_AFFIX_DEFS[afterNextEnemyAffix].name} ` : ""}{CASTLE_UNIT_DEFS[battle.afterNextEnemyKind].name}</>}
+          </span>
+        </div>
+      </section>
+    );
+  }
   const activeSynergyIds = new Set(getActiveCastleSynergies(run.upgrades).map(synergy => synergy.id));
   const nextEnemyAffix = getCastleEnemyAffix(battle.enemyThreatTier, battle.enemySpawnCount);
   const afterNextEnemyAffix = getCastleEnemyAffix(battle.enemyThreatTier, battle.enemySpawnCount + 1);
@@ -639,27 +705,50 @@ function CommandTray({
   onSummon,
   onPower,
   onRefresh,
+  onHatch,
+  onOverfeed,
 }: {
   run: CastleRunState;
   onSummon: (kind: CastleUnitKind) => void;
   onPower: (id: CastlePowerId) => void;
   onRefresh: () => void;
+  onHatch: () => void;
+  onOverfeed: (unitId: string) => void;
 }) {
   const powers = getAvailableCastlePowers(run.upgrades).filter(power => run.battle.commandHand.includes(power.id));
   const summons = getPlayerSummonKinds(run.upgrades).filter(kind => run.battle.commandHand.includes(kind));
   const population = getCastleArmyPopulation(run.battle);
+  const wildBrood = getCastleWildBroodCount(run.battle);
+  const overfeedTargets = run.battle.units.filter(unit => unit.side === "player" && unit.hp > 0 && unit.origin === "paid" && !unit.overfed);
+  const instinct = CASTLE_NURSERY_INSTINCT_DEFS[run.nurseryInstinctId];
   return (
     <div className="castle-command-tray">
       <div className="castle-command-heading">
         <span><Sparkles />Command with {formatCastleEnergy(run.battle.energy)} Goo</span>
         <div>
-          <small>Hand {run.battle.commandHand.length}/4 · draw {run.battle.commandDrawPile.length} · army {population}/{CASTLE_ARMY_CAPACITY}</small>
+          <small>Hand {run.battle.commandHand.length}/4 · draw {run.battle.commandDrawPile.length} · Army Mass {population}/{CASTLE_ARMY_CAPACITY}{wildBrood > 0 ? ` · Wild ${wildBrood}/3` : ""}</small>
           <button
             disabled={run.battle.commandRefreshUsedThisWindow || run.battle.summonPlayedThisWindow || run.battle.powerPlayedThisWindow || !run.battle.commandWindowReady}
             onClick={onRefresh}
             title="Replace all four command cards once before playing a card"
           ><RefreshCcw />{run.battle.commandRefreshUsedThisWindow ? "Refreshed" : "Refresh hand"}</button>
         </div>
+      </div>
+      <div className="castle-mass-meter" aria-label={`Army Mass ${population} of ${CASTLE_ARMY_CAPACITY}`}>
+        <span><b>Army Mass</b><small>Paid and hand-hatched units use this limit. Wild Brood has a separate reserve.</small></span>
+        <div>{Array.from({ length: CASTLE_ARMY_CAPACITY }, (_, index) => <i key={index} className={index < population ? "is-filled" : ""} />)}</div>
+        <em style={{ "--instinct-accent": instinct.accent } as CSSProperties}>{instinct.name}</em>
+      </div>
+      <div className="castle-instinct-command">
+        {run.nurseryInstinctId === "wildBrood" && <span><Sparkles /><b>{wildBrood}/3 wild Piplets</b><small>Half strength · next brood in {Math.max(0, Math.ceil(run.battle.autoSpawnTimerMs / 1_000))}s</small></span>}
+        {run.nurseryInstinctId === "handHatch" && (
+          <button
+            disabled={run.battle.hatchCharges <= 0 || run.battle.summonPlayedThisWindow || population >= CASTLE_ARMY_CAPACITY || !run.battle.commandWindowReady}
+            onClick={onHatch}
+            title="Spend one recall charge to hatch a full-strength Piplet. This uses your summon action and one Army Mass."
+          ><Sparkles /><strong>Hand Hatch</strong><span>{run.battle.hatchCharges}/2 charges · {run.battle.hatchProgress}/3 recall pips</span></button>
+        )}
+        {run.nurseryInstinctId === "devourer" && <span><Zap /><b>Devourer</b><small>{run.battle.maxEnergy} max Goo · leader powers cost 10% less</small></span>}
       </div>
       <div className="castle-command-scroll" role="group" aria-label="Summons and castle powers">
         {summons.map(kind => {
@@ -680,21 +769,35 @@ function CommandTray({
             </button>
           );
         })}
-        {powers.map(power => (
+        {powers.map(power => {
+          const powerCost = getCastlePowerCost(run, power.id);
+          return (
           <button
             key={power.id}
             className="is-power"
-              disabled={run.battle.energy < power.cost || run.battle.powerPlayedThisWindow || !run.battle.commandWindowReady}
+            disabled={run.battle.energy < powerCost || run.battle.powerPlayedThisWindow || !run.battle.commandWindowReady}
             onClick={() => onPower(power.id)}
-            title={`${power.name}: ${power.description} Costs ${power.cost} Goo.`}
-            aria-label={`Use ${power.name}. ${power.description} Costs ${power.cost} Goo.`}
+            title={`${power.name}: ${power.description} Costs ${powerCost} Goo.`}
+            aria-label={`Use ${power.name}. ${power.description} Costs ${powerCost} Goo.`}
           >
             <Zap />
             <strong>{power.name}</strong>
             <span>{power.description}</span>
-            <b>{power.cost}</b>
+            <b>{powerCost}</b>
           </button>
-        ))}
+          );
+        })}
+      </div>
+      <div className="castle-overfeed-row">
+        <span><b>Overfeed</b><small>Once per battle: spend 3 Goo to give one paid minion +20% max HP and damage.</small></span>
+        {run.battle.overfeedUsed
+          ? <em>Already used</em>
+          : overfeedTargets.length === 0
+            ? <em>Summon a paid minion first</em>
+            : <select aria-label="Choose a minion to overfeed" defaultValue="" onChange={event => { if (event.target.value) onOverfeed(event.target.value); event.currentTarget.value = ""; }} disabled={run.battle.energy < 3}>
+              <option value="" disabled>{run.battle.energy < 3 ? "Need 3 Goo" : "Choose minion · 3 Goo"}</option>
+              {overfeedTargets.map(unit => <option key={unit.id} value={unit.id}>{CASTLE_UNIT_DEFS[unit.kind].name} · {Math.ceil(unit.hp)}/{unit.maxHp} HP</option>)}
+            </select>}
       </div>
     </div>
   );
@@ -988,12 +1091,14 @@ function DeckSetup({
   selectedDeckId,
   contractId,
   difficultyId,
+  nurseryInstinctId,
   rewardCurve,
   recallMode,
   profile,
   onDeck,
   onContract,
   onDifficulty,
+  onNurseryInstinct,
   onCurve,
   onRecallMode,
   onKeepsake,
@@ -1004,12 +1109,14 @@ function DeckSetup({
   selectedDeckId: string;
   contractId: CastleContractId;
   difficultyId: CastleDifficultyId;
+  nurseryInstinctId: CastleNurseryInstinctId;
   rewardCurve: StudyRewardCurve;
   recallMode: StudyRecallMode;
   profile: CastleDeckProfile;
   onDeck: (id: string) => void;
   onContract: (id: CastleContractId) => void;
   onDifficulty: (id: CastleDifficultyId) => void;
+  onNurseryInstinct: (id: CastleNurseryInstinctId) => void;
   onCurve: (curve: StudyRewardCurve) => void;
   onRecallMode: (mode: StudyRecallMode) => void;
   onKeepsake: (id: CastleKeepsakeId) => void;
@@ -1032,12 +1139,12 @@ function DeckSetup({
         <PipploSprite className="castle-setup-pipplo" />
         <p className="castle-eyebrow">Castle expedition</p>
         <h1>Pipplo's Goo Keep</h1>
-        <p>Recall words, hatch a wobbling army, and push across the lane before the rival keep overwhelms yours.</p>
+        <p>Recall words, hatch a wobbling army, and help Pipplo devour the rival general before they exhaust him.</p>
 
         <div className="castle-setup-loop" aria-label="How a run works">
           <div><BookOpen /><span><b>1. Study</b>New directions teach first and pause safely.</span></div>
           <div><Swords /><span><b>2. Command</b>Choose from four cards, then spend Goo on one summon and one power.</span></div>
-          <div><Castle /><span><b>3. Conquer</b>Break keeps and evolve your run build.</span></div>
+          <div><Castle /><span><b>3. Digest</b>Defeat rival generals and absorb their strangest traits.</span></div>
         </div>
 
         <section className="castle-profile-summary" aria-label="Keeper chronicle">
@@ -1054,7 +1161,7 @@ function DeckSetup({
           {nextRunKeepsake && (
             <p><Route /><span><b>Expedition trail: {nextRunKeepsake.name}</b>Complete {Math.max(0, nextRunKeepsake.runRequirement! - profile.runsCompleted)} more expedition{nextRunKeepsake.runRequirement! - profile.runsCompleted === 1 ? "" : "s"} · {profile.runsCompleted}/{nextRunKeepsake.runRequirement}</span></p>
           )}
-          {!nextGuardianKeepsake && !nextRunKeepsake && <p><Sparkles /><span><b>All keepsakes discovered</b>Mallow has no more trinkets to hide.</span></p>}
+          {!nextGuardianKeepsake && !nextRunKeepsake && <p><Sparkles /><span><b>All keepsakes discovered</b>The rival generals have no more trinkets to hide.</span></p>}
         </section>
 
         <h2 className="castle-setup-label" id="castle-deck-label">Study world</h2>
@@ -1091,6 +1198,28 @@ function DeckSetup({
                 <strong>{difficulty.name}</strong>
                 <span>{difficulty.description}</span>
                 <small>{id === "study" ? "−15% enemy health · slower pressure" : id === "siege" ? "+1 enemy damage · faster pressure" : "Intended combat balance"}</small>
+              </button>
+            );
+          })}
+        </div>
+
+        <h2 className="castle-setup-label" id="castle-instinct-label">Nursery Instinct <small>Your starting army economy</small></h2>
+        <div className="castle-instinct-grid" role="group" aria-labelledby="castle-instinct-label">
+          {(Object.keys(CASTLE_NURSERY_INSTINCT_DEFS) as CastleNurseryInstinctId[]).map(id => {
+            const instinct = CASTLE_NURSERY_INSTINCT_DEFS[id];
+            return (
+              <button
+                key={id}
+                aria-pressed={nurseryInstinctId === id}
+                className={nurseryInstinctId === id ? "is-selected" : ""}
+                style={{ "--instinct-accent": instinct.accent } as CSSProperties}
+                onClick={() => onNurseryInstinct(id)}
+              >
+                <Sparkles />
+                <strong>{instinct.name}</strong>
+                <b>{instinct.shortName}</b>
+                <span>{instinct.description}</span>
+                <small>{instinct.playstyle}</small>
               </button>
             );
           })}
@@ -1195,7 +1324,7 @@ const CASTLE_TUTORIAL_STEPS = [
   {
     icon: Castle,
     eyebrow: "Run strategy",
-    title: "Break keeps and build a run",
+    title: "Defeat generals and build a run",
     copy: "Every five correct recalls grants bonus Goo. After each keep, choose a mutation and one of three drafted routes; story events reveal every consequence before you commit.",
   },
 ] as const;
@@ -1249,6 +1378,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   const [run, setRun] = useState<CastleRunState | null>(initial.run);
   const [contractId, setContractId] = useState<CastleContractId>("regular");
   const [difficultyId, setDifficultyId] = useState<CastleDifficultyId>(initial.run?.difficultyId || "standard");
+  const [nurseryInstinctId, setNurseryInstinctId] = useState<CastleNurseryInstinctId>(initial.run?.nurseryInstinctId || "handHatch");
   const [rewardCurve, setRewardCurve] = useState<StudyRewardCurve>(initial.run?.rewardCurve || "quadratic");
   const [recallMode, setRecallMode] = useState<StudyRecallMode>(initial.run?.recallMode || "balanced");
   const [question, setQuestion] = useState<StudyQuestion | null>(null);
@@ -1310,7 +1440,6 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   useEffect(() => {
     const preloadedImages = [
       ...PIPPLO_ANIMATION_FRAMES.idle,
-      ...MALLOW_ANIMATION_FRAMES.idle,
       ...Object.values(FRIENDLY_UNIT_ART),
       ...Object.values(ENEMY_UNIT_ART),
     ].map(src => {
@@ -1328,11 +1457,6 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     const preloadTimer = window.setTimeout(() => {
       [
       ...Object.entries(PIPPLO_ANIMATION_FRAMES).filter(([name]) => name !== "idle").flatMap(([, frames]) => frames),
-      ...Object.entries(MALLOW_ANIMATION_FRAMES).filter(([name]) => name !== "idle").flatMap(([, frames]) => frames),
-      ...Object.values(FRIENDLY_UNIT_ATTACK_FRAMES).flat(),
-      ...Object.values(ENEMY_UNIT_ATTACK_FRAMES).flat(),
-      ...Object.values(FRIENDLY_UNIT_WALK_FRAMES).flat(),
-      ...Object.values(ENEMY_UNIT_WALK_FRAMES).flat(),
       ].forEach(src => {
         const image = new Image();
         image.decoding = "async";
@@ -1535,6 +1659,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
     setRun(restored ? pauseCastleBattle(restored, "Saved run restored. Resume when ready.") : null);
     setStudyBlocked(false);
     setDifficultyId(restored?.difficultyId || "standard");
+    setNurseryInstinctId(restored?.nurseryInstinctId || "handHatch");
     setRewardCurve(restored?.rewardCurve || "quadratic");
     setRecallMode(restored?.recallMode || "balanced");
     setDecks(getStudyDecks());
@@ -1561,6 +1686,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       recallMode,
       profile.selectedKeepsakeId,
       difficultyId,
+      nurseryInstinctId,
     ));
     const nextQuestion = tryDrawStudyQuestion(selectedDeckId, next.rewardCurve, undefined, next.recallMode);
     if (!nextQuestion) {
@@ -1809,11 +1935,23 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
   };
 
   const usePower = (id: CastlePowerId) => {
-    const power = CASTLE_POWER_DEFS[id];
-    if (!run || run.phase !== "battle" || run.battle.energy < power.cost) return;
+    if (!run || run.phase !== "battle" || run.battle.energy < getCastlePowerCost(run, id)) return;
     playCastleSound("power", soundEnabled);
     triggerPipploAnimation("cast");
     setRun(current => current ? activateCastlePower(current, id) : current);
+  };
+
+  const hatchPiplet = () => {
+    if (!run || run.phase !== "battle") return;
+    playCastleSound("summon", soundEnabled);
+    setRun(current => current ? hatchCastlePiplet(current) : current);
+  };
+
+  const overfeedUnit = (unitId: string) => {
+    if (!run || run.phase !== "battle") return;
+    playCastleSound("power", soundEnabled);
+    triggerPipploAnimation("cast");
+    setRun(current => current ? overfeedCastleUnit(current, unitId) : current);
   };
 
   const refreshCommandHand = () => {
@@ -1845,12 +1983,14 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         selectedDeckId={selectedDeckId}
         contractId={contractId}
         difficultyId={difficultyId}
+        nurseryInstinctId={nurseryInstinctId}
         rewardCurve={rewardCurve}
         recallMode={recallMode}
         profile={profile}
         onDeck={chooseDeck}
         onContract={setContractId}
         onDifficulty={setDifficultyId}
+        onNurseryInstinct={setNurseryInstinctId}
         onCurve={setRewardCurve}
         onRecallMode={setRecallMode}
         onKeepsake={id => setProfile(selectCastleKeepsake(selectedDeckId, id))}
@@ -1985,7 +2125,11 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                 ? run.battle.commandWindowReady
                   ? "Your latest answer unlocked one summon and one keep power. Both armies keep moving."
                   : question ? "Recall while both armies fight. Switch panels whenever you need to command." : "Start the next card whenever you are ready; combat keeps moving."
-                : question ? `Protected lesson: ${question.prompt}` : "Combat resumes with the next familiar card."}</span>
+                : question
+                  ? question.seenBefore
+                    ? `Manual pause: ${question.prompt}. Return to the card and resume when ready.`
+                    : `Protected lesson: ${question.prompt}. First exposure never advances combat.`
+                  : "Combat resumes with the next familiar card."}</span>
             </div>
             <button className="castle-guide-button" onClick={() => { pauseForInterruption(); setGuideOpen(true); }}><CircleHelp />Field guide<small>safe pause</small></button>
           </div>
@@ -1994,6 +2138,8 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             onSummon={summonUnit}
             onPower={usePower}
             onRefresh={refreshCommandHand}
+            onHatch={hatchPiplet}
+            onOverfeed={overfeedUnit}
           />
           {question ? (
             <button className="castle-back-to-study" onClick={() => changePanelMode("study")}><BookOpen />Back to flashcard</button>
@@ -2006,10 +2152,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
       {run.phase === "battle" && run.battle.guardianBriefingPending && guardianPower && (
         <aside className="castle-overlay castle-guardian-briefing-overlay">
           <section ref={activeDialogRef} tabIndex={-1} className="castle-guardian-briefing" role="dialog" aria-modal="true" aria-labelledby="castle-guardian-briefing-title">
-            <MallowSprite className={`castle-guardian-mallow guardian-form-${guardianPower.id}`} animation="idle" />
+            <GeneralPortrait powerId={guardianPower.id} className="castle-guardian-mallow" />
             <p className="castle-eyebrow">Guardian briefing · {guardianRegion.name}</p>
             <h2 id="castle-guardian-briefing-title">{guardianPower.epithet}</h2>
-            <p>Mallow has changed forms for this gate. Combat and response timing are paused until you understand the new rules.</p>
+            <p>This region's general has revealed a stronger form. Combat and response timing are paused until you understand the new rules.</p>
             <div className="castle-guardian-rule" style={{ "--guardian-accent": guardianPower.accent } as CSSProperties}>
               <Castle />
               <div><span>Regional stance</span><b>{guardianPower.name}</b><small>{guardianPower.description}<strong>Recurring: {guardianPower.signature}</strong><em>Counterplay: {guardianPower.counterplay}</em></small></div>
@@ -2034,24 +2180,50 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
         <aside className="castle-overlay">
           <section ref={activeDialogRef} tabIndex={-1} className="castle-reward-sheet" role="dialog" aria-modal="true" aria-label="Choose a run upgrade">
             <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop />
-            <p className="castle-eyebrow">Castle absorbed</p>
+            <p className="castle-eyebrow">{run.rewardMorselChoices.length > 0 ? "Outpost Morsel" : "General Digestion"}</p>
             <h2>What should Pipplo digest?</h2>
-            <p>Choose one transformation for the rest of this run. Reach 2/3 in a category and future drafts guarantee a compatible evolution finisher.</p>
+            <p>{run.rewardMorselChoices.length > 0
+              ? "Choose one small, stackable trait. Two were learned from this enemy family; the third is a neutral jelly adaptation. Each can stack five times."
+              : "Choose one major mutation from the defeated general. Major Digestions define the build and count heavily toward the next enemy power snapshot."}</p>
             {permanentDiscoveryNames.length > 0 && (
               <div className="castle-discovery-banner" role="status">
                 <Sparkles />
                 <div><b>Keeper Chronicle discovery</b><span>{permanentDiscoveryNames.join(", ")} {permanentDiscoveryNames.length === 1 ? "has" : "have"} joined future expeditions.</span></div>
               </div>
             )}
-            <div className="castle-synergy-track" aria-label="Build evolution progress">
+            {run.rewardMorselChoices.length === 0 && <div className="castle-synergy-track" aria-label="Build evolution progress">
               {Object.values(CASTLE_SYNERGY_DEFS).map(synergy => {
                 const count = Math.min(synergy.threshold, synergyProgress[synergy.category]);
                 return <span key={synergy.id} className={count >= synergy.threshold ? "is-active" : ""} style={{ "--synergy-accent": synergy.accent } as CSSProperties}><b>{synergy.name}</b><small>{synergy.category} {count}/{synergy.threshold}</small></span>;
               })}
-            </div>
+            </div>}
             <div className="castle-reward-grid">
+              {run.rewardMorselChoices.map((id: CastleMorselId) => {
+                const morsel = CASTLE_MORSEL_DEFS[id];
+                const stacks = run.morselStacks[id] || 0;
+                return (
+                  <button key={id} className="is-morsel" style={{ "--reward-accent": morsel.accent } as CSSProperties} onClick={() => {
+                    setQuestion(null);
+                    setFeedback(null);
+                    setReveal(false);
+                    setPanelMode("study");
+                    setRun(claimCastleMorsel(run, id));
+                  }}>
+                    <span>{morsel.family === "neutral" ? "Neutral adaptation" : `${morsel.family} family morsel`}</span>
+                    <strong>{morsel.name}</strong>
+                    <small>{morsel.description}</small>
+                    <em>Stack {stacks + 1}/5 · +1 enemy scaling point</em>
+                  </button>
+                );
+              })}
               {run.rewardChoices.map(id => {
                 const reward = CASTLE_UPGRADE_DEFS[id];
+                const family = getCastleEnemyFamily(run.region);
+                const signature = family === "shell"
+                  ? reward.category === "castle" || reward.category === "minion"
+                  : family === "mire"
+                    ? reward.category === "study" || reward.category === "castle"
+                    : reward.category === "minion" || reward.category === "trait";
                 const synergy = Object.values(CASTLE_SYNERGY_DEFS).find(candidate => candidate.category === reward.category)!;
                 const previewCount = Math.min(synergy.threshold, getCastleSynergyProgress([...run.upgrades, id])[reward.category]);
                 return (
@@ -2062,7 +2234,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
                     setPanelMode("study");
                     setRun(claimCastleUpgrade(run, id));
                   }}>
-                    <span>{reward.category} · {reward.rarity}</span>
+                    <span>{signature ? `${family} signature` : "cross-family mutation"} · {reward.rarity}</span>
                     <strong>{reward.name}</strong>
                     <small>{reward.description}</small>
                     <em className={previewCount >= synergy.threshold && synergyProgress[reward.category] < synergy.threshold ? "will-evolve" : ""}>Evolution: {previewCount}/{synergy.threshold} · {synergy.name}{previewCount >= synergy.threshold && synergyProgress[reward.category] < synergy.threshold ? " unlocks" : ""}</em>
@@ -2153,7 +2325,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <PipploSprite className="castle-celebration-pipplo" animation="cheer" loop />
             <p className="castle-eyebrow">Contract complete</p>
             <h2>Pipplo can head home—or wobble deeper</h2>
-            <p className="castle-result-story">Mallow lowers her wand and rolls the moon gate open. The promised study road is clear, but she is already grinning about a rematch.</p>
+            <p className="castle-result-story">The defeated general opens the moon gate. The promised study road is clear, but a stronger rival is already stirring beyond it.</p>
             <div className="castle-result-stats">
               <span><b>{run.reviews}</b>reviews</span>
               <span><b>{run.correct + run.wrong > 0 ? Math.round((run.correct / (run.correct + run.wrong)) * 100) : 0}%</b>graded accuracy</span>
@@ -2200,9 +2372,9 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <h2>{run.phase === "complete" ? "The deck-world grew" : "The castle fell; the learning stayed"}</h2>
             <p className="castle-result-story">{run.phase === "complete"
               ? run.contractId === "long"
-                ? "Mallow pins a crescent ribbon beside Pipplo's star. The whole three-region road now remembers this expedition."
-                : "Mallow taps her crescent badge in salute. New discoveries are waiting on the next road."
-              : "Mallow leaves the moon gate glowing for a rematch. Every review from this attempt is already safe."}</p>
+                ? "Pipplo pins a crescent ribbon beside his star. The whole three-region road now remembers this expedition."
+                : "The rival general dissolves into a final useful morsel. New discoveries are waiting on the next road."
+              : "The rival leaves the moon gate glowing for a rematch. Every review from this attempt is already safe."}</p>
             <p>{run.reviews} reviews · {run.correct} correct · {run.wrong} missed · best region {run.bestRegion}</p>
             <div className="castle-result-stats">
               <span><b>{run.introducedThisRun}</b>introduced</span>
@@ -2255,8 +2427,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <span><Zap /><b>Focus bonus</b><small>Five correct seen recalls grant one extra Goo instead of automatic damage.</small></span>
               <span><Swords /><b>Enemy Rally</b><small>A miss pulls the next wave closer and adds a pip. Recall that direction later to clear one; three pips fire a 3-damage Moon Volley and summon a bonus squad.</small></span>
               <span><Clock3 /><b>Live recall</b><small>Familiar cards keep the lane moving. Only a first-time lesson freezes combat.</small></span>
+              <span><Swords /><b>Army Mass</b><small>Paid and hand-hatched minions use {CASTLE_ARMY_CAPACITY} visible mass. Wild Brood reserves never hide or consume those spaces.</small></span>
+              <span><Sparkles /><b>{CASTLE_NURSERY_INSTINCT_DEFS[run.nurseryInstinctId].name}</b><small>{CASTLE_NURSERY_INSTINCT_DEFS[run.nurseryInstinctId].description}</small></span>
+              <span><Zap /><b>Overfeed</b><small>Once each battle, spend 3 Goo in Army to give one paid minion +20% max HP and damage.</small></span>
               <span><Route /><b>Formation lanes</b><small>Up to {CASTLE_MELEE_ENGAGEMENT_SLOTS} melee and {CASTLE_RANGED_ENGAGEMENT_SLOTS} ranged units strike one target at once. Extra units queue as reserves.</small></span>
-              <span><Castle /><b>Guardian phases</b><small>A pre-fight briefing freezes combat and response timing. At 66% and 33% HP, guardians telegraph reinforcements and attack faster.</small></span>
+              <span><Castle /><b>General phases</b><small>A pre-fight briefing freezes combat and response timing. At 66% and 33% HP, generals telegraph reinforcements and attack faster.</small></span>
+              <span><Sparkles /><b>Digesting rivals</b><small>Outposts offer small stackable Morsels. Regional generals offer major Digestions that define your run build.</small></span>
               <span><Sparkles /><b>Moon Ascension</b><small>After the three named regions, enemy stats climb, scheduled waves gain previewed Moon Marks, and guardians add new escorts and Moon Pulse.</small></span>
             </div>
             <details className="castle-handwriting-demo">
@@ -2265,10 +2441,10 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               <JapaneseScratchpad revealed={false} />
             </details>
 
-            <h3>Guardian stances</h3>
+            <h3>Regional generals</h3>
             <div className="castle-guide-list is-powers">
               {Object.values(CASTLE_GUARDIAN_POWER_DEFS).map(power => (
-                <article key={power.id}><MallowSprite className={`castle-guide-guardian guardian-form-${power.id}`} animation="idle" /><div><b>{power.epithet}</b><span><strong>{power.name}.</strong> {power.description} {power.signature}</span><small>{power.counterplay} · {run.battle.guardianPowerId === power.id ? "Current guardian rule" : "Rotates by region"}</small></div></article>
+                <article key={power.id}><GeneralPortrait powerId={power.id} className="castle-guide-guardian" /><div><b>{power.epithet}</b><span><strong>{power.name}.</strong> {power.description} {power.signature}</span><small>{power.counterplay} · {run.battle.guardianPowerId === power.id ? "Current general rule" : "Rotates by region"}</small></div></article>
               ))}
             </div>
 
@@ -2301,7 +2477,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             <div className="castle-guide-list is-powers">
               {Object.values(CASTLE_POWER_DEFS).map(power => {
                 const unlocked = !power.requiredUpgradeId || run.upgrades.includes(power.requiredUpgradeId);
-                return <article key={power.id}><Zap /><div><b>{power.name}</b><span>{power.description}</span><small>{power.cost} Goo · {unlocked ? "available this battle" : `requires ${CASTLE_UPGRADE_DEFS[power.requiredUpgradeId!].name}`}</small></div></article>;
+                return <article key={power.id}><Zap /><div><b>{power.name}</b><span>{power.description}</span><small>{getCastlePowerCost(run, power.id)} Goo · {unlocked ? "available this battle" : `requires ${CASTLE_UPGRADE_DEFS[power.requiredUpgradeId!].name}`}</small></div></article>;
               })}
             </div>
 
@@ -2337,6 +2513,12 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
             </div>
 
             <h3>Current run build</h3>
+            <div className="castle-guide-build is-morsels">
+              {(Object.keys(run.morselStacks) as CastleMorselId[]).filter(id => run.morselStacks[id] > 0).map(id => (
+                <span key={id}><b>{CASTLE_MORSEL_DEFS[id].name} · {run.morselStacks[id]}/5</b>{CASTLE_MORSEL_DEFS[id].description}</span>
+              ))}
+              {Object.values(run.morselStacks).every(stacks => stacks === 0) && <p>No Morsels digested yet. Defeat an outpost to choose the first small adaptation.</p>}
+            </div>
             <div className="castle-guide-synergies">
               {Object.values(CASTLE_SYNERGY_DEFS).map(synergy => {
                 const count = Math.min(synergy.threshold, synergyProgress[synergy.category]);
@@ -2344,7 +2526,7 @@ export default function CastleBattleLab({ onExit }: CastleBattleLabProps) {
               })}
             </div>
             <div className="castle-guide-build">
-              {run.upgrades.length > 0 ? run.upgrades.map(id => <span key={id}><b>{CASTLE_UPGRADE_DEFS[id].name}</b>{CASTLE_UPGRADE_DEFS[id].description}</span>) : <p>Defeat the first castle to choose your first mutation.</p>}
+              {run.upgrades.length > 0 ? run.upgrades.map(id => <span key={id}><b>{CASTLE_UPGRADE_DEFS[id].name}</b>{CASTLE_UPGRADE_DEFS[id].description}</span>) : <p>Defeat the first regional general to choose a major Digestion.</p>}
             </div>
           </section>
         </aside>

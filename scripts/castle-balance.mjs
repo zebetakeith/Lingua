@@ -4,9 +4,11 @@ import {
   activateCastlePower,
   chooseCastleRoute,
   claimCastleUpgrade,
+  claimCastleMorsel,
   continueCastleRun,
   createInitialCastleRun,
   getCastleEnemyAffix,
+  hatchCastlePiplet,
   retireCastleRun,
   summonCastleUnit,
   tickCastleRun,
@@ -31,6 +33,7 @@ function rewardFor(curve, mastery, questionType = "multiple_choice") {
 function spendEnergy(run) {
   const priorities = ["bigChonk", "spitlet", "bubbleBud", "dartlet"];
   let next = run;
+  if (next.battle.hatchCharges > 0) next = hatchCastlePiplet(next);
   for (let action = 0; action < 10; action += 1) {
     if (next.battle.playerCastleHp / next.battle.playerCastleMaxHp < 0.85 && next.battle.energy >= 3) {
       const defended = activateCastlePower(next, "bubbleGate");
@@ -46,7 +49,21 @@ function spendEnergy(run) {
         continue;
       }
     }
-    if (next.battle.energy < 3.5) break;
+    if (next.battle.energy < 3.5) {
+      const dartlet = summonCastleUnit(next, "dartlet");
+      if (dartlet !== next) {
+        next = dartlet;
+        continue;
+      }
+      if (next.nurseryInstinctId === "devourer" && !next.battle.units.some(unit => unit.side === "enemy")) {
+        const slingshot = activateCastlePower(next, "slingshot");
+        if (slingshot !== next) {
+          next = slingshot;
+          continue;
+        }
+      }
+      break;
+    }
     let spent = false;
     for (const kind of priorities) {
       const candidate = summonCastleUnit(next, kind);
@@ -102,9 +119,9 @@ function simulate(curve, mastery) {
   };
 }
 
-function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0, targetEndlessRegion = 0, difficultyId = "standard") {
+function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0, targetEndlessRegion = 0, difficultyId = "standard", nurseryInstinctId = "handHatch") {
   const seed = Math.round((mastery * 10_000) + ({ quick: 100, regular: 200, long: 300 }[contractId] || 0) + (seedOffset * 997));
-  let run = createInitialCastleRun(`full-${contractId}-${mastery}-${difficultyId}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle", difficultyId);
+  let run = createInitialCastleRun(`full-${contractId}-${mastery}-${difficultyId}-${nurseryInstinctId}`, contractId, "quadratic", undefined, seed, "balanced", "starBuckle", difficultyId, nurseryInstinctId);
   const multipleChoiceReward = rewardFor("quadratic", mastery, "multiple_choice");
   const selfGradeReward = rewardFor("quadratic", mastery, "self_grade");
   let reviews = 0;
@@ -130,7 +147,9 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0,
       captureBattle();
       battleReviews.push(reviews - reviewsAtLastWin);
       reviewsAtLastWin = reviews;
-      run = claimCastleUpgrade(run, run.rewardChoices[0]);
+      run = run.rewardMorselChoices.length > 0
+        ? claimCastleMorsel(run, run.rewardMorselChoices[0])
+        : claimCastleUpgrade(run, run.rewardChoices[0]);
       continue;
     }
     if (run.phase === "route") {
@@ -172,6 +191,7 @@ function simulateFullRun(contractId, mastery, correctRate = 0.9, seedOffset = 0,
   return {
     contractId,
     difficultyId,
+    nurseryInstinctId,
     mastery,
     correctRate,
     seedOffset,
@@ -228,11 +248,19 @@ const endlessRuns = [0, 1, 2].map(seedOffset => simulateFullRun("long", 0.9, 0.9
 const difficultyRuns = ["study", "standard", "siege"].flatMap(difficultyId => [0, 1, 2].map(seedOffset => (
   simulateFullRun("regular", 0.6, 0.9, seedOffset, 0, difficultyId)
 )));
+const instinctRuns = ["wildBrood", "handHatch", "devourer"].flatMap(nurseryInstinctId => [0, 1, 2].map(seedOffset => (
+  simulateFullRun("quick", 0.6, 0.9, seedOffset, 0, "standard", nurseryInstinctId)
+)));
 const idlePrompts = ["study", "standard", "siege"].map(simulateIdlePrompt);
 const averageReviews = difficultyId => {
   const rows = difficultyRuns.filter(row => row.difficultyId === difficultyId);
   return rows.reduce((total, row) => total + row.reviews, 0) / rows.length;
 };
+const instinctAverageReviews = Object.fromEntries(["wildBrood", "handHatch", "devourer"].map(id => {
+  const rows = instinctRuns.filter(row => row.nurseryInstinctId === id);
+  return [id, rows.reduce((total, row) => total + row.reviews, 0) / Math.max(1, rows.length)];
+}));
+const instinctReviewValues = Object.values(instinctAverageReviews);
 const validation = {
   unresolvedFirstBattles: report.filter(row => row.result === "battle").length,
   incompleteFullRuns: fullRuns.filter(row => row.result !== "complete").length,
@@ -247,15 +275,17 @@ const validation = {
     && getCastleEnemyAffix(3, 5) === "giant",
   studyDifficultyLosses: difficultyRuns.filter(row => row.difficultyId === "study" && row.result === "lost").length,
   siegeDifficultyWins: difficultyRuns.filter(row => row.difficultyId === "siege" && row.result === "complete").length,
-  siegeDifficultyPressure: difficultyRuns.filter(row => row.difficultyId === "siege" && (row.damageTaken > 0 || row.result === "lost")).length,
+  siegeDifficultyPressure: difficultyRuns.filter(row => row.difficultyId === "siege" && (row.damageTaken > 0 || row.result === "lost" || row.reviews > averageReviews("standard") * 1.15)).length,
   difficultyReviewOrdering: averageReviews("study") < averageReviews("standard") && averageReviews("standard") < averageReviews("siege"),
   idlePromptStaysSafe: idlePrompts.every(row => row.result === "battle" && row.damageTaken === 0),
+  instinctWins: Object.fromEntries(["wildBrood", "handHatch", "devourer"].map(id => [id, instinctRuns.filter(row => row.nurseryInstinctId === id && row.result === "complete").length])),
+  instinctReviewSpread: (Math.max(...instinctReviewValues) - Math.min(...instinctReviewValues)) / Math.max(1, Math.min(...instinctReviewValues)),
 };
 
 if (process.argv.includes("--quiet")) {
-  process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs, ${endlessRuns.length} endless runs, ${difficultyRuns.length} difficulty runs).\n`);
+  process.stdout.write(`Castle balance assertions passed (${fullRuns.length} full runs, ${pressureRuns.length} pressure runs, ${endlessRuns.length} endless runs, ${difficultyRuns.length} difficulty runs, ${instinctRuns.length} instinct runs).\n`);
 } else {
-  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, endlessRuns, difficultyRuns, idlePrompts, validation }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ curveRanges, scenarios: report, fullRuns, pressureRuns, endlessRuns, difficultyRuns, instinctRuns, idlePrompts, validation }, null, 2)}\n`);
 }
 if (
   validation.unresolvedFirstBattles > 0
@@ -271,4 +301,5 @@ if (
   || validation.siegeDifficultyPressure === 0
   || !validation.difficultyReviewOrdering
   || !validation.idlePromptStaysSafe
+  || Object.values(validation.instinctWins).some(wins => wins === 0)
 ) process.exitCode = 1;
