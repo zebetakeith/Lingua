@@ -14,6 +14,7 @@ import {
   canDraftCastleUpgrade,
   canChooseCastleEvent,
   chooseCastleRoute,
+  claimCastleMorsel,
   claimCastleUpgrade,
   continueCastleRun,
   createInitialCastleRun,
@@ -22,6 +23,8 @@ import {
   getCastleBattleProgress,
   getCastleEndlessThreat,
   getCastleEnemyAffix,
+  getCastlePowerCost,
+  getCastleWildBroodCount,
   getCastleEventChoiceEffect,
   getCastleGuardianPower,
   getActiveCastleSynergies,
@@ -30,6 +33,8 @@ import {
   refreshCastleCommandHand,
   resolveCastleEvent,
   resumeCastleBattle,
+  hatchCastlePiplet,
+  overfeedCastleUnit,
   summonCastleUnit,
   tickCastleRun,
 } from "../src/experiments/castleBattle.ts";
@@ -93,6 +98,8 @@ function testUnit(kind, side, id, overrides = {}) {
     slowMs: 0,
     damageBonus: 0,
     kills: 0,
+    origin: side === "enemy" ? "enemy" : "paid",
+    overfed: false,
     ...overrides,
   };
 }
@@ -117,6 +124,57 @@ const standardRewardResult = applyCastleStudyOutcome(standardDifficultyRun, outc
 const siegeRewardResult = applyCastleStudyOutcome(siegeDifficultyRun, outcome(500, { reward: 1.25 }));
 assert.equal(studyRewardResult.battle.energy, standardRewardResult.battle.energy, "Study First must not change recall rewards");
 assert.equal(siegeRewardResult.battle.energy, standardRewardResult.battle.energy, "Moonstorm must not change recall rewards");
+
+let handHatchRun = createInitialCastleRun("hand-hatch", "quick", "quadratic", [], 42, "balanced", null, "standard", "handHatch");
+handHatchRun = applyCastleStudyOutcome(handHatchRun, outcome(601));
+handHatchRun = applyCastleStudyOutcome(handHatchRun, outcome(602));
+handHatchRun = applyCastleStudyOutcome(handHatchRun, outcome(603));
+assert.equal(handHatchRun.battle.hatchCharges, 1, "Hand Hatch should store one charge after three correct familiar recalls");
+handHatchRun = hatchCastlePiplet(handHatchRun);
+assert.equal(handHatchRun.battle.hatchCharges, 0, "hatching should consume exactly one stored Hand Hatch charge");
+assert.equal(getCastleArmyPopulation(handHatchRun.battle), 1, "a hand-hatched Piplet should use one paid Army Mass");
+assert.equal(handHatchRun.battle.units[0].origin, "manual", "a hand-hatched Piplet should remain distinguishable from passive brood");
+
+let wildBroodRun = createInitialCastleRun("wild-brood", "quick", "quadratic", [], 42, "balanced", null, "standard", "wildBrood");
+wildBroodRun = { ...wildBroodRun, battle: { ...wildBroodRun.battle, mode: "study", autoSpawnTimerMs: 0 } };
+wildBroodRun = tickCastleRun(wildBroodRun, 100, 1);
+assert.equal(getCastleWildBroodCount(wildBroodRun.battle), 1, "Wild Brood should hatch one half-strength reserve Piplet when its timer completes");
+assert.equal(getCastleArmyPopulation(wildBroodRun.battle), 0, "Wild Brood reserve Piplets must not consume paid Army Mass");
+assert.equal(wildBroodRun.battle.units[0].maxHp, Math.round(CASTLE_UNIT_DEFS.piplet.hp * 0.5), "Wild Brood Piplets should have half base health");
+
+const devourerRun = createInitialCastleRun("devourer", "quick", "quadratic", [], 42, "balanced", null, "standard", "devourer");
+assert.equal(devourerRun.battle.maxEnergy, 13, "Devourer should raise max Goo by one");
+assert.equal(getCastlePowerCost(devourerRun, "slingshot"), 2.25, "Devourer should discount leader powers by ten percent");
+
+let overfeedRun = readyCommand({ ...freshRun(), battle: { ...freshRun().battle, energy: 8 } }, "dartlet");
+overfeedRun = summonCastleUnit(overfeedRun, "dartlet");
+const paidDartlet = overfeedRun.battle.units.find(unit => unit.kind === "dartlet");
+overfeedRun = overfeedCastleUnit(overfeedRun, paidDartlet.id);
+const overfedDartlet = overfeedRun.battle.units.find(unit => unit.id === paidDartlet.id);
+assert.equal(overfeedRun.battle.overfeedUsed, true, "overfeeding should be limited to one use per battle");
+assert.equal(overfedDartlet.overfed, true, "the selected paid minion should be marked overfed");
+assert.ok(overfedDartlet.maxHp > paidDartlet.maxHp && overfedDartlet.damageBonus > paidDartlet.damageBonus, "overfeeding should raise max HP and damage");
+
+let morselRewardRun = {
+  ...freshRun(),
+  battle: {
+    ...freshRun().battle,
+    mode: "study",
+    guardian: false,
+    enemyCastleHp: 1,
+    autoSpawnTimerMs: 999_999,
+    enemySpawnTimerMs: 999_999,
+    playerTurretTimerMs: 999_999,
+    enemyTurretTimerMs: 999_999,
+    units: [testUnit("dartlet", "player", "morsel-finisher", { position: 95, attackCooldownMs: 0 })],
+  },
+};
+morselRewardRun = tickCastleRun(morselRewardRun, 100, 1);
+assert.equal(morselRewardRun.rewardMorselChoices.length, 3, "an outpost should offer two enemy-family Morsels and one neutral adaptation");
+assert.equal(morselRewardRun.rewardChoices.length, 0, "outposts should reserve major Digestions for generals");
+const claimedMorselId = morselRewardRun.rewardMorselChoices[0];
+morselRewardRun = claimCastleMorsel(morselRewardRun, claimedMorselId);
+assert.equal(morselRewardRun.morselStacks[claimedMorselId], 1, "claiming a Morsel should add one persistent run stack");
 
 const mossRoute = chooseCastleRoute({
   ...keepsakeRun("mossPatch"),
@@ -149,6 +207,34 @@ assert.deepEqual(migratedProfile.unlockedKeepsakeIds, ["starBuckle"], "old profi
 assert.equal(migratedProfile.selectedKeepsakeId, "starBuckle", "old profiles should safely equip the starter keepsake");
 assert.deepEqual(migratedProfile.unlockedUpgradeIds, STARTER_CASTLE_UPGRADE_IDS, "retired prototype upgrades should be removed during profile recovery");
 assert.deepEqual(migratedProfile.discoveredEnemyKinds, [], "retired prototype enemies should be removed during profile recovery");
+localStorage.clear();
+
+const legacyActiveRun = createInitialCastleRun("legacy-active", "quick", "quadratic", ["nurseryChimney"], 42);
+legacyActiveRun.version = 1;
+legacyActiveRun.upgrades = ["nurseryChimney"];
+delete legacyActiveRun.nurseryInstinctId;
+delete legacyActiveRun.rewardMorselChoices;
+delete legacyActiveRun.morselStacks;
+delete legacyActiveRun.battle.maxEnergy;
+delete legacyActiveRun.battle.hatchProgress;
+delete legacyActiveRun.battle.hatchCharges;
+delete legacyActiveRun.battle.overfeedUsed;
+delete legacyActiveRun.battle.playerPowerScore;
+delete legacyActiveRun.battle.playerAttackSpeedMultiplier;
+delete legacyActiveRun.battle.playerHpMultiplier;
+delete legacyActiveRun.battle.playerShieldBonus;
+delete legacyActiveRun.battle.recallGooBonus;
+legacyActiveRun.battle.units = [testUnit("piplet", "player", "legacy-piplet")];
+delete legacyActiveRun.battle.units[0].origin;
+delete legacyActiveRun.battle.units[0].overfed;
+localStorage.setItem("lexicon_labyrinth_castle_runs_v1", JSON.stringify({
+  "legacy-active": { profile: { ...migratedProfile, deckId: "legacy-active" }, run: legacyActiveRun },
+}));
+const migratedActiveRun = loadCastleRun("legacy-active");
+assert.equal(migratedActiveRun.version, 2, "an active version-one run should migrate instead of being discarded");
+assert.equal(migratedActiveRun.nurseryInstinctId, "wildBrood", "legacy Nursery Chimney runs should migrate to Wild Brood");
+assert.equal(migratedActiveRun.battle.units[0].origin, "legacy", "legacy friendly units should receive a safe population origin");
+assert.equal(migratedActiveRun.morselStacks.neutralRecall, 0, "migrated runs should receive an empty Morsel collection");
 localStorage.clear();
 
 let run = freshRun();
@@ -263,7 +349,7 @@ let engineRun = {
   battle: { ...freshRun().battle, mode: "study", combatBeatRemainingMs: 4_000, units: [engineTarget], playerTurretTimerMs: 0, autoSpawnTimerMs: 999_999, enemySpawnTimerMs: 999_999, enemyTurretTimerMs: 999_999 },
 };
 engineRun = tickCastleRun(engineRun, 100, 1);
-assert.equal(engineRun.battle.playerTurretTimerMs, 2_500, "Nursery Engine should reduce the keep turret reload to 2.6 seconds");
+assert.equal(engineRun.battle.playerTurretTimerMs, 1_900, "Nursery Engine should reduce Pipplo's auto-defense reload to two seconds");
 
 const instinctUpgrades = ["impHorns", "springTail", "crabClaws"];
 const instinctUnit = testUnit("dartlet", "player", "instinct-unit", { position: 20 });
@@ -531,6 +617,7 @@ assert.equal(mixedFormation.battle.units.find(unit => unit.id === "formation-men
 const branchDraftBattle = {
   ...freshRun().battle,
   mode: "study",
+  guardian: true,
   enemyCastleHp: 1,
   autoSpawnTimerMs: 999_999,
   enemySpawnTimerMs: 999_999,
@@ -689,8 +776,8 @@ let hornSplash = {
   },
 };
 hornSplash = tickCastleRun(hornSplash, 100, 1);
-assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-primary").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 4, "Imp Horns should preserve the turret's full primary hit");
-assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-splash").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 2, "Imp Horns should splash a second enemy for half turret damage");
+assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-primary").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 7, "Imp Horns should preserve Pipplo's full primary auto-defense hit");
+assert.equal(hornSplash.battle.units.find(unit => unit.id === "horn-splash").hp, CASTLE_UNIT_DEFS.shellSlime.hp - 2, "Imp Horns should splash a second enemy for two damage");
 
 let encounterRun = createInitialCastleRun("encounter-memory", "quick", "quadratic", ALL_CASTLE_UPGRADE_IDS, 7);
 encounterRun = {
@@ -1014,11 +1101,12 @@ assert.equal(endlessStart.battle.enemyThreatTier, 1, "region four should begin M
 assert.equal(getCastleEndlessThreat(6).tier, 3, "each region after the core three should add one ascension tier");
 assert.equal(getCastleBattleProgress(endlessStart), "Moon Ascension 1 · Castle 1/3", "endless HUD progress should use its ascension name instead of an impossible region fraction");
 assert.equal(getCastleBattleProgress({ ...freshRun(), targetRegions: 1, region: 2 }), "Deep run · Region 2 · Castle 1/3", "continuing beyond a short contract should label the deeper named region clearly");
-assert.equal(getCastleGuardianPower(4).id, "rootQuake", "the first endless region should introduce the Root Quake guardian stance");
+assert.equal(getCastleGuardianPower(3).id, "rootQuake", "the third named region should belong to Orrum's Root Quake form");
+assert.equal(getCastleGuardianPower(4).id, "moonTax", "the first endless region should introduce an empowered cross-family form");
 assert.equal(getCastleGuardianPower(5).id, "broodCall", "the second endless region should introduce the Brood Call guardian stance");
 for (let region = 1; region <= 5; region += 1) {
   const guardianIdentity = getCastleGuardianPower(region);
-  assert.match(guardianIdentity.epithet, /^Mallow, /, "every guardian stance should have a named Mallow form");
+  assert.match(guardianIdentity.epithet, /, (Shell Cantor|Mire Gardener|Spore Oracle|Rootbreaker|Brood Bellkeeper)$/, "every guardian stance should name its regional general and role");
   assert.ok(guardianIdentity.counterplay.length >= 40, "every guardian briefing should teach concrete counterplay");
 }
 
@@ -1151,7 +1239,7 @@ const shellStance = tickCastleRun({
   battle: { ...guardianAtThreat(0, 1, 60).battle, guardianPowerId: "shellReprisal" },
 }, 100, 1);
 const reprisalShell = shellStance.battle.units.find(unit => unit.kind === "shellSlime");
-assert.equal(reprisalShell.shield, 11, "Shell Reprisal should add five visible barrier to the phase-two defender");
+assert.equal(reprisalShell.shield, 9, "Shell Reprisal should add five visible barrier to the tuned phase-two defender");
 assert.match(shellStance.battle.notice, /Shell Reprisal gave every enemy 5 barrier/, "Shell Reprisal should explain its phase effect");
 
 const sporeStanceBase = guardianAtThreat(0, 1, 60);

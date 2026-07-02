@@ -2,6 +2,7 @@ import {
   ALL_CASTLE_UPGRADE_IDS,
   ALL_CASTLE_KEEPSAKE_IDS,
   ALL_CASTLE_GUARDIAN_POWER_IDS,
+  ALL_CASTLE_MORSEL_IDS,
   CASTLE_CONTRACTS,
   CASTLE_DIFFICULTIES,
   CASTLE_EVENT_DEFS,
@@ -12,6 +13,7 @@ import {
   STARTER_CASTLE_KEEPSAKE_IDS,
   STARTER_CASTLE_UPGRADE_IDS,
   createInitialCastleRun,
+  createEmptyCastleMorselStacks,
   normalizeCastleRunStudySummary,
   type CastleContractId,
   type CastleDifficultyId,
@@ -19,6 +21,8 @@ import {
   type CastleCommandCardId,
   type CastleEventId,
   type CastleKeepsakeId,
+  type CastleNurseryInstinctId,
+  type CastleMorselId,
   type CastleRouteChoice,
   type CastleRunState,
   type CastleUnitKind,
@@ -52,7 +56,9 @@ const CASTLE_ROUTES: CastleRouteChoice[] = ["battle", "rest", "workshop", "event
 const CASTLE_ENEMY_AFFIXES: CastleEnemyAffixId[] = ["armored", "frenzied", "giant"];
 
 function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunState | null {
-  if (saved.version !== CASTLE_RUN_VERSION || !saved.battle) return null;
+  if (!saved.battle) return null;
+  const savedVersion = Number((saved as unknown as { version?: number }).version || 1);
+  if (savedVersion > CASTLE_RUN_VERSION) return null;
   const contractId: CastleContractId = saved.contractId in CASTLE_CONTRACTS ? saved.contractId : "regular";
   const difficultyId: CastleDifficultyId = typeof saved.difficultyId === "string" && saved.difficultyId in CASTLE_DIFFICULTIES
     ? saved.difficultyId as CastleDifficultyId
@@ -61,9 +67,25 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
   const recallMode = saved.recallMode === "deck" ? "deck" : "balanced";
   const keepsakeId = saved.keepsakeId && ALL_CASTLE_KEEPSAKE_IDS.includes(saved.keepsakeId) ? saved.keepsakeId : null;
   const upgrades = Array.isArray(saved.upgrades) ? saved.upgrades.filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id)) : [];
+  const savedInstinct = (saved as unknown as { nurseryInstinctId?: CastleNurseryInstinctId }).nurseryInstinctId;
+  const nurseryInstinctId: CastleNurseryInstinctId = savedInstinct && savedInstinct in {
+    wildBrood: true,
+    handHatch: true,
+    devourer: true,
+  }
+    ? savedInstinct
+    : savedVersion < 2 && (upgrades.includes("nurseryChimney") || upgrades.includes("swarmSchool"))
+      ? "wildBrood"
+      : "handHatch";
   const draftPoolIds = Array.isArray(saved.draftPoolIds)
     ? saved.draftPoolIds.filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id))
     : STARTER_CASTLE_UPGRADE_IDS;
+  const morselStacks = createEmptyCastleMorselStacks();
+  const savedMorselStacks = (saved as unknown as { morselStacks?: Partial<Record<CastleMorselId, number>> }).morselStacks;
+  for (const id of ALL_CASTLE_MORSEL_IDS) {
+    const value = savedMorselStacks?.[id];
+    morselStacks[id] = Number.isFinite(value) ? Math.max(0, Math.min(5, Math.floor(value!))) : 0;
+  }
   const base = createInitialCastleRun(
     deckId,
     contractId,
@@ -73,6 +95,8 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
     recallMode,
     keepsakeId,
     difficultyId,
+    nurseryInstinctId,
+    morselStacks,
   );
   const battle = saved.battle;
   const telemetry = battle.telemetry || base.battle.telemetry;
@@ -94,10 +118,13 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
     rewardCurve,
     recallMode,
     keepsakeId,
+    nurseryInstinctId,
+    morselStacks,
     phase: CASTLE_PHASES.includes(saved.phase) ? saved.phase : "battle",
     upgrades,
     draftPoolIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...draftPoolIds])),
     rewardChoices: Array.isArray(saved.rewardChoices) ? saved.rewardChoices.filter(id => ALL_CASTLE_UPGRADE_IDS.includes(id)) : [],
+    rewardMorselChoices: Array.isArray(saved.rewardMorselChoices) ? saved.rewardMorselChoices.filter(id => ALL_CASTLE_MORSEL_IDS.includes(id)) : [],
     routeChoices: Array.isArray(saved.routeChoices) ? saved.routeChoices.filter(route => CASTLE_ROUTES.includes(route)) : [],
     pendingEventId: saved.pendingEventId && eventIds.includes(saved.pendingEventId) ? saved.pendingEventId : null,
     eventHistory: Array.isArray(saved.eventHistory) ? saved.eventHistory.filter(id => eventIds.includes(id)) : [],
@@ -106,6 +133,10 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
       ...base.battle,
       ...battle,
       difficultyId,
+      maxEnergy: Number.isFinite(battle.maxEnergy) ? Math.max(1, battle.maxEnergy) : base.battle.maxEnergy,
+      hatchProgress: Number.isFinite(battle.hatchProgress) ? Math.max(0, Math.min(2, Math.floor(battle.hatchProgress))) : 0,
+      hatchCharges: Number.isFinite(battle.hatchCharges) ? Math.max(0, Math.min(2, Math.floor(battle.hatchCharges))) : 0,
+      overfeedUsed: Boolean(battle.overfeedUsed),
       combatBeatRemainingMs: Number.isFinite(battle.combatBeatRemainingMs) ? Math.max(0, battle.combatBeatRemainingMs) : 0,
       commandWindowReady: Boolean(battle.commandWindowReady),
       summonPlayedThisWindow: Boolean(battle.summonPlayedThisWindow),
@@ -136,6 +167,13 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
       enemyThreatTier: Number.isFinite(battle.enemyThreatTier)
         ? Math.max(0, Math.floor(battle.enemyThreatTier))
         : base.battle.enemyThreatTier,
+      playerPowerScore: Number.isFinite(battle.playerPowerScore)
+        ? Math.max(0, Math.floor(battle.playerPowerScore))
+        : base.battle.playerPowerScore,
+      playerAttackSpeedMultiplier: Number.isFinite(battle.playerAttackSpeedMultiplier) ? Math.max(0.5, battle.playerAttackSpeedMultiplier) : base.battle.playerAttackSpeedMultiplier,
+      playerHpMultiplier: Number.isFinite(battle.playerHpMultiplier) ? Math.max(0.5, battle.playerHpMultiplier) : base.battle.playerHpMultiplier,
+      playerShieldBonus: Number.isFinite(battle.playerShieldBonus) ? Math.max(0, battle.playerShieldBonus) : base.battle.playerShieldBonus,
+      recallGooBonus: Number.isFinite(battle.recallGooBonus) ? Math.max(0, Math.min(0.05, battle.recallGooBonus)) : base.battle.recallGooBonus,
       encounteredEnemyKinds,
       units: Array.isArray(battle.units)
         ? battle.units
@@ -143,6 +181,8 @@ function normalizeCastleRun(deckId: string, saved: CastleRunState): CastleRunSta
           .map(unit => ({
             ...unit,
             affix: unit.side === "enemy" && unit.affix && CASTLE_ENEMY_AFFIXES.includes(unit.affix) ? unit.affix : null,
+            origin: unit.origin || (unit.side === "enemy" ? "enemy" : "legacy"),
+            overfed: Boolean(unit.overfed),
           }))
         : [],
       fxEvents: Array.isArray(battle.fxEvents) ? battle.fxEvents : [],

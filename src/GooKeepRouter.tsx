@@ -11,7 +11,7 @@ function LoadingScreen({ gooKeep }: { gooKeep: boolean }) {
       <div className="goo-route-loading-card" role="status" aria-live="polite">
         <span className="goo-route-loading-spark" aria-hidden="true">✦</span>
         <b>{gooKeep ? "Opening Pipplo's Goo Keep…" : "Opening Lexicon Labyrinth…"}</b>
-        <small>{gooKeep ? "Waking the nursery and Mallow's moon gate" : "Preparing your study world"}</small>
+        <small>{gooKeep ? "Waking Pipplo and the rival generals" : "Preparing your study world"}</small>
       </div>
     </main>
   );

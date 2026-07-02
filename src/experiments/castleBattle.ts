@@ -1,6 +1,6 @@
 import type { StudyQuestionType, StudyRecallMode, StudyRewardCurve } from "../game/study";
 
-export const CASTLE_RUN_VERSION = 1;
+export const CASTLE_RUN_VERSION = 2;
 export const CASTLE_LANE_LENGTH = 100;
 export const CASTLE_RALLY_LIMIT = 3;
 export const CASTLE_RECALL_BOLT_LIMIT = 5;
@@ -14,6 +14,10 @@ export type CastleContractId = "quick" | "regular" | "long";
 export type CastleDifficultyId = "study" | "standard" | "siege";
 export type CastleRunPhase = "battle" | "reward" | "route" | "event" | "retire" | "complete" | "lost";
 export type CastleBattleMode = "study" | "command";
+export type CastleNurseryInstinctId = "wildBrood" | "handHatch" | "devourer";
+export type CastleUnitOrigin = "paid" | "wild" | "manual" | "enemy" | "legacy";
+export type CastleEnemyFamilyId = "shell" | "mire" | "root" | "neutral";
+export type CastleMorselId = "shellTempo" | "shellFlesh" | "mireTempo" | "mireDew" | "rootFlesh" | "rootGuard" | "neutralTempo" | "neutralFlesh" | "neutralRecall";
 export type CastleEnemyAffixId = "armored" | "frenzied" | "giant";
 export type CastleRouteChoice = "battle" | "rest" | "workshop" | "event";
 export type CastleGuardianPowerId = "shellReprisal" | "sporeWeather" | "moonTax" | "rootQuake" | "broodCall";
@@ -116,6 +120,8 @@ export interface CastleUnitState {
   slowMs: number;
   damageBonus: number;
   kills: number;
+  origin: CastleUnitOrigin;
+  overfed: boolean;
 }
 
 export interface CastleEnemyAffixDef {
@@ -133,6 +139,7 @@ export interface CastleFxEvent {
   fromPosition?: number;
   ttlMs: number;
   label?: string;
+  powerId?: CastlePowerId;
 }
 
 export interface CastleBattleTelemetry {
@@ -167,6 +174,10 @@ export interface CastleBattleState {
   enemyCastleHp: number;
   enemyCastleMaxHp: number;
   energy: number;
+  maxEnergy: number;
+  hatchProgress: number;
+  hatchCharges: number;
+  overfeedUsed: boolean;
   combatBeatRemainingMs: number;
   commandWindowReady: boolean;
   summonPlayedThisWindow: boolean;
@@ -191,6 +202,11 @@ export interface CastleBattleState {
   enemyTurretTimerMs: number;
   enemySlowMs: number;
   enemyThreatTier: number;
+  playerPowerScore: number;
+  playerAttackSpeedMultiplier: number;
+  playerHpMultiplier: number;
+  playerShieldBonus: number;
+  recallGooBonus: number;
   units: CastleUnitState[];
   encounteredEnemyKinds: CastleUnitKind[];
   nextUnitId: number;
@@ -233,9 +249,12 @@ export interface CastleRunState {
   rewardCurve: StudyRewardCurve;
   recallMode: StudyRecallMode;
   keepsakeId: CastleKeepsakeId | null;
+  nurseryInstinctId: CastleNurseryInstinctId;
   upgrades: CastleUpgradeId[];
   draftPoolIds: CastleUpgradeId[];
   rewardChoices: CastleUpgradeId[];
+  rewardMorselChoices: CastleMorselId[];
+  morselStacks: Record<CastleMorselId, number>;
   routeChoices: CastleRouteChoice[];
   pendingEventId: CastleEventId | null;
   eventHistory: CastleEventId[];
@@ -281,6 +300,23 @@ export interface CastleDifficultyDef {
   enemyHpMultiplier: number;
   enemyDamageBonus: number;
   enemySpeedMultiplier: number;
+}
+
+export interface CastleNurseryInstinctDef {
+  id: CastleNurseryInstinctId;
+  name: string;
+  shortName: string;
+  description: string;
+  playstyle: string;
+  accent: string;
+}
+
+export interface CastleMorselDef {
+  id: CastleMorselId;
+  name: string;
+  family: CastleEnemyFamilyId;
+  description: string;
+  accent: string;
 }
 
 export interface CastleEventChoiceDef {
@@ -350,6 +386,51 @@ export const CASTLE_DIFFICULTIES: Record<CastleDifficultyId, CastleDifficultyDef
   },
 };
 
+export const CASTLE_NURSERY_INSTINCT_DEFS: Record<CastleNurseryInstinctId, CastleNurseryInstinctDef> = {
+  wildBrood: {
+    id: "wildBrood",
+    name: "Wild Brood",
+    shortName: "Passive swarm",
+    description: "Pipplo sheds a half-strength Piplet every 10 seconds, up to three. Wild Piplets use a separate reserve and never trigger paid-summon bonuses.",
+    playstyle: "Steady lane presence with less direct control.",
+    accent: "#68c78d",
+  },
+  handHatch: {
+    id: "handHatch",
+    name: "Hand Hatch",
+    shortName: "Recall charges",
+    description: "Every three correct familiar recalls stores one hatch charge, up to two. Spend a charge in the Army panel to hatch a normal one-mass Piplet.",
+    playstyle: "Turns reliable recall into deliberate formation timing.",
+    accent: "#f0c95e",
+  },
+  devourer: {
+    id: "devourer",
+    name: "Devourer",
+    shortName: "Power build",
+    description: "No free Piplets. Pipplo stores one extra Goo and all leader powers cost 10% less.",
+    playstyle: "Fewer bodies, more flexible spell turns and overfeeding.",
+    accent: "#dd83b6",
+  },
+};
+
+export const CASTLE_MORSEL_DEFS: Record<CastleMorselId, CastleMorselDef> = {
+  shellTempo: { id: "shellTempo", name: "Cantor Rhythm", family: "shell", description: "+3% friendly attack speed per stack.", accent: "#70bdd5" },
+  shellFlesh: { id: "shellFlesh", name: "Pearl Membrane", family: "shell", description: "+3% max HP for newly summoned friendly units per stack.", accent: "#9fd5df" },
+  mireTempo: { id: "mireTempo", name: "Mothbeat Nerves", family: "mire", description: "+3% friendly attack speed per stack.", accent: "#c584c2" },
+  mireDew: { id: "mireDew", name: "Recall Dew", family: "mire", description: "+0.01 Goo from every correct graded recall per stack, capped at +0.05.", accent: "#85c69a" },
+  rootFlesh: { id: "rootFlesh", name: "Root-Fed Bodies", family: "root", description: "+3% max HP for newly summoned friendly units per stack.", accent: "#a87a53" },
+  rootGuard: { id: "rootGuard", name: "Bark Bubble", family: "root", description: "New friendly units arrive with +1 shield per stack.", accent: "#c0935f" },
+  neutralTempo: { id: "neutralTempo", name: "Quick Jelly", family: "neutral", description: "+3% friendly attack speed per stack.", accent: "#f0c95e" },
+  neutralFlesh: { id: "neutralFlesh", name: "Plump Jelly", family: "neutral", description: "+3% max HP for newly summoned friendly units per stack.", accent: "#ef987f" },
+  neutralRecall: { id: "neutralRecall", name: "Memory Syrup", family: "neutral", description: "+0.01 Goo from every correct graded recall per stack, capped at +0.05.", accent: "#86c8a4" },
+};
+
+export const ALL_CASTLE_MORSEL_IDS = Object.keys(CASTLE_MORSEL_DEFS) as CastleMorselId[];
+
+export function createEmptyCastleMorselStacks(): Record<CastleMorselId, number> {
+  return Object.fromEntries(ALL_CASTLE_MORSEL_IDS.map(id => [id, 0])) as Record<CastleMorselId, number>;
+}
+
 export const CASTLE_ENEMY_AFFIX_DEFS: Record<CastleEnemyAffixId, CastleEnemyAffixDef> = {
   armored: {
     id: "armored",
@@ -383,7 +464,7 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   shellReprisal: {
     id: "shellReprisal",
     name: "Shell Reprisal",
-    epithet: "Mallow, Shell Cantor",
+    epithet: "Clackback, Shell Cantor",
     description: "At each phase change, every enemy in the lane gains 5 barrier.",
     signatureName: "Shell Chorus",
     signature: "Shell Chorus periodically grants the four frontmost enemies 2 barrier.",
@@ -393,7 +474,7 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   sporeWeather: {
     id: "sporeWeather",
     name: "Spore Weather",
-    epithet: "Mallow, Mire Gardener",
+    epithet: "Mycella, Mire Gardener",
     description: "At each phase change, friendly units are slowed for 3 seconds.",
     signatureName: "Spore Squall",
     signature: "Spore Squall periodically slows the whole friendly formation.",
@@ -403,8 +484,8 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   moonTax: {
     id: "moonTax",
     name: "Moon Tax",
-    epithet: "Mallow, Moon Collector",
-    description: "At each phase change, Mallow drains up to 1 stored Goo.",
+    epithet: "Mycella, Spore Oracle",
+    description: "At each phase change, the Spore Oracle drains up to 1 stored Goo.",
     signatureName: "Moon Tithe",
     signature: "Moon Tithe periodically drains up to 0.5 stored Goo during combat.",
     counterplay: "Spend Goo before marching instead of banking it where the next tithe can reach it.",
@@ -413,7 +494,7 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   rootQuake: {
     id: "rootQuake",
     name: "Root Quake",
-    epithet: "Mallow, Rootbreaker",
+    epithet: "Orrum, Rootbreaker",
     description: "At each phase change, every friendly unit takes 4 damage; unit shields absorb it first.",
     signatureName: "Root Tremor",
     signature: "Root Tremor periodically deals 2 shieldable damage to every friendly unit.",
@@ -423,8 +504,8 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
   broodCall: {
     id: "broodCall",
     name: "Brood Call",
-    epithet: "Mallow, Brood Bellkeeper",
-    description: "At each phase change, Mallow calls an extra Nibble Imp, then an armored Shell Slime.",
+    epithet: "Orrum, Brood Bellkeeper",
+    description: "At each phase change, the Bellkeeper calls an extra Nibble Imp, then an armored Shell Slime.",
     signatureName: "Brood Drum",
     signature: "Brood Drum periodically hatches a bonus attacker, escalating to Boomcaps.",
     counterplay: "Keep a splash power ready and avoid filling all ten army spaces with fragile melee units.",
@@ -435,7 +516,12 @@ export const CASTLE_GUARDIAN_POWER_DEFS: Record<CastleGuardianPowerId, CastleGua
 export const ALL_CASTLE_GUARDIAN_POWER_IDS = Object.keys(CASTLE_GUARDIAN_POWER_DEFS) as CastleGuardianPowerId[];
 
 export function getCastleGuardianPower(region: number): CastleGuardianPowerDef {
-  const id = ALL_CASTLE_GUARDIAN_POWER_IDS[(Math.max(1, Math.floor(region)) - 1) % ALL_CASTLE_GUARDIAN_POWER_IDS.length];
+  const normalizedRegion = Math.max(1, Math.floor(region));
+  const coreGenerals: CastleGuardianPowerId[] = ["shellReprisal", "sporeWeather", "rootQuake"];
+  const endlessForms: CastleGuardianPowerId[] = ["moonTax", "broodCall", "shellReprisal", "sporeWeather", "rootQuake"];
+  const id = normalizedRegion <= 3
+    ? coreGenerals[normalizedRegion - 1]
+    : endlessForms[(normalizedRegion - 4) % endlessForms.length];
   return CASTLE_GUARDIAN_POWER_DEFS[id] || CASTLE_GUARDIAN_POWER_DEFS.shellReprisal;
 }
 
@@ -482,7 +568,7 @@ export const CASTLE_KEEPSAKE_DEFS: Record<CastleKeepsakeId, CastleKeepsakeDef> =
   moonTreaty: {
     id: "moonTreaty",
     name: "Moon Treaty",
-    description: "Begin with +2 Goo, but Mallow starts with 1 Rally pip.",
+    description: "Begin with +2 Goo, but the rival starts with 1 Rally pip.",
     unlockHint: "Complete 3 expeditions.",
     accent: "#9d83dc",
     runRequirement: 3,
@@ -911,13 +997,24 @@ function createBattle(
   carriedCastleHp: number,
   carriedEnergy: number,
   upgrades: CastleUpgradeId[],
+  morselStacks: Record<CastleMorselId, number>,
   difficultyId: CastleDifficultyId,
+  nurseryInstinctId: CastleNurseryInstinctId,
 ): CastleBattleState {
   const guardian = battleInRegion === 3;
   const endlessThreat = getCastleEndlessThreat(region);
   const difficulty = CASTLE_DIFFICULTIES[difficultyId];
+  const morselPower = Object.values(morselStacks).reduce((total, stacks) => total + Math.max(0, stacks), 0);
+  const playerPowerScore = upgrades.reduce((total, id) => {
+    const rarity = CASTLE_UPGRADE_DEFS[id]?.rarity;
+    return total + (rarity === "rare" ? 4 : rarity === "uncommon" ? 2 : 1);
+  }, morselPower);
+  const tempoStacks = morselStacks.shellTempo + morselStacks.mireTempo + morselStacks.neutralTempo;
+  const hpStacks = morselStacks.shellFlesh + morselStacks.rootFlesh + morselStacks.neutralFlesh;
+  const recallStacks = Math.min(5, morselStacks.mireDew + morselStacks.neutralRecall);
   const playerCastleMaxHp = 100 + (hasUpgrade(upgrades, "crabClaws") ? 20 : 0);
-  const enemyCastleMaxHp = Math.round((72 + (region * 18) + (battleInRegion * 10) + (guardian ? 42 : 0)) * difficulty.enemyHpMultiplier);
+  const maxEnergy = nurseryInstinctId === "devourer" ? CASTLE_MAX_ENERGY + 1 : CASTLE_MAX_ENERGY;
+  const enemyCastleMaxHp = Math.round((26 + (region * 5) + (battleInRegion * 3) + (guardian ? 5 : 0)) * difficulty.enemyHpMultiplier * (1 + playerPowerScore * 0.02));
   const summonCards = getPlayerSummonKinds(upgrades);
   const commandDeck: CastleCommandCardId[] = [
     ...summonCards,
@@ -939,7 +1036,11 @@ function createBattle(
     playerBarrier: hasUpgrade(upgrades, "bubbleBelly") ? 8 : 0,
     enemyCastleHp: enemyCastleMaxHp,
     enemyCastleMaxHp,
-    energy: clamp(carriedEnergy, 0, CASTLE_MAX_ENERGY),
+    energy: clamp(carriedEnergy, 0, maxEnergy),
+    maxEnergy,
+    hatchProgress: 0,
+    hatchCharges: 0,
+    overfeedUsed: false,
     combatBeatRemainingMs: 0,
     commandWindowReady: false,
     summonPlayedThisWindow: false,
@@ -958,12 +1059,17 @@ function createBattle(
     firstEnemyDefeatRewarded: false,
     recalledDirectionKeys: [],
     hasteMs: 0,
-    autoSpawnTimerMs: 1_500,
-    enemySpawnTimerMs: guardian ? 2_500 : 4_000,
-    playerTurretTimerMs: 1_500,
-    enemyTurretTimerMs: 2_500,
+    autoSpawnTimerMs: nurseryInstinctId === "wildBrood" ? 10_000 : 0,
+    enemySpawnTimerMs: guardian ? 5_000 : 6_500,
+    playerTurretTimerMs: 1_300,
+    enemyTurretTimerMs: 3_000,
     enemySlowMs: 0,
     enemyThreatTier: endlessThreat.tier,
+    playerPowerScore,
+    playerAttackSpeedMultiplier: 1 + tempoStacks * 0.03,
+    playerHpMultiplier: 1 + hpStacks * 0.03,
+    playerShieldBonus: morselStacks.rootGuard,
+    recallGooBonus: recallStacks * 0.01,
     units: [],
     encounteredEnemyKinds: [],
     nextUnitId: 1,
@@ -987,10 +1093,17 @@ export function createInitialCastleRun(
   recallMode: StudyRecallMode = "balanced",
   keepsakeId: CastleKeepsakeId | null = null,
   difficultyId: CastleDifficultyId = "standard",
+  nurseryInstinctId: CastleNurseryInstinctId = "handHatch",
+  morselStacksOverride?: Partial<Record<CastleMorselId, number>>,
 ): CastleRunState {
   const contract = CASTLE_CONTRACTS[contractId];
   const seed = seedOverride ?? seedFromString(`${deckId}:${contractId}:${Date.now()}`);
-  const battle = applyCastleKeepsake(createBattle(1, 1, 100, 0, [], difficultyId), keepsakeId, []);
+  const morselStacks = createEmptyCastleMorselStacks();
+  for (const id of ALL_CASTLE_MORSEL_IDS) {
+    const value = morselStacksOverride?.[id];
+    if (Number.isFinite(value)) morselStacks[id] = Math.max(0, Math.min(5, Math.floor(value!)));
+  }
+  const battle = applyCastleKeepsake(createBattle(1, 1, 100, 0, [], morselStacks, difficultyId, nurseryInstinctId), keepsakeId, []);
   return {
     version: CASTLE_RUN_VERSION,
     deckId,
@@ -1005,9 +1118,12 @@ export function createInitialCastleRun(
     rewardCurve,
     recallMode,
     keepsakeId,
+    nurseryInstinctId,
     upgrades: [],
     draftPoolIds: Array.from(new Set([...STARTER_CASTLE_UPGRADE_IDS, ...draftPoolIds])),
     rewardChoices: [],
+    rewardMorselChoices: [],
+    morselStacks,
     routeChoices: [],
     pendingEventId: null,
     eventHistory: [],
@@ -1038,8 +1154,10 @@ function createUnit(
   friendlyCount: number,
   playerSpawnCount: number,
   enemyThreatTier: number,
+  playerPowerScore: number,
   difficultyId: CastleDifficultyId,
   enemyAffix: CastleEnemyAffixId | null,
+  origin: CastleUnitOrigin,
 ): CastleUnitState {
   const def = CASTLE_UNIT_DEFS[kind];
   let hpMultiplier = 1;
@@ -1066,6 +1184,8 @@ function createUnit(
       damageBonus += Math.ceil(enemyThreatTier / 2);
       if (kind === "shellSlime" || kind === "rootLump") shield += Math.min(10, enemyThreatTier * 2);
     }
+    hpMultiplier *= 1 + playerPowerScore * 0.02;
+    damageBonus += Math.floor(playerPowerScore / 8);
     if (affix === "armored") shield += 6;
     if (affix === "frenzied") damageBonus += 1;
     if (affix === "giant") {
@@ -1073,7 +1193,11 @@ function createUnit(
       damageBonus += 1;
     }
   }
-  const hp = Math.round(def.hp * hpMultiplier);
+  if (origin === "wild") {
+    hpMultiplier *= 0.5;
+    damageBonus -= Math.max(1, Math.floor(def.damage * 0.5));
+  }
+  const hp = Math.max(1, Math.round(def.hp * hpMultiplier));
   return {
     id: `${side}-${id}`,
     side,
@@ -1087,6 +1211,8 @@ function createUnit(
     slowMs: 0,
     damageBonus,
     kills: 0,
+    origin,
+    overfed: false,
   };
 }
 
@@ -1097,9 +1223,14 @@ function addUnit(
   upgrades: CastleUpgradeId[],
   paid = false,
   enemyAffix: CastleEnemyAffixId | null = null,
+  origin: CastleUnitOrigin = side === "enemy" ? "enemy" : paid ? "paid" : "legacy",
 ): CastleBattleState {
   const friendlyCount = battle.units.filter(unit => unit.side === side).length;
-  const unit = createUnit(side, kind, battle.nextUnitId, upgrades, paid, friendlyCount, battle.playerSpawnCount, battle.enemyThreatTier, battle.difficultyId, enemyAffix);
+  let unit = createUnit(side, kind, battle.nextUnitId, upgrades, paid, friendlyCount, battle.playerSpawnCount, battle.enemyThreatTier, battle.playerPowerScore, battle.difficultyId, enemyAffix, origin);
+  if (side === "player") {
+    const maxHp = Math.max(1, Math.round(unit.maxHp * battle.playerHpMultiplier));
+    unit = { ...unit, hp: maxHp, maxHp, shield: unit.shield + battle.playerShieldBonus };
+  }
   return {
     ...battle,
     units: [...battle.units, unit],
@@ -1121,14 +1252,14 @@ function applyCastleKeepsake(
 ): CastleBattleState {
   if (!keepsakeId) return battle;
   let next = battle;
-  if (keepsakeId === "starBuckle") next = { ...next, energy: Math.min(CASTLE_MAX_ENERGY, next.energy + 1) };
+  if (keepsakeId === "starBuckle") next = { ...next, energy: Math.min(next.maxEnergy, next.energy + 1) };
   if (keepsakeId === "shellButton") next = { ...next, playerBarrier: next.playerBarrier + 10 };
   if (keepsakeId === "boltBead") next = { ...next, recallBoltCharge: Math.min(CASTLE_RECALL_BOLT_LIMIT - 1, next.recallBoltCharge + 1) };
   if (keepsakeId === "nurseryBell") next = addUnit(next, "player", "piplet", upgrades);
   if (keepsakeId === "mossPatch") next = { ...next, playerCastleHp: Math.min(next.playerCastleMaxHp, next.playerCastleHp + 8) };
   if (keepsakeId === "moonTreaty") next = {
     ...next,
-    energy: Math.min(CASTLE_MAX_ENERGY, next.energy + 2),
+    energy: Math.min(next.maxEnergy, next.energy + 2),
     rally: Math.min(CASTLE_RALLY_LIMIT - 1, next.rally + 1),
   };
   return next;
@@ -1141,6 +1272,7 @@ function addBattleFx(
   position: number,
   label?: string,
   fromPosition?: number,
+  powerId?: CastlePowerId,
 ): CastleBattleState {
   return {
     ...battle,
@@ -1152,6 +1284,7 @@ function addBattleFx(
       fromPosition,
       ttlMs: kind === "power" ? 700 : kind === "hit" ? 650 : kind === "projectile" ? 520 : 480,
       label,
+      powerId,
     }].slice(-14),
     nextFxId: battle.nextFxId + 1,
   };
@@ -1167,6 +1300,10 @@ function advanceGuardianPhase(battle: CastleBattleState, upgrades: CastleUpgrade
   for (let phase = battle.guardianPhase + 1; phase <= targetPhase; phase += 1) {
     if (phase === 2) {
       next = addUnit(next, "enemy", "shellSlime", upgrades);
+      if (next.enemyThreatTier === 0) {
+        const shellId = next.units[next.units.length - 1]?.id;
+        next.units = next.units.map(unit => unit.id === shellId ? { ...unit, hp: 14, maxHp: 14, shield: Math.min(unit.shield, 4) } : unit);
+      }
       if (next.enemyThreatTier >= 1) next = addUnit(next, "enemy", "echoMoth", upgrades);
       next = addBattleFx(next, "power", "enemy", 88, "Phase 2: Rootwall!");
       next.notice = next.enemyThreatTier >= 1
@@ -1177,7 +1314,7 @@ function advanceGuardianPhase(battle: CastleBattleState, upgrades: CastleUpgrade
       const rootId = next.units[next.units.length - 1]?.id;
       if (next.enemyThreatTier === 0) {
         next.units = next.units.map(unit => unit.id === rootId
-          ? { ...unit, hp: 30, maxHp: 30, damageBonus: -2 }
+          ? { ...unit, hp: 20, maxHp: 20, damageBonus: -2 }
           : unit);
       }
       if (next.enemyThreatTier >= 2) next = addUnit(next, "enemy", "sporeBud", upgrades);
@@ -1280,7 +1417,7 @@ function triggerGuardianSignature(battle: CastleBattleState, upgrades: CastleUpg
   return { ...next, guardianAbilityTimerMs: getGuardianSignatureInterval(next) };
 }
 
-function getUnitStats(unit: CastleUnitState, upgrades: CastleUpgradeId[], units: CastleUnitState[]) {
+function getUnitStats(unit: CastleUnitState, upgrades: CastleUpgradeId[], units: CastleUnitState[], playerAttackSpeedMultiplier = 1) {
   const def = CASTLE_UNIT_DEFS[unit.kind];
   const friendly = unit.side === "player";
   const meleeRangeBonus = friendly && hasUpgrade(upgrades, "stretchyLegs") && def.range < 4 ? 1.8 : 0;
@@ -1299,7 +1436,7 @@ function getUnitStats(unit: CastleUnitState, upgrades: CastleUpgradeId[], units:
     damage: Math.max(1, def.damage + unit.damageBonus + spitletRelay),
     speed: def.speed * friendlySpeedMultiplier * affixSpeedMultiplier,
     range: def.range + meleeRangeBonus,
-    attackMs: def.attackMs * affixAttackMultiplier,
+    attackMs: def.attackMs * affixAttackMultiplier / (friendly ? playerAttackSpeedMultiplier : 1),
   };
 }
 
@@ -1328,17 +1465,18 @@ function resolveBattleStep(
   current: CastleBattleState,
   deltaMs: number,
   upgrades: CastleUpgradeId[],
+  nurseryInstinctId: CastleNurseryInstinctId,
   region: number,
   battleInRegion: number,
   enemyPressureSpeed: number,
 ): CastleBattleState {
   const difficulty = CASTLE_DIFFICULTIES[current.difficultyId];
-  const effectiveEnemyPressure = enemyPressureSpeed * difficulty.enemySpeedMultiplier;
+  const effectiveEnemyPressure = enemyPressureSpeed * difficulty.enemySpeedMultiplier * (1 + current.playerPowerScore * 0.015);
   const guardianPressure = current.guardian ? 1 + (Math.max(1, current.guardianPhase) - 1) * 0.03 : 1;
   let battle: CastleBattleState = {
     ...current,
     activeTimeMs: current.activeTimeMs + deltaMs,
-    autoSpawnTimerMs: current.autoSpawnTimerMs - deltaMs,
+    autoSpawnTimerMs: nurseryInstinctId === "wildBrood" ? current.autoSpawnTimerMs - deltaMs : 0,
     enemySpawnTimerMs: current.enemySpawnTimerMs - (deltaMs * effectiveEnemyPressure * guardianPressure),
     playerTurretTimerMs: current.playerTurretTimerMs - deltaMs,
     enemyTurretTimerMs: current.enemyTurretTimerMs - (deltaMs * effectiveEnemyPressure * guardianPressure),
@@ -1363,12 +1501,10 @@ function resolveBattleStep(
       .filter(event => event.ttlMs > 0),
   };
 
-  const autoInterval = hasUpgrade(upgrades, "nurseryChimney") ? 5_500 : 6_800;
-  if (battle.autoSpawnTimerMs <= 0) {
-    battle = addUnit(battle, "player", "piplet", upgrades);
-    if (hasUpgrade(upgrades, "swarmSchool") && battle.playerSpawnCount % 5 === 0) {
-      battle = addUnit(battle, "player", "piplet", upgrades);
-    }
+  const autoInterval = hasUpgrade(upgrades, "nurseryChimney") ? 8_500 : 10_000;
+  const wildBroodCount = battle.units.filter(unit => unit.side === "player" && unit.origin === "wild" && unit.hp > 0).length;
+  if (nurseryInstinctId === "wildBrood" && battle.autoSpawnTimerMs <= 0) {
+    if (wildBroodCount < 3) battle = addUnit(battle, "player", "piplet", upgrades, false, null, "wild");
     battle.autoSpawnTimerMs += autoInterval;
   }
   if (battle.enemySpawnTimerMs <= 0) {
@@ -1376,7 +1512,7 @@ function resolveBattleStep(
     battle = addUnit(battle, "enemy", battle.nextEnemyKind, upgrades, false, enemyAffix);
     battle.nextEnemyKind = battle.afterNextEnemyKind;
     battle.afterNextEnemyKind = getEnemyWaveKind(region, battleInRegion, battle.enemySpawnCount + 1, battle.guardian);
-    battle.enemySpawnTimerMs += Math.max(5_500, 9_500 - (region * 450) - (battle.guardian ? 900 : 0));
+    battle.enemySpawnTimerMs += Math.max(6_500, 11_000 - (region * 400) - (battle.guardian ? 800 : 0));
   }
   if (battle.guardian && battle.guardianAbilityTimerMs <= 0) {
     battle = triggerGuardianSignature(battle, upgrades);
@@ -1411,7 +1547,7 @@ function resolveBattleStep(
     if (unit.side === "enemy" && battle.enemySlowMs > 0) continue;
     if (unit.kind === "mendlet") continue;
     if (bubbleShieldTarget(unit)) continue;
-    const stats = getUnitStats(unit, upgrades, battle.units);
+    const stats = getUnitStats(unit, upgrades, battle.units, battle.playerAttackSpeedMultiplier);
     const target = nearestUnit(battle.units, unit);
     const targetDistance = target ? Math.abs(target.position - unit.position) : Number.POSITIVE_INFINITY;
     const castleDistance = unit.side === "player" ? CASTLE_LANE_LENGTH - unit.position : unit.position;
@@ -1435,7 +1571,7 @@ function resolveBattleStep(
   }
   const updatedUnits = battle.units.map(unit => {
     if (unit.hp <= 0) return unit;
-    const stats = getUnitStats(unit, upgrades, battle.units);
+    const stats = getUnitStats(unit, upgrades, battle.units, battle.playerAttackSpeedMultiplier);
     const target = nearestUnit(battle.units, unit);
     const targetDistance = target ? Math.abs(target.position - unit.position) : Number.POSITIVE_INFINITY;
     const castleDistance = unit.side === "player" ? CASTLE_LANE_LENGTH - unit.position : unit.position;
@@ -1535,25 +1671,36 @@ function resolveBattleStep(
     }),
   };
   if (battle.playerTurretTimerMs <= 0) {
-    const target = battle.units.filter(unit => unit.side === "enemy" && unit.position <= 32 && unit.hp > 0).sort((a, b) => a.position - b.position)[0];
+    const target = battle.units.filter(unit => unit.side === "enemy" && unit.hp > 0).sort((a, b) => a.position - b.position)[0];
     if (target) {
-      battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, 4).unit : unit);
-      generatedFx.push({ kind: "hit", side: "player", position: target.position, label: "4" });
+      battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, 7).unit : unit);
+      generatedFx.push({ kind: "projectile", side: "player", position: target.position, fromPosition: 4, label: "Pipplo 7" });
       if (hasUpgrade(upgrades, "impHorns")) {
         const splash = battle.units.filter(unit => unit.side === "enemy" && unit.id !== target.id && unit.hp > 0).sort((a, b) => a.position - b.position)[0];
         if (splash) battle.units = battle.units.map(unit => unit.id === splash.id ? applyDamage(unit, 2).unit : unit);
       }
+    } else if (battle.units.some(unit => unit.side === "player" && unit.hp > 0 && unit.position >= 68)) {
+      battle.enemyCastleHp = Math.max(0, battle.enemyCastleHp - 7);
+      generatedFx.push({ kind: "projectile", side: "player", position: 98, fromPosition: 4, label: "Pipplo 7" });
     }
-    battle.playerTurretTimerMs += hasCastleSynergy(upgrades, "nurseryEngine") ? 2_600 : 3_200;
+    battle.playerTurretTimerMs += hasCastleSynergy(upgrades, "nurseryEngine") ? 2_000 : 2_400;
   }
   if (battle.enemyTurretTimerMs <= 0) {
-    const target = battle.units.filter(unit => unit.side === "player" && unit.position >= 68 && unit.hp > 0).sort((a, b) => b.position - a.position)[0];
+    const target = battle.units.filter(unit => unit.side === "player" && unit.hp > 0).sort((a, b) => b.position - a.position)[0];
     if (target) {
       const turretDamage = Math.max(1, (battle.guardian ? battle.guardianPhase >= 3 ? 5 : 4 : 3) + Math.floor(battle.enemyThreatTier / 2) + difficulty.enemyDamageBonus);
       battle.units = battle.units.map(unit => unit.id === target.id ? applyDamage(unit, turretDamage).unit : unit);
-      generatedFx.push({ kind: "hit", side: "enemy", position: target.position, label: `${turretDamage}` });
+      generatedFx.push({ kind: "projectile", side: "enemy", position: target.position, fromPosition: 96, label: `General ${turretDamage}` });
+    } else if (battle.units.some(unit => unit.side === "enemy" && unit.hp > 0 && unit.position <= 32)) {
+      const leaderDamage = Math.max(1, 1 + difficulty.enemyDamageBonus);
+      const barrierAbsorbed = Math.min(battle.playerBarrier, leaderDamage);
+      const hpDamage = leaderDamage - barrierAbsorbed;
+      battle.playerBarrier -= barrierAbsorbed;
+      battle.playerCastleHp = Math.max(0, battle.playerCastleHp - hpDamage);
+      battle.telemetry.damageTaken += hpDamage;
+      generatedFx.push({ kind: "projectile", side: "enemy", position: 2, fromPosition: 96, label: hpDamage > 0 ? `General ${hpDamage}` : "Blocked" });
     }
-    battle.enemyTurretTimerMs += battle.guardian ? 2_700 - ((battle.guardianPhase - 1) * 250) : 3_500;
+    battle.enemyTurretTimerMs += battle.guardian ? 3_500 - ((battle.guardianPhase - 1) * 150) : 4_500;
   }
 
   const burstBoomcaps = battle.units.filter(unit => unit.side === "enemy" && unit.kind === "boomcap" && unit.hp <= 0);
@@ -1580,9 +1727,9 @@ function resolveBattleStep(
         next = addUnit(next, "player", "piplet", upgrades);
       }
     } else {
-      if (hasUpgrade(upgrades, "digestor")) next.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, next.energy + 0.15));
+      if (hasUpgrade(upgrades, "digestor")) next.energy = roundEnergy(Math.min(next.maxEnergy, next.energy + 0.15));
       if (!next.firstEnemyDefeatRewarded && hasUpgrade(upgrades, "copycatJelly")) {
-        next.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, next.energy + 0.75));
+        next.energy = roundEnergy(Math.min(next.maxEnergy, next.energy + 0.75));
         next.firstEnemyDefeatRewarded = true;
       }
     }
@@ -1626,6 +1773,30 @@ function drawUpgradeChoices(run: CastleRunState): { choices: CastleUpgradeId[]; 
       pool = pool.filter(id => id !== finisher);
     }
   }
+  const family = getCastleEnemyFamily(run.region);
+  const signatureCategories: Record<Exclude<CastleEnemyFamilyId, "neutral">, CastleUpgradeCategory[]> = {
+    shell: ["castle", "minion"],
+    mire: ["study", "castle"],
+    root: ["minion", "trait"],
+  };
+  const drawFrom = (predicate: (id: CastleUpgradeId) => boolean): CastleUpgradeId | undefined => {
+    const candidates = pool.filter(predicate);
+    if (candidates.length === 0) return undefined;
+    const roll = nextRandom(rngState);
+    rngState = roll.state;
+    const picked = candidates[Math.floor(roll.value * candidates.length)];
+    pool = pool.filter(id => id !== picked);
+    return picked;
+  };
+  while (choices.filter(id => signatureCategories[family].includes(CASTLE_UPGRADE_DEFS[id].category)).length < 2 && choices.length < 3) {
+    const signature = drawFrom(id => signatureCategories[family].includes(CASTLE_UPGRADE_DEFS[id].category));
+    if (!signature) break;
+    choices.push(signature);
+  }
+  if (choices.length < 3) {
+    const crossFamily = drawFrom(id => !signatureCategories[family].includes(CASTLE_UPGRADE_DEFS[id].category));
+    if (crossFamily) choices.push(crossFamily);
+  }
   while (pool.length > 0 && choices.length < 3) {
     const roll = nextRandom(rngState);
     rngState = roll.state;
@@ -1636,10 +1807,29 @@ function drawUpgradeChoices(run: CastleRunState): { choices: CastleUpgradeId[]; 
   return { choices, rngState };
 }
 
+export function getCastleEnemyFamily(region: number): Exclude<CastleEnemyFamilyId, "neutral"> {
+  const index = (Math.max(1, Math.floor(region)) - 1) % 3;
+  return index === 0 ? "shell" : index === 1 ? "mire" : "root";
+}
+
+function drawMorselChoices(run: CastleRunState): { choices: CastleMorselId[]; rngState: number } {
+  const family = getCastleEnemyFamily(run.region);
+  const familyChoices = ALL_CASTLE_MORSEL_IDS.filter(id => CASTLE_MORSEL_DEFS[id].family === family && (run.morselStacks[id] || 0) < 5);
+  const neutralChoices = ALL_CASTLE_MORSEL_IDS.filter(id => CASTLE_MORSEL_DEFS[id].family === "neutral" && (run.morselStacks[id] || 0) < 5);
+  const roll = nextRandom(run.rngState);
+  const choices = familyChoices.slice(0, 2);
+  if (neutralChoices.length > 0) choices.push(neutralChoices[Math.floor(roll.value * neutralChoices.length)]);
+  for (const fallback of neutralChoices) {
+    if (choices.length >= 3) break;
+    if (!choices.includes(fallback)) choices.push(fallback);
+  }
+  return { choices, rngState: roll.state };
+}
+
 export function tickCastleRun(run: CastleRunState, deltaMs: number, combatSpeed = 1): CastleRunState {
   if (run.phase !== "battle" || run.battle.mode !== "study") return run;
   const safeDelta = clamp(deltaMs, 0, 250);
-  const battle = resolveBattleStep(run.battle, safeDelta, run.upgrades, run.region, run.battleInRegion, clamp(combatSpeed, 0.25, 1.5));
+  const battle = resolveBattleStep(run.battle, safeDelta, run.upgrades, run.nurseryInstinctId, run.region, run.battleInRegion, clamp(combatSpeed, 0.25, 1.5));
   if (battle.playerCastleHp <= 0) {
     return {
       ...run,
@@ -1651,19 +1841,21 @@ export function tickCastleRun(run: CastleRunState, deltaMs: number, combatSpeed 
     };
   }
   if (battle.enemyCastleHp <= 0) {
-    const choiceResult = drawUpgradeChoices({ ...run, battle });
+    const majorChoiceResult = battle.guardian ? drawUpgradeChoices({ ...run, battle }) : null;
+    const morselChoiceResult = battle.guardian ? null : drawMorselChoices({ ...run, battle });
     return {
       ...run,
       savedAt: Date.now(),
       phase: "reward",
-      battle: { ...battle, mode: "command", notice: "The enemy castle burst into edible sparkles!" },
-      rewardChoices: choiceResult.choices,
-      rngState: choiceResult.rngState,
+      battle: { ...battle, mode: "command", notice: "The rival general burst into edible sparkles!" },
+      rewardChoices: majorChoiceResult?.choices || [],
+      rewardMorselChoices: morselChoiceResult?.choices || [],
+      rngState: majorChoiceResult?.rngState ?? morselChoiceResult?.rngState ?? run.rngState,
       carriedCastleHp: battle.playerCastleHp,
       carriedEnergy: hasUpgrade(run.upgrades, "recallReservoir") ? Math.min(1.5, battle.energy) : 0,
       battlesWon: run.battlesWon + 1,
       bestRegion: Math.max(run.bestRegion, run.region),
-      notice: battle.guardian ? "Guardian defeated. Choose what Pipplo digests." : "Castle defeated. Choose one run mutation.",
+      notice: battle.guardian ? "General defeated. Choose a major Digestion." : "Outpost defeated. Choose one enemy-family Morsel.",
     };
   }
   return { ...run, savedAt: Date.now(), battle };
@@ -1700,16 +1892,17 @@ export function activateCastlePower(run: CastleRunState, powerId: CastlePowerId)
   if (!run.battle.commandWindowReady || run.battle.powerPlayedThisWindow) return run;
   if (!run.battle.commandHand.includes(powerId)) return run;
   const power = CASTLE_POWER_DEFS[powerId];
+  const powerCost = getCastlePowerCost(run, powerId);
   if (!getAvailableCastlePowers(run.upgrades).some(candidate => candidate.id === powerId)) return run;
-  if (run.battle.energy < power.cost) return run;
+  if (run.battle.energy < powerCost) return run;
   let battle: CastleBattleState = {
     ...run.battle,
     powerPlayedThisWindow: true,
-    energy: roundEnergy(run.battle.energy - power.cost),
+    energy: roundEnergy(run.battle.energy - powerCost),
     notice: `${power.name}! ${power.description}`,
     telemetry: {
       ...run.battle.telemetry,
-      energySpent: run.battle.telemetry.energySpent + power.cost,
+      energySpent: run.battle.telemetry.energySpent + powerCost,
       powersUsed: run.battle.telemetry.powersUsed + 1,
     },
   };
@@ -1742,12 +1935,12 @@ export function activateCastlePower(run: CastleRunState, powerId: CastlePowerId)
     const target = battle.units.filter(unit => unit.side === "enemy" && unit.kind !== "rootLump" && unit.hp / unit.maxHp <= threshold).sort((a, b) => a.position - b.position)[0];
     if (target) {
       battle.units = battle.units.filter(unit => unit.id !== target.id);
-      battle.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, battle.energy + (hasUpgrade(run.upgrades, "digestor") ? 0.75 : 0.35)));
+      battle.energy = roundEnergy(Math.min(battle.maxEnergy, battle.energy + (hasUpgrade(run.upgrades, "digestor") ? 0.75 : 0.35)));
       battle = addBattleFx(battle, "pop", "player", target.position, "Snatched!");
     } else {
-      battle.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, battle.energy + power.cost));
+      battle.energy = roundEnergy(Math.min(battle.maxEnergy, battle.energy + powerCost));
       battle.notice = "No weakened enemy was close enough to snatch. Energy refunded.";
-      battle.telemetry.energySpent -= power.cost;
+      battle.telemetry.energySpent -= powerCost;
       battle.telemetry.powersUsed -= 1;
     }
   } else if (powerId === "sporeMortar") {
@@ -1757,6 +1950,8 @@ export function activateCastlePower(run: CastleRunState, powerId: CastlePowerId)
     for (const target of targets) battle = addBattleFx(battle, "hit", "player", target.position, "8");
     battle = addBattleFx(battle, "power", "player", 54, "Spore burst!");
   }
+  const powerPositions: Record<CastlePowerId, number> = { slingshot: 72, bubbleGate: 8, snackCannon: 24, gooMoat: 50, timewobble: 64, tongueSnatch: 48, sporeMortar: 58 };
+  battle = addBattleFx(battle, "power", "player", powerPositions[powerId], undefined, undefined, powerId);
   battle = cycleCastleCommandCard(battle, powerId);
   return { ...run, savedAt: Date.now(), battle };
 }
@@ -1845,7 +2040,7 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
   if (outcome.isExposure) {
     notice = "New direction learned. Reference study never advances combat or grants battle Goo.";
   } else if (outcome.isCorrect) {
-    let reward = outcome.reward;
+    let reward = outcome.reward + battle.recallGooBonus;
     if (outcome.selfGraded && hasUpgrade(run.upgrades, "deepRecall")) reward *= 1.1;
     if (!outcome.wasUnseen && !battle.firstSeenCorrectAwarded && hasUpgrade(run.upgrades, "firstRecall")) {
       reward += 0.5;
@@ -1877,6 +2072,13 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
         battle.recallBoltCharge -= CASTLE_RECALL_BOLT_LIMIT;
         reward += 1;
       }
+      if (run.nurseryInstinctId === "handHatch" && battle.hatchCharges < 2) {
+        battle.hatchProgress += 1;
+        if (battle.hatchProgress >= 3) {
+          battle.hatchProgress -= 3;
+          battle.hatchCharges = Math.min(2, battle.hatchCharges + 1);
+        }
+      }
     }
     if (battle.cleanStreak % 5 === 0) {
       if (hasUpgrade(run.upgrades, "rootRepair")) battle.playerCastleHp = Math.min(battle.playerCastleMaxHp, battle.playerCastleHp + 5);
@@ -1888,7 +2090,7 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
       }
     }
     if (outcome.due && hasUpgrade(run.upgrades, "dueDew")) battle.playerBarrier += 3;
-    battle.energy = roundEnergy(Math.min(CASTLE_MAX_ENERGY, battle.energy + reward));
+    battle.energy = roundEnergy(Math.min(battle.maxEnergy, battle.energy + reward));
     battle.telemetry.energyEarned = roundEnergy(battle.telemetry.energyEarned + reward);
     notice = recovered
       ? `Recovered recall: +${roundEnergy(reward)} Goo and one Rally pip cleared.`
@@ -1917,7 +2119,7 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
       battle.telemetry.damageTaken += keepDamage;
       battle = addBattleFx(battle, "projectile", "enemy", 2, keepDamage > 0 ? `${keepDamage}` : "Blocked", 88);
       battle.telemetry.rallyTriggered += 1;
-      notice = "Enemy Rally! Mallow's Moon Volley struck and a bonus squad joined the lane.";
+      notice = "Enemy Rally! The rival's Moon Volley struck and a bonus squad joined the lane.";
     } else {
       notice = ignoresFirst
         ? "Rally Lantern softened the first miss."
@@ -1947,8 +2149,55 @@ export function applyCastleStudyOutcome(run: CastleRunState, outcome: CastleStud
 
 export function getCastleArmyPopulation(battle: CastleBattleState): number {
   return battle.units
-    .filter(unit => unit.side === "player" && unit.hp > 0)
+    .filter(unit => unit.side === "player" && unit.hp > 0 && unit.origin !== "wild")
     .reduce((total, unit) => total + CASTLE_UNIT_DEFS[unit.kind].population, 0);
+}
+
+export function getCastleWildBroodCount(battle: CastleBattleState): number {
+  return battle.units.filter(unit => unit.side === "player" && unit.hp > 0 && unit.origin === "wild").length;
+}
+
+export function getCastlePowerCost(run: Pick<CastleRunState, "nurseryInstinctId">, powerId: CastlePowerId): number {
+  const multiplier = run.nurseryInstinctId === "devourer" ? 0.9 : 1;
+  return roundEnergy(CASTLE_POWER_DEFS[powerId].cost * multiplier);
+}
+
+export function hatchCastlePiplet(run: CastleRunState): CastleRunState {
+  if (run.phase !== "battle" || run.nurseryInstinctId !== "handHatch") return run;
+  if (!run.battle.commandWindowReady || run.battle.summonPlayedThisWindow || run.battle.hatchCharges <= 0) return run;
+  if (getCastleArmyPopulation(run.battle) + CASTLE_UNIT_DEFS.piplet.population > CASTLE_ARMY_CAPACITY) return run;
+  let battle = addUnit(run.battle, "player", "piplet", run.upgrades, true, null, "manual");
+  battle = {
+    ...battle,
+    hatchCharges: battle.hatchCharges - 1,
+    summonPlayedThisWindow: true,
+    notice: "Pipplo opened a Hand Hatch charge: a full-strength Piplet joined the formation.",
+    telemetry: { ...battle.telemetry, summons: battle.telemetry.summons + 1 },
+  };
+  return { ...run, savedAt: Date.now(), battle };
+}
+
+export function overfeedCastleUnit(run: CastleRunState, unitId: string): CastleRunState {
+  if (run.phase !== "battle" || run.battle.overfeedUsed || run.battle.energy < 3) return run;
+  const target = run.battle.units.find(unit => unit.id === unitId && unit.side === "player" && unit.hp > 0 && unit.origin === "paid" && !unit.overfed);
+  if (!target) return run;
+  const bonusHp = Math.max(1, Math.round(target.maxHp * 0.2));
+  const bonusDamage = Math.max(1, Math.round(CASTLE_UNIT_DEFS[target.kind].damage * 0.2));
+  const battle: CastleBattleState = {
+    ...run.battle,
+    energy: roundEnergy(run.battle.energy - 3),
+    overfeedUsed: true,
+    units: run.battle.units.map(unit => unit.id === unitId ? {
+      ...unit,
+      hp: unit.hp + bonusHp,
+      maxHp: unit.maxHp + bonusHp,
+      damageBonus: unit.damageBonus + bonusDamage,
+      overfed: true,
+    } : unit),
+    notice: `${CASTLE_UNIT_DEFS[target.kind].name} was overfed: +20% max HP and stronger attacks for this battle.`,
+    telemetry: { ...run.battle.telemetry, energySpent: run.battle.telemetry.energySpent + 3 },
+  };
+  return { ...run, savedAt: Date.now(), battle };
 }
 
 export function resumeCastleBattle(run: CastleRunState): CastleRunState {
@@ -2032,11 +2281,33 @@ export function claimCastleUpgrade(run: CastleRunState, upgradeId: CastleUpgrade
     phase: contractComplete ? "retire" : "route",
     upgrades,
     rewardChoices: [],
+    rewardMorselChoices: [],
     routeChoices: routeDraft.choices,
     rngState: routeDraft.rngState,
     pendingEventId: null,
     carriedCastleHp,
     notice: `${CASTLE_UPGRADE_DEFS[upgradeId].name} absorbed.${evolvedSynergies.length > 0 ? ` ${evolvedSynergies.map(synergy => synergy.name).join(" and ")} evolved!` : ""} ${contractComplete ? "The study contract is complete." : "Choose the next route."}`,
+  };
+}
+
+export function claimCastleMorsel(run: CastleRunState, morselId: CastleMorselId): CastleRunState {
+  if (run.phase !== "reward" || !run.rewardMorselChoices.includes(morselId)) return run;
+  const currentStacks = run.morselStacks[morselId] || 0;
+  if (currentStacks >= 5) return run;
+  const morselStacks = { ...run.morselStacks, [morselId]: currentStacks + 1 };
+  const routeDraft = drawRouteChoices(run.rngState);
+  return {
+    ...run,
+    savedAt: Date.now(),
+    phase: "route",
+    morselStacks,
+    rewardChoices: [],
+    rewardMorselChoices: [],
+    routeChoices: routeDraft.choices,
+    rngState: routeDraft.rngState,
+    pendingEventId: null,
+    carriedCastleHp: Math.min(120, run.carriedCastleHp + 6),
+    notice: `${CASTLE_MORSEL_DEFS[morselId].name} absorbed · stack ${currentStacks + 1}/5. Choose the next route.`,
   };
 }
 
@@ -2059,7 +2330,7 @@ function startNextBattle(run: CastleRunState, carriedCastleHp: number, carriedEn
     };
   }
   const battle = applyCastleKeepsake(
-    createBattle(region, battleInRegion, carriedCastleHp, carriedEnergy, run.upgrades, run.difficultyId),
+    createBattle(region, battleInRegion, carriedCastleHp, carriedEnergy, run.upgrades, run.morselStacks, run.difficultyId, run.nurseryInstinctId),
     run.keepsakeId,
     run.upgrades,
   );
@@ -2123,14 +2394,14 @@ export function chooseCastleRoute(run: CastleRunState, choice: CastleRouteChoice
   let notice = "The next castle is ready.";
   if (choice === "rest") {
     hp = Math.min(120, hp + 28);
-    if (hasUpgrade(run.upgrades, "mossCoat")) energy = Math.min(CASTLE_MAX_ENERGY, energy + 2);
+    if (hasUpgrade(run.upgrades, "mossCoat")) energy = Math.min(run.battle.maxEnergy, energy + 2);
     notice = "Soft Nest: the keep repaired 28 HP before the next march.";
   } else if (choice === "workshop") {
-    energy = Math.min(CASTLE_MAX_ENERGY, energy + 1.5);
+    energy = Math.min(run.battle.maxEnergy, energy + 1.5);
     barrier = 8;
     notice = "Goo Workshop: +1.5 Goo and an 8-point starting barrier.";
   } else {
-    energy = Math.min(CASTLE_MAX_ENERGY, energy + 0.5);
+    energy = Math.min(run.battle.maxEnergy, energy + 0.5);
     allies = ["piplet"];
     notice = "Straight Road: a scouting Piplet and +0.5 Goo arrived early.";
   }
@@ -2169,7 +2440,7 @@ export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventCho
     hp = Math.max(1, hp - hpCost);
     const available = preparedRun.draftPoolIds.filter(id => !preparedRun.upgrades.includes(id) && canDraftCastleUpgrade(id, preparedRun.upgrades));
     if (available.length === 0) {
-      energy = Math.min(CASTLE_MAX_ENERGY, energy + 3);
+      energy = Math.min(run.battle.maxEnergy, energy + 3);
       result = `No new mutation answered, so the echo condensed into +3 Goo.`;
       return;
     }
@@ -2187,7 +2458,7 @@ export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventCho
     hp = Math.min(120, hp + 22);
     result = "Starwell water repaired 22 keep HP.";
   } else if (choiceId === "starwellBottle") {
-    energy = Math.min(CASTLE_MAX_ENERGY, energy + 3);
+    energy = Math.min(run.battle.maxEnergy, energy + 3);
     result = "The bottled star-fizz became +3 starting Goo.";
   } else if (choiceId === "starwellDive") {
     absorbMutation(14);
@@ -2199,7 +2470,7 @@ export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventCho
     result = "The hatchling wrapped the keep in 18 starting barrier.";
   } else if (choiceId === "hatchlingShare") {
     hp = Math.min(120, hp + 10);
-    energy = Math.min(CASTLE_MAX_ENERGY, energy + 1.5);
+    energy = Math.min(run.battle.maxEnergy, energy + 1.5);
     result = "The shared snack repaired 10 HP and added 1.5 Goo.";
   } else if (choiceId === "marketSnack") {
     energy -= 2;
@@ -2207,7 +2478,7 @@ export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventCho
     result = "The giant snack cost 2 Goo and repaired 32 HP.";
   } else if (choiceId === "marketTrade") {
     hp = Math.max(1, hp - 10);
-    energy = Math.min(CASTLE_MAX_ENERGY, energy + 4);
+    energy = Math.min(run.battle.maxEnergy, energy + 4);
     result = "One brick became +4 Goo; the keep lost 10 HP.";
   } else if (choiceId === "marketEgg") {
     energy -= 1;
@@ -2217,7 +2488,7 @@ export function resolveCastleEvent(run: CastleRunState, choiceId: CastleEventCho
     absorbMutation(8);
   } else if (choiceId === "oracleShelter") {
     hp = Math.min(120, hp + 18);
-    energy = Math.min(CASTLE_MAX_ENERGY, energy + 1);
+    energy = Math.min(run.battle.maxEnergy, energy + 1);
     result = "The roots repaired 18 HP and tucked away +1 Goo.";
   } else if (choiceId === "oracleChallenge") {
     hp = Math.max(1, hp - 12);

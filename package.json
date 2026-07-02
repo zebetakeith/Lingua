@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint:goo-keep": "eslint src/GooKeepRouter.tsx src/main.tsx src/experiments/CastleBattleLab.tsx src/experiments/castleBattle.ts src/experiments/castleStorage.ts src/game/study.ts src/game/studyBridge.ts scripts/castle-balance.mjs scripts/castle-mechanics.mjs scripts/study-safety.mjs scripts/goo-keep-assets.mjs",
+    "lint:goo-keep": "eslint src/GooKeepRouter.tsx src/main.tsx src/experiments/CastleBattleLab.tsx src/experiments/castleBattle.ts src/experiments/castleStorage.ts src/experiments/phaser/GooKeepBattlefield.tsx src/game/study.ts src/game/studyBridge.ts scripts/castle-balance.mjs scripts/castle-mechanics.mjs scripts/study-safety.mjs scripts/goo-keep-assets.mjs",
     "test:goo-keep": "npm run lint:goo-keep && node scripts/study-safety.mjs && node scripts/castle-mechanics.mjs && node scripts/castle-balance.mjs --quiet && node scripts/goo-keep-assets.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -47,12 +47,13 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.562.0",
     "next-themes": "^0.4.6",
+    "phaser": "^3.90.0",
     "react": "^19.2.0",
     "react-day-picker": "^9.13.0",
     "react-dom": "^19.2.0",
-    "react-router": "^7.6.1",
     "react-hook-form": "^7.70.0",
     "react-resizable-panels": "^4.2.2",
+    "react-router": "^7.6.1",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
