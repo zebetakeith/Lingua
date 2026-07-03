@@ -23,21 +23,23 @@ The production master is `public/assets/goo-keep/characters/pipplo/master/pipplo
 - Friendly units are round, buoyant, and forward-leaning. Enemy units are strange rather than gruesome: shells, caps, roots, wings, horns, and odd props provide their identity.
 - Avoid a generic oval body with interchangeable circles attached to it.
 
-## Palette and materials
+## Palette and finish
 
 Core colors: lemon yellow, moss green, lake teal, lavender, coral pink, tangerine, warm brown, mist gray, and cream.
 
-Surfaces are clean and soft with restrained tactile shading. Highlights should suggest a squeezable toy or painted clay, never chrome or hard plastic. Dark contours may be used on tiny lane units for legibility, but large characters and scenery should favor shape separation over heavy outlines.
+Characters use a deliberately small set of solid fills. Do not use gradients, baked lighting, dimensional highlights, texture, clay rendering, plastic rendering, bevels, or material simulation. Softness comes from the silhouette and motion, not from 3D-style shading. Dark contours may be used sparingly on tiny lane units for legibility, but large characters should favor shape separation over heavy outlines.
 
 ## Articulated motion
 
 Characters are flat 2D puppets with false depth. The body, arms, feet, antennae, wings, caps, roots, horns, shells, and held props are separate pieces attached at deliberate pivots.
 
-- Never animate rectangular crops cut from a complete painted character. Overlapping pixels and missing seams make the character tear apart in motion.
+- Never animate rectangular crops cut from a shaded or textured character. Overlapping lighting and missing seams make the character tear apart in motion. Tiny lane units may use the audited flat-seed crop rig only while its displacement clamps keep every seam buried and its action QA remains clean.
 - A limb may rotate and squash around its shoulder or hip, but its attachment point stays inside the body silhouette. Secondary motion is angle-limited.
 - Faces live on their own shallow plane. Eyes and pupils can slide, compress, and softly occlude toward the far edge to suggest a turn without changing to a 3D render.
-- Battlefield leaders may use polished raster cutout parts when every part is authored separately from one approved master. Preserve one shared palette, shading direction, and edge treatment; the runtime may transform the art, but it must never redraw the identity with geometric stand-ins.
+- Battlefield leaders use authored raster cutout parts. Preserve one shared finite palette and edge treatment; the runtime may transform the art, but it must never redraw the identity with geometric stand-ins.
 - Pipplo's reference implementation lives in `public/assets/goo-keep/characters/pipplo/rig-v2-flat/layers`. Every visible region uses a solid fill with no gradients, simulated lighting, material texture, or dimensional highlights. Its flat source board and parts preview live outside the shipping bundle under `art-source/goo-keep/characters/pipplo/rig-v2-flat`; the rejected shaded rig is archived under `art-source/goo-keep/characters/pipplo/rig-v1`.
+- The five enemy-general rigs live in `public/assets/goo-keep/characters/generals-flat`. Their source boards, finite palettes, crop manifests, and reproducible build inputs live under `art-source/goo-keep/characters/generals-flat`.
+- The twelve lane-unit flat seeds live beside their legacy seeds as `seed-flat-v1.png`; only those flat seeds are loaded by the battlefield. Their palette manifest and roster preview live under `art-source/goo-keep/characters/unit-rigs-flat`.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.
 - Travel: body squash follows speed; feet, fins, roots, or wings alternate rather than bobbing as one rigid card.

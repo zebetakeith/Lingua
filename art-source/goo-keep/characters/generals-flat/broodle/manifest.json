@@ -1,0 +1,228 @@
+{
+  "palette": [
+    "#5d286b",
+    "#472050",
+    "#ff5d62",
+    "#f9d993",
+    "#f4af2f",
+    "#f88850",
+    "#2d182f",
+    "#1f1424",
+    "#fff8e8",
+    "#9b4b73"
+  ],
+  "sourceSize": [
+    1254,
+    1254
+  ],
+  "parts": {
+    "ear-left": {
+      "file": "ear-left.png",
+      "size": [
+        334,
+        442
+      ],
+      "sourceCrop": [
+        10,
+        10,
+        365,
+        470
+      ]
+    },
+    "ear-right": {
+      "file": "ear-right.png",
+      "size": [
+        342,
+        448
+      ],
+      "sourceCrop": [
+        875,
+        10,
+        1235,
+        470
+      ]
+    },
+    "horn-left": {
+      "file": "horn-left.png",
+      "size": [
+        71,
+        93
+      ],
+      "sourceCrop": [
+        515,
+        75,
+        625,
+        205
+      ]
+    },
+    "horn-right": {
+      "file": "horn-right.png",
+      "size": [
+        71,
+        94
+      ],
+      "sourceCrop": [
+        640,
+        75,
+        755,
+        205
+      ]
+    },
+    "body": {
+      "file": "body.png",
+      "size": [
+        465,
+        565
+      ],
+      "sourceCrop": [
+        375,
+        220,
+        875,
+        805
+      ]
+    },
+    "arm-left": {
+      "file": "arm-left.png",
+      "size": [
+        242,
+        189
+      ],
+      "sourceCrop": [
+        95,
+        465,
+        375,
+        685
+      ]
+    },
+    "arm-right": {
+      "file": "arm-right.png",
+      "size": [
+        242,
+        189
+      ],
+      "sourceCrop": [
+        880,
+        465,
+        1160,
+        695
+      ]
+    },
+    "eye-left": {
+      "file": "eye-left.png",
+      "size": [
+        65,
+        84
+      ],
+      "sourceCrop": [
+        110,
+        675,
+        205,
+        775
+      ]
+    },
+    "eye-right": {
+      "file": "eye-right.png",
+      "size": [
+        81,
+        82
+      ],
+      "sourceCrop": [
+        250,
+        675,
+        350,
+        775
+      ]
+    },
+    "mouth": {
+      "file": "mouth.png",
+      "size": [
+        170,
+        108
+      ],
+      "sourceCrop": [
+        155,
+        725,
+        325,
+        850
+      ]
+    },
+    "tail": {
+      "file": "tail.png",
+      "size": [
+        313,
+        464
+      ],
+      "sourceCrop": [
+        865,
+        680,
+        1190,
+        1160
+      ]
+    },
+    "satchel": {
+      "file": "satchel.png",
+      "size": [
+        460,
+        390
+      ],
+      "sourceCrop": [
+        390,
+        770,
+        850,
+        1160
+      ]
+    },
+    "bell": {
+      "file": "bell.png",
+      "size": [
+        178,
+        328
+      ],
+      "sourceCrop": [
+        10,
+        875,
+        200,
+        1215
+      ]
+    },
+    "medal": {
+      "file": "medal.png",
+      "size": [
+        125,
+        175
+      ],
+      "sourceCrop": [
+        240,
+        860,
+        390,
+        1050
+      ]
+    },
+    "foot-left": {
+      "file": "foot-left.png",
+      "size": [
+        167,
+        116
+      ],
+      "sourceCrop": [
+        300,
+        1100,
+        490,
+        1225
+      ]
+    },
+    "foot-right": {
+      "file": "foot-right.png",
+      "size": [
+        210,
+        119
+      ],
+      "sourceCrop": [
+        735,
+        1100,
+        945,
+        1225
+      ]
+    }
+  }
+}

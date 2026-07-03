@@ -1,0 +1,204 @@
+{
+  "palette": [
+    "#65336f",
+    "#4d275d",
+    "#f4d79c",
+    "#ff6862",
+    "#ff9f2c",
+    "#2c9da7",
+    "#1f7585",
+    "#a9cee8",
+    "#ff845b",
+    "#3b2034",
+    "#f05c73",
+    "#fff4da"
+  ],
+  "sourceSize": [
+    1536,
+    1024
+  ],
+  "parts": {
+    "cap": {
+      "file": "cap.png",
+      "size": [
+        873,
+        548
+      ],
+      "sourceCrop": [
+        25,
+        5,
+        910,
+        560
+      ]
+    },
+    "body": {
+      "file": "body.png",
+      "size": [
+        467,
+        509
+      ],
+      "sourceCrop": [
+        875,
+        25,
+        1345,
+        560
+      ]
+    },
+    "arm-left": {
+      "file": "arm-left.png",
+      "size": [
+        312,
+        158
+      ],
+      "sourceCrop": [
+        55,
+        525,
+        415,
+        695
+      ]
+    },
+    "arm-right": {
+      "file": "arm-right.png",
+      "size": [
+        363,
+        171
+      ],
+      "sourceCrop": [
+        485,
+        525,
+        885,
+        710
+      ]
+    },
+    "foot-left": {
+      "file": "foot-left.png",
+      "size": [
+        131,
+        86
+      ],
+      "sourceCrop": [
+        900,
+        550,
+        1090,
+        685
+      ]
+    },
+    "foot-right": {
+      "file": "foot-right.png",
+      "size": [
+        131,
+        86
+      ],
+      "sourceCrop": [
+        1130,
+        550,
+        1315,
+        685
+      ]
+    },
+    "fan": {
+      "file": "fan.png",
+      "size": [
+        432,
+        322
+      ],
+      "sourceCrop": [
+        25,
+        665,
+        485,
+        1010
+      ]
+    },
+    "charm-cord": {
+      "file": "charm-cord.png",
+      "size": [
+        225,
+        200
+      ],
+      "sourceCrop": [
+        470,
+        740,
+        735,
+        995
+      ]
+    },
+    "charm-blue": {
+      "file": "charm-blue.png",
+      "size": [
+        171,
+        171
+      ],
+      "sourceCrop": [
+        735,
+        765,
+        945,
+        1010
+      ]
+    },
+    "charm-coral": {
+      "file": "charm-coral.png",
+      "size": [
+        198,
+        171
+      ],
+      "sourceCrop": [
+        915,
+        765,
+        1140,
+        1010
+      ]
+    },
+    "eye-left": {
+      "file": "eye-left.png",
+      "size": [
+        47,
+        65
+      ],
+      "sourceCrop": [
+        1155,
+        675,
+        1260,
+        795
+      ]
+    },
+    "eye-right": {
+      "file": "eye-right.png",
+      "size": [
+        47,
+        65
+      ],
+      "sourceCrop": [
+        1250,
+        675,
+        1360,
+        795
+      ]
+    },
+    "mouth": {
+      "file": "mouth.png",
+      "size": [
+        99,
+        96
+      ],
+      "sourceCrop": [
+        1160,
+        770,
+        1340,
+        895
+      ]
+    },
+    "drop": {
+      "file": "drop.png",
+      "size": [
+        87,
+        146
+      ],
+      "sourceCrop": [
+        1180,
+        845,
+        1330,
+        1015
+      ]
+    }
+  }
+}
