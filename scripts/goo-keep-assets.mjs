@@ -16,6 +16,8 @@ assert.ok(battlefieldSource.includes("maxDisplacement"), "articulated unit piece
 assert.ok(battlefieldSource.includes('get("rigAction")'), "leader action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
+assert.ok(battlefieldSource.includes("PIPPLO_RIG_TEXTURES"), "Pipplo should load the approved layered raster puppet");
+assert.ok(battlefieldSource.includes("buildRasterPipplo"), "Pipplo should assemble authored raster layers rather than runtime geometry");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {
@@ -27,6 +29,24 @@ function expectFrames(relativeRoot, animations, size) {
 
 expectFrames(path.join("characters", "pipplo"), ["idle", "cast", "hurt", "cheer"], 192);
 expected.set(path.join("characters", "pipplo", "master", "pipplo-master-v2.png"), 1254);
+for (const [part, dimensions] of Object.entries({
+  "body.png": [591, 699],
+  "arm-left.png": [159, 232],
+  "arm-right.png": [153, 223],
+  "foot-left.png": [167, 121],
+  "foot-right.png": [167, 120],
+  "antenna-stem.png": [173, 145],
+  "antenna-pom.png": [163, 151],
+  "eye-left.png": [114, 116],
+  "eye-right.png": [114, 115],
+  "pupil-left.png": [79, 78],
+  "pupil-right.png": [79, 77],
+  "mouth.png": [180, 132],
+  "cheek-small.png": [70, 71],
+  "cheek-large.png": [70, 70],
+})) {
+  expected.set(path.join("characters", "pipplo", "rig-v1", "layers", part), dimensions);
+}
 expected.set(path.join("characters", "generals", "clackback", "clackback-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "puffmaestro", "puffmaestro-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "thumblestump", "thumblestump-master-v1.png"), 1254);
@@ -67,7 +87,8 @@ for (const [relative, expectedSize] of expected) {
   assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], `${relative} must be a PNG`);
   const width = bytes.readUInt32BE(16);
   const height = bytes.readUInt32BE(20);
-  assert.deepEqual([width, height], [expectedSize, expectedSize], `${relative} must keep its normalized canvas`);
+  const expectedDimensions = Array.isArray(expectedSize) ? expectedSize : [expectedSize, expectedSize];
+  assert.deepEqual([width, height], expectedDimensions, `${relative} must keep its normalized canvas`);
 }
 for (const relative of actual) assert.ok(expected.has(relative), `${relative} is not represented in the shipping audit`);
 

@@ -32,6 +32,29 @@ const UNIT_TEXTURES: Partial<Record<CastleUnitKind, string>> = {
   rootLump: "units/enemy/rootLump/seed-v2.png",
 };
 
+const PIPPLO_RIG_TEXTURES = {
+  body: "body.png",
+  armLeft: "arm-left.png",
+  armRight: "arm-right.png",
+  footLeft: "foot-left.png",
+  footRight: "foot-right.png",
+  antennaStem: "antenna-stem.png",
+  antennaPom: "antenna-pom.png",
+  eyeLeft: "eye-left.png",
+  eyeRight: "eye-right.png",
+  pupilLeft: "pupil-left.png",
+  pupilRight: "pupil-right.png",
+  mouth: "mouth.png",
+  cheekSmall: "cheek-small.png",
+  cheekLarge: "cheek-large.png",
+} as const;
+
+type PipploRigPart = keyof typeof PIPPLO_RIG_TEXTURES;
+
+function pipploTextureKey(part: PipploRigPart): string {
+  return `pipplo-rig-${part}`;
+}
+
 const FRIENDLY_UNIT_KINDS = new Set<CastleUnitKind>(["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]);
 
 type LeaderForm = "pipplo" | "mallow" | "clackback" | "puffmaestro" | "thumblestump" | "broodle";
@@ -48,7 +71,7 @@ interface FlatLeaderStyle {
 }
 
 const FLAT_LEADER_STYLES: Record<LeaderForm, FlatLeaderStyle> = {
-  pipplo: { bodyColor: 0xf2df28, outlineColor: 0xb49f16, accentColor: 0xf0648b, bodyWidth: 104, bodyHeight: 118, bodyY: -62, faceY: -70, eyeSpacing: 35 },
+  pipplo: { bodyColor: 0xf2df28, outlineColor: 0xb49f16, accentColor: 0xf0648b, bodyWidth: 104, bodyHeight: 118, bodyY: -62, faceY: -76, eyeSpacing: 36 },
   mallow: { bodyColor: 0xb8b2e5, outlineColor: 0x6f679f, accentColor: 0xf1cf62, bodyWidth: 88, bodyHeight: 104, bodyY: -58, faceY: -65, eyeSpacing: 28 },
   clackback: { bodyColor: 0x8b78bd, outlineColor: 0x55477e, accentColor: 0xf1c65f, bodyWidth: 102, bodyHeight: 94, bodyY: -52, faceY: -59, eyeSpacing: 31 },
   puffmaestro: { bodyColor: 0xf0dfbb, outlineColor: 0x76624f, accentColor: 0xcb5f91, bodyWidth: 78, bodyHeight: 92, bodyY: -49, faceY: -54, eyeSpacing: 25 },
@@ -299,12 +322,13 @@ class PuppetLeader {
   private readonly visualScale: number;
   private readonly joints: FlatJoint[] = [];
   private readonly eyeSockets: Phaser.GameObjects.Container[] = [];
-  private readonly pupils: Phaser.GameObjects.Ellipse[] = [];
+  private readonly pupils: Array<Phaser.GameObjects.Ellipse | Phaser.GameObjects.Image> = [];
   private bodyRoot!: Phaser.GameObjects.Container;
   private faceRoot!: Phaser.GameObjects.Container;
   private mouthRoot!: Phaser.GameObjects.Container;
   private reaction = 0;
   private summonPulse = 0;
+  private eatPulse = 0;
   private phase = 0;
   private hpRatio = 1;
 
@@ -344,20 +368,62 @@ class PuppetLeader {
     return node;
   }
 
+  private buildRasterPipplo(scene: Phaser.Scene): void {
+    const rasterScale = 0.18;
+
+    const leftArm = this.addJoint(scene, "arm", -1, -45, -78, -5, 0.4);
+    leftArm.add(scene.add.image(0, 0, pipploTextureKey("armLeft")).setOrigin(0.82, 0.16).setScale(rasterScale));
+    const rightArm = this.addJoint(scene, "arm", 1, 45, -78, 5, 2.1);
+    rightArm.add(scene.add.image(0, 0, pipploTextureKey("armRight")).setOrigin(0.18, 0.16).setScale(rasterScale));
+
+    const leftFoot = this.addJoint(scene, "leg", -1, -24, -13, -2, 0.2);
+    leftFoot.add(scene.add.image(0, 0, pipploTextureKey("footLeft")).setOrigin(0.7, 0.18).setScale(rasterScale));
+    const rightFoot = this.addJoint(scene, "leg", 1, 24, -13, 2, 3.2);
+    rightFoot.add(scene.add.image(0, 0, pipploTextureKey("footRight")).setOrigin(0.3, 0.18).setScale(rasterScale));
+
+    const antenna = this.addJoint(scene, "antenna", 0, -2, -124, 0, 1.2);
+    antenna.add([
+      scene.add.image(0, 0, pipploTextureKey("antennaStem")).setOrigin(0.14, 0.88).setScale(0.21),
+      scene.add.image(31, -27, pipploTextureKey("antennaPom")).setScale(rasterScale),
+    ]);
+
+    const body = scene.add.image(0, 0, pipploTextureKey("body")).setScale(rasterScale);
+    this.bodyRoot = scene.add.container(0, -67, [body]);
+    this.root.add(this.bodyRoot);
+
+    this.faceRoot = scene.add.container(0, -76);
+    const eyeParts: Array<{ socket: PipploRigPart; pupil: PipploRigPart }> = [
+      { socket: "eyeLeft", pupil: "pupilLeft" },
+      { socket: "eyeRight", pupil: "pupilRight" },
+    ];
+    for (const [index, parts] of eyeParts.entries()) {
+      const side = index === 0 ? -1 : 1;
+      const socket = scene.add.container(side * 18, -2);
+      const white = scene.add.image(0, 0, pipploTextureKey(parts.socket)).setScale(0.145);
+      const pupil = scene.add.image(0, 1, pipploTextureKey(parts.pupil)).setScale(0.12);
+      socket.add([white, pupil]);
+      this.faceRoot.add(socket);
+      this.eyeSockets.push(socket);
+      this.pupils.push(pupil);
+    }
+    const mouth = scene.add.image(0, 0, pipploTextureKey("mouth")).setScale(0.12);
+    this.mouthRoot = scene.add.container(0, 18, [mouth]);
+    this.faceRoot.add([
+      this.mouthRoot,
+      scene.add.image(31, 8, pipploTextureKey("cheekLarge")).setScale(0.105),
+      scene.add.image(38, -3, pipploTextureKey("cheekSmall")).setScale(0.1),
+    ]);
+    this.root.add(this.faceRoot);
+  }
+
   private buildCharacter(scene: Phaser.Scene): void {
     const style = this.style;
 
     if (this.form === "pipplo") {
-      this.addOvalLimb(scene, "arm", -1, -45, -72, 31, 24, style.bodyColor, -8, 0.4);
-      this.addOvalLimb(scene, "arm", 1, 45, -72, 31, 24, style.bodyColor, 8, 2.1);
-      this.addOvalLimb(scene, "leg", -1, -27, -9, 29, 20, style.bodyColor, -2, 0.2);
-      this.addOvalLimb(scene, "leg", 1, 27, -9, 29, 20, style.bodyColor, 2, 3.2);
-      const antenna = this.addJoint(scene, "antenna", 0, 0, -119, 0, 1.2);
-      antenna.add([
-        scene.add.rectangle(3, -13, 8, 31, style.bodyColor).setStrokeStyle(3, style.outlineColor, 0.94).setAngle(12),
-        this.outlinedCircle(scene, 12, -31, 12, style.accentColor),
-      ]);
-    } else if (this.form === "clackback") {
+      this.buildRasterPipplo(scene);
+      return;
+    }
+    if (this.form === "clackback") {
       const shell = this.addJoint(scene, "crown", 1, 19, -68, 8, 0.7);
       shell.add(this.outlinedEllipse(scene, 15, -5, 72, 84, 0xe9c79d, 0x9f6d62));
       const spiral = scene.add.graphics().lineStyle(4, 0xc78875, 0.9);
@@ -520,6 +586,10 @@ class PuppetLeader {
     this.summonPulse = 1;
   }
 
+  devour(): void {
+    this.eatPulse = 1;
+  }
+
   setVisible(visible: boolean): void {
     this.root.setVisible(visible);
     this.shadow.setVisible(visible);
@@ -529,6 +599,7 @@ class PuppetLeader {
     this.phase += deltaSeconds * (live ? 2.45 : 0.82);
     this.reaction = Math.max(0, this.reaction - deltaSeconds * 3.4);
     this.summonPulse = Math.max(0, this.summonPulse - deltaSeconds * 3.2);
+    this.eatPulse = Math.max(0, this.eatPulse - deltaSeconds * 2.15);
     const motionScale = reducedMotion ? 0.24 : 1;
     const healthDroop = (1 - this.hpRatio) * 7;
     const bob = Math.sin(this.phase * 1.12) * 2.2 * motionScale;
@@ -536,10 +607,10 @@ class PuppetLeader {
     const facing = this.side === "enemy" ? -1 : 1;
     const reactionShove = this.reaction * 4 * facing;
     this.root
-      .setPosition(this.homeX + this.summonPulse * 3 * facing - reactionShove, GROUND_Y + bob + healthDroop - this.summonPulse * 3)
+      .setPosition(this.homeX + this.summonPulse * 3 * facing - reactionShove, GROUND_Y + bob + healthDroop - this.summonPulse * 3 - this.eatPulse * 4)
       .setScale(
-        facing * this.visualScale * (1 + squash + this.summonPulse * 0.025),
-        this.visualScale * (1 - squash - this.summonPulse * 0.018 + this.reaction * 0.018),
+        facing * this.visualScale * (1 + squash + this.summonPulse * 0.025 + this.eatPulse * 0.055),
+        this.visualScale * (1 - squash - this.summonPulse * 0.018 + this.reaction * 0.018 - this.eatPulse * 0.04),
       )
       .setAngle(Math.sin(this.phase * 0.5) * 0.8 * motionScale + this.reaction * 2.8 * facing);
     this.shadow.setPosition(this.homeX, GROUND_Y + 3).setScale(this.visualScale * (1 - Math.abs(bob) / 28 + this.summonPulse * 0.05), this.visualScale);
@@ -548,7 +619,7 @@ class PuppetLeader {
     const turn = Math.sin(this.phase * 0.34) * motionScale;
     const turnAmount = Math.abs(turn);
     const eyeSpread = this.style.eyeSpacing * (1 - turnAmount * 0.24);
-    this.faceRoot.setPosition(turn * this.style.bodyWidth * 0.12, this.style.faceY + Math.sin(this.phase * 0.8) * 0.45 * motionScale);
+    this.faceRoot.setPosition(turn * this.style.bodyWidth * 0.12, this.style.faceY + Math.sin(this.phase * 0.8) * 0.45 * motionScale + this.eatPulse * 2);
     this.faceRoot.setScale(1 - turnAmount * 0.08, 1);
     this.eyeSockets[0].setPosition(-eyeSpread * 0.5 + turn * 1.8, 0).setAlpha(turn > 0 ? 1 - turnAmount * 0.42 : 1);
     this.eyeSockets[1].setPosition(eyeSpread * 0.5 + turn * 1.8, 0).setAlpha(turn < 0 ? 1 - turnAmount * 0.42 : 1);
@@ -557,7 +628,9 @@ class PuppetLeader {
     const expressionScale = blink * (1 - this.reaction * 0.48);
     for (const pupil of this.pupils) pupil.setX(turn * 2.4).setY(1 + this.reaction * 1.2);
     for (const socket of this.eyeSockets) socket.setScale(1, expressionScale);
-    this.mouthRoot.setScale(1 + this.summonPulse * 0.18, 1 + this.summonPulse * 0.3 + this.reaction * 0.28).setAngle(this.reaction * 8 * facing);
+    this.mouthRoot
+      .setScale(1 + this.summonPulse * 0.18 + this.eatPulse * 0.68, 1 + this.summonPulse * 0.3 + this.reaction * 0.28 + this.eatPulse * 0.82)
+      .setAngle(this.reaction * 8 * facing);
 
     const settle = Math.min(1, deltaSeconds * (reducedMotion ? 18 : 12));
     for (const joint of this.joints) {
@@ -565,15 +638,16 @@ class PuppetLeader {
       let amplitude = joint.role === "arm" ? 5.5 : joint.role === "leg" ? 3.2 : joint.role === "ear" ? 6.5 : joint.role === "antenna" ? 5.2 : joint.role === "prop" ? 3.5 : 2.8;
       if (joint.role === "crown") amplitude = 2.2;
       let actionAngle = 0;
-      if (joint.role === "arm") actionAngle = -joint.side * this.summonPulse * 21 + joint.side * this.reaction * 9;
-      else if (joint.role === "ear" || joint.role === "antenna") actionAngle = joint.side * this.summonPulse * 8 + joint.side * this.reaction * 5;
+      if (joint.role === "arm") actionAngle = -joint.side * this.summonPulse * 36 + joint.side * this.reaction * 9 - joint.side * this.eatPulse * 26;
+      else if (joint.role === "antenna") actionAngle = this.summonPulse * 10 + this.reaction * 6 + this.eatPulse * 12;
+      else if (joint.role === "ear") actionAngle = joint.side * this.summonPulse * 8 + joint.side * this.reaction * 5 + this.eatPulse * 7;
       else if (joint.role === "prop") actionAngle = -joint.side * this.summonPulse * 11 + joint.side * this.reaction * 6;
       else if (joint.role === "leg") actionAngle = joint.side * this.reaction * 4;
       const targetAngle = joint.baseAngle + wave * amplitude * motionScale + actionAngle;
       joint.angle = Phaser.Math.Linear(joint.angle, targetAngle, settle);
       const attachWobble = joint.role === "leg" ? Math.max(0, wave) * 0.7 : Math.sin(this.phase + joint.phaseOffset) * 0.45;
       joint.node
-        .setPosition(joint.baseX, joint.baseY + attachWobble * motionScale - this.summonPulse * (joint.role === "arm" ? 1.4 : 0))
+        .setPosition(joint.baseX, joint.baseY + attachWobble * motionScale - this.summonPulse * (joint.role === "arm" ? 2.8 : 0) - this.eatPulse * (joint.role === "arm" ? 1.8 : 0))
         .setAngle(joint.angle);
     }
   }
@@ -717,6 +791,9 @@ class GooKeepScene extends Phaser.Scene {
     for (const [kind, path] of Object.entries(UNIT_TEXTURES)) {
       this.load.image(textureKey(kind as CastleUnitKind), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
     }
+    for (const [part, filename] of Object.entries(PIPPLO_RIG_TEXTURES)) {
+      this.load.image(pipploTextureKey(part as PipploRigPart), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/rig-v1/layers/${filename}`);
+    }
   }
 
   create(): void {
@@ -758,16 +835,18 @@ class GooKeepScene extends Phaser.Scene {
   private runDebugActions(time: number): void {
     if (!import.meta.env.DEV) return;
     const action = new URLSearchParams(window.location.search).get("rigAction");
-    if (action !== "hit" && action !== "summon") return;
+    if (action !== "hit" && action !== "summon" && action !== "eat") return;
     const beat = Math.floor(time / 1_100);
     if (beat === this.debugActionBeat) return;
     this.debugActionBeat = beat;
     if (action === "hit") {
       this.player?.hit();
       this.enemy?.hit();
-    } else {
+    } else if (action === "summon") {
       this.player?.summon();
       this.enemy?.summon();
+    } else {
+      this.player?.devour();
     }
   }
 
@@ -1029,6 +1108,7 @@ class GooKeepScene extends Phaser.Scene {
     const startX = this.leaderX("enemy");
     const targetX = this.leaderX("player");
     this.enemy?.hit();
+    this.player?.devour();
     for (let index = 0; index < 16; index += 1) {
       const morsel = this.add.circle(startX + Phaser.Math.Between(-30, 30), 175 + Phaser.Math.Between(-35, 35), Phaser.Math.Between(4, 9), index % 3 === 0 ? 0xffdc72 : index % 2 === 0 ? 0x80d6a1 : 0xe78abf, 0.95).setDepth(42);
       this.tweens.add({
@@ -1042,7 +1122,7 @@ class GooKeepScene extends Phaser.Scene {
         onComplete: () => {
           if (index === 15) {
             this.enemy?.setVisible(false);
-            this.player?.summon();
+            this.player?.devour();
             this.burst(targetX, 175, 0xffdc72, 14);
           }
           morsel.destroy();

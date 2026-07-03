@@ -36,7 +36,8 @@ Characters are flat 2D puppets with false depth. The body, arms, feet, antennae,
 - Never animate rectangular crops cut from a complete painted character. Overlapping pixels and missing seams make the character tear apart in motion.
 - A limb may rotate and squash around its shoulder or hip, but its attachment point stays inside the body silhouette. Secondary motion is angle-limited.
 - Faces live on their own shallow plane. Eyes and pupils can slide, compress, and softly occlude toward the far edge to suggest a turn without changing to a 3D render.
-- Battlefield leaders use flat fills, simple contours, and the same shape language as minions and scenery. Detailed raster masters remain useful for large static portraits, not moving body parts.
+- Battlefield leaders may use polished raster cutout parts when every part is authored separately from one approved master. Preserve one shared palette, shading direction, and edge treatment; the runtime may transform the art, but it must never redraw the identity with geometric stand-ins.
+- Pipplo's reference implementation lives in `public/assets/goo-keep/characters/pipplo/rig-v1/layers`. Its alpha-cleaned source board and parts preview live outside the shipping bundle under `art-source/goo-keep/characters/pipplo/rig-v1`.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.
 - Travel: body squash follows speed; feet, fins, roots, or wings alternate rather than bobbing as one rigid card.
