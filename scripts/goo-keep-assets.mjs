@@ -18,6 +18,7 @@ assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses ne
 assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes("PIPPLO_RIG_TEXTURES"), "Pipplo should load the approved layered raster puppet");
 assert.ok(battlefieldSource.includes("buildRasterPipplo"), "Pipplo should assemble authored raster layers rather than runtime geometry");
+assert.ok(battlefieldSource.includes("rig-v2-flat"), "Pipplo's shipping rig should use the zero-gradient flat art set");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {
@@ -31,21 +32,21 @@ expectFrames(path.join("characters", "pipplo"), ["idle", "cast", "hurt", "cheer"
 expected.set(path.join("characters", "pipplo", "master", "pipplo-master-v2.png"), 1254);
 for (const [part, dimensions] of Object.entries({
   "body.png": [591, 699],
-  "arm-left.png": [159, 232],
-  "arm-right.png": [153, 223],
-  "foot-left.png": [167, 121],
-  "foot-right.png": [167, 120],
-  "antenna-stem.png": [173, 145],
-  "antenna-pom.png": [163, 151],
+  "arm-left.png": [155, 231],
+  "arm-right.png": [149, 222],
+  "foot-left.png": [165, 121],
+  "foot-right.png": [165, 120],
+  "antenna-stem.png": [167, 141],
+  "antenna-pom.png": [162, 153],
   "eye-left.png": [114, 116],
-  "eye-right.png": [114, 115],
-  "pupil-left.png": [79, 78],
-  "pupil-right.png": [79, 77],
-  "mouth.png": [180, 132],
-  "cheek-small.png": [70, 71],
+  "eye-right.png": [113, 115],
+  "pupil-left.png": [78, 77],
+  "pupil-right.png": [77, 77],
+  "mouth.png": [179, 129],
+  "cheek-small.png": [70, 70],
   "cheek-large.png": [70, 70],
 })) {
-  expected.set(path.join("characters", "pipplo", "rig-v1", "layers", part), dimensions);
+  expected.set(path.join("characters", "pipplo", "rig-v2-flat", "layers", part), dimensions);
 }
 expected.set(path.join("characters", "generals", "clackback", "clackback-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "puffmaestro", "puffmaestro-master-v1.png"), 1254);
@@ -83,6 +84,9 @@ for (const [relative, expectedSize] of expected) {
   const filename = path.join(assetRoot, relative);
   const fileStat = await stat(filename);
   assert.ok(fileStat.size > 100, `${relative} must not be empty`);
+  if (relative.includes(`${path.sep}rig-v2-flat${path.sep}`)) {
+    assert.ok(fileStat.size < 20_000, `${relative} should remain flat-color art without baked texture or gradient data`);
+  }
   const bytes = await readFile(filename);
   assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], `${relative} must be a PNG`);
   const width = bytes.readUInt32BE(16);

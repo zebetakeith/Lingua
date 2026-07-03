@@ -792,7 +792,7 @@ class GooKeepScene extends Phaser.Scene {
       this.load.image(textureKey(kind as CastleUnitKind), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
     }
     for (const [part, filename] of Object.entries(PIPPLO_RIG_TEXTURES)) {
-      this.load.image(pipploTextureKey(part as PipploRigPart), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/rig-v1/layers/${filename}`);
+      this.load.image(pipploTextureKey(part as PipploRigPart), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/rig-v2-flat/layers/${filename}`);
     }
   }
 
