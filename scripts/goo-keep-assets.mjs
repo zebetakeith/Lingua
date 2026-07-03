@@ -16,9 +16,10 @@ assert.ok(battlefieldSource.includes("maxDisplacement"), "articulated unit piece
 assert.ok(battlefieldSource.includes('get("rigAction")'), "leader action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
-assert.ok(battlefieldSource.includes("PIPPLO_RIG_TEXTURES"), "Pipplo should load the approved layered raster puppet");
-assert.ok(battlefieldSource.includes("buildRasterPipplo"), "Pipplo should assemble authored raster layers rather than runtime geometry");
-assert.ok(battlefieldSource.includes("rig-v2-flat"), "Pipplo's shipping rig should use the zero-gradient flat art set");
+assert.ok(battlefieldSource.includes("PIPPLO_HYBRID_IDLE_FRAME_COUNT"), "Pipplo should load the cohesive hybrid idle strip");
+assert.ok(battlefieldSource.includes("buildHybridPipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
+assert.ok(!battlefieldSource.includes("buildRasterPipplo"), "Pipplo must not return to the independent runtime limb puppet");
+assert.ok(battlefieldSource.includes("hybrid-idle"), "Pipplo's shipping idle should use the palette-locked hybrid frame set");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {
@@ -47,6 +48,9 @@ for (const [part, dimensions] of Object.entries({
   "cheek-large.png": [70, 70],
 })) {
   expected.set(path.join("characters", "pipplo", "rig-v2-flat", "layers", part), dimensions);
+}
+for (let frame = 1; frame <= 12; frame += 1) {
+  expected.set(path.join("characters", "pipplo", "hybrid-idle", `${frame.toString().padStart(2, "0")}.png`), 192);
 }
 expected.set(path.join("characters", "generals", "clackback", "clackback-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "puffmaestro", "puffmaestro-master-v1.png"), 1254);
@@ -84,7 +88,7 @@ for (const [relative, expectedSize] of expected) {
   const filename = path.join(assetRoot, relative);
   const fileStat = await stat(filename);
   assert.ok(fileStat.size > 100, `${relative} must not be empty`);
-  if (relative.includes(`${path.sep}rig-v2-flat${path.sep}`)) {
+  if (relative.includes(`${path.sep}rig-v2-flat${path.sep}`) || relative.includes(`${path.sep}hybrid-idle${path.sep}`)) {
     assert.ok(fileStat.size < 20_000, `${relative} should remain flat-color art without baked texture or gradient data`);
   }
   const bytes = await readFile(filename);

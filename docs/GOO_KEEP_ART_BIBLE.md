@@ -27,7 +27,7 @@ The production master is `public/assets/goo-keep/characters/pipplo/master/pipplo
 
 Core colors: lemon yellow, moss green, lake teal, lavender, coral pink, tangerine, warm brown, mist gray, and cream.
 
-Surfaces are clean and soft with restrained tactile shading. Highlights should suggest a squeezable toy or painted clay, never chrome or hard plastic. Dark contours may be used on tiny lane units for legibility, but large characters and scenery should favor shape separation over heavy outlines.
+Pipplo uses solid flat fills with no simulated lighting or material texture. Dark contours may be used on tiny lane units for legibility, but large characters and scenery should favor shape separation over heavy outlines.
 
 ## Articulated motion
 
@@ -37,7 +37,7 @@ Characters are flat 2D puppets with false depth. The body, arms, feet, antennae,
 - A limb may rotate and squash around its shoulder or hip, but its attachment point stays inside the body silhouette. Secondary motion is angle-limited.
 - Faces live on their own shallow plane. Eyes and pupils can slide, compress, and softly occlude toward the far edge to suggest a turn without changing to a 3D render.
 - Battlefield leaders may use polished raster cutout parts when every part is authored separately from one approved master. Preserve one shared palette, shading direction, and edge treatment; the runtime may transform the art, but it must never redraw the identity with geometric stand-ins.
-- Pipplo's reference implementation lives in `public/assets/goo-keep/characters/pipplo/rig-v2-flat/layers`. Every visible region uses a solid fill with no gradients, simulated lighting, material texture, or dimensional highlights. Its flat source board and parts preview live outside the shipping bundle under `art-source/goo-keep/characters/pipplo/rig-v2-flat`; the rejected shaded rig is archived under `art-source/goo-keep/characters/pipplo/rig-v1`.
+- Pipplo is the hybrid-animation reference. The approved flat layers remain under `public/assets/goo-keep/characters/pipplo/rig-v2-flat/layers`, but they are composited offline into twelve cohesive bottom-anchored frames under `public/assets/goo-keep/characters/pipplo/hybrid-idle`. Phaser animates only the complete frames, so arms, feet, face, and antenna can never separate at runtime. The reproducible strip, contact sheet, and motion preview live under `art-source/goo-keep/characters/pipplo/hybrid-idle`.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.
 - Travel: body squash follows speed; feet, fins, roots, or wings alternate rather than bobbing as one rigid card.
@@ -45,7 +45,7 @@ Characters are flat 2D puppets with false depth. The body, arms, feet, antennae,
 - Hit: the body absorbs the impact first; attached parts lag by a few degrees rather than flying away.
 - Reduced motion: keep state readability but reduce displacement and overshoot.
 
-Animation should not depend on a short looping strip for its smoothness. Raster frames may provide authored poses, but continuous spring motion supplies the life between poses.
+Four- or five-frame loops are too coarse for hero characters. Use 8–16 cohesive authored frames for silhouette-changing motion, then reserve runtime transforms for whole-character recoil, squash, placement, and impact—not live limb assembly.
 
 ## Battlefield and effects
 

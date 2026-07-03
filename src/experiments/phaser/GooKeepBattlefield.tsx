@@ -32,27 +32,10 @@ const UNIT_TEXTURES: Partial<Record<CastleUnitKind, string>> = {
   rootLump: "units/enemy/rootLump/seed-v2.png",
 };
 
-const PIPPLO_RIG_TEXTURES = {
-  body: "body.png",
-  armLeft: "arm-left.png",
-  armRight: "arm-right.png",
-  footLeft: "foot-left.png",
-  footRight: "foot-right.png",
-  antennaStem: "antenna-stem.png",
-  antennaPom: "antenna-pom.png",
-  eyeLeft: "eye-left.png",
-  eyeRight: "eye-right.png",
-  pupilLeft: "pupil-left.png",
-  pupilRight: "pupil-right.png",
-  mouth: "mouth.png",
-  cheekSmall: "cheek-small.png",
-  cheekLarge: "cheek-large.png",
-} as const;
+const PIPPLO_HYBRID_IDLE_FRAME_COUNT = 12;
 
-type PipploRigPart = keyof typeof PIPPLO_RIG_TEXTURES;
-
-function pipploTextureKey(part: PipploRigPart): string {
-  return `pipplo-rig-${part}`;
+function pipploHybridTextureKey(frame: number): string {
+  return `pipplo-hybrid-idle-${frame.toString().padStart(2, "0")}`;
 }
 
 const FRIENDLY_UNIT_KINDS = new Set<CastleUnitKind>(["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]);
@@ -326,6 +309,9 @@ class PuppetLeader {
   private bodyRoot!: Phaser.GameObjects.Container;
   private faceRoot!: Phaser.GameObjects.Container;
   private mouthRoot!: Phaser.GameObjects.Container;
+  private hybridSprite?: Phaser.GameObjects.Image;
+  private hybridClock = 0;
+  private hybridFrame = -1;
   private reaction = 0;
   private summonPulse = 0;
   private eatPulse = 0;
@@ -368,59 +354,16 @@ class PuppetLeader {
     return node;
   }
 
-  private buildRasterPipplo(scene: Phaser.Scene): void {
-    const rasterScale = 0.18;
-
-    const leftArm = this.addJoint(scene, "arm", -1, -45, -78, -5, 0.4);
-    leftArm.add(scene.add.image(0, 0, pipploTextureKey("armLeft")).setOrigin(0.82, 0.16).setScale(rasterScale));
-    const rightArm = this.addJoint(scene, "arm", 1, 45, -78, 5, 2.1);
-    rightArm.add(scene.add.image(0, 0, pipploTextureKey("armRight")).setOrigin(0.18, 0.16).setScale(rasterScale));
-
-    const leftFoot = this.addJoint(scene, "leg", -1, -24, -13, -2, 0.2);
-    leftFoot.add(scene.add.image(0, 0, pipploTextureKey("footLeft")).setOrigin(0.7, 0.18).setScale(rasterScale));
-    const rightFoot = this.addJoint(scene, "leg", 1, 24, -13, 2, 3.2);
-    rightFoot.add(scene.add.image(0, 0, pipploTextureKey("footRight")).setOrigin(0.3, 0.18).setScale(rasterScale));
-
-    const antenna = this.addJoint(scene, "antenna", 0, -2, -124, 0, 1.2);
-    antenna.add([
-      scene.add.image(0, 0, pipploTextureKey("antennaStem")).setOrigin(0.14, 0.88).setScale(0.21),
-      scene.add.image(31, -27, pipploTextureKey("antennaPom")).setScale(rasterScale),
-    ]);
-
-    const body = scene.add.image(0, 0, pipploTextureKey("body")).setScale(rasterScale);
-    this.bodyRoot = scene.add.container(0, -67, [body]);
-    this.root.add(this.bodyRoot);
-
-    this.faceRoot = scene.add.container(0, -76);
-    const eyeParts: Array<{ socket: PipploRigPart; pupil: PipploRigPart }> = [
-      { socket: "eyeLeft", pupil: "pupilLeft" },
-      { socket: "eyeRight", pupil: "pupilRight" },
-    ];
-    for (const [index, parts] of eyeParts.entries()) {
-      const side = index === 0 ? -1 : 1;
-      const socket = scene.add.container(side * 18, -2);
-      const white = scene.add.image(0, 0, pipploTextureKey(parts.socket)).setScale(0.145);
-      const pupil = scene.add.image(0, 1, pipploTextureKey(parts.pupil)).setScale(0.12);
-      socket.add([white, pupil]);
-      this.faceRoot.add(socket);
-      this.eyeSockets.push(socket);
-      this.pupils.push(pupil);
-    }
-    const mouth = scene.add.image(0, 0, pipploTextureKey("mouth")).setScale(0.12);
-    this.mouthRoot = scene.add.container(0, 18, [mouth]);
-    this.faceRoot.add([
-      this.mouthRoot,
-      scene.add.image(31, 8, pipploTextureKey("cheekLarge")).setScale(0.105),
-      scene.add.image(38, -3, pipploTextureKey("cheekSmall")).setScale(0.1),
-    ]);
-    this.root.add(this.faceRoot);
+  private buildHybridPipplo(scene: Phaser.Scene): void {
+    this.hybridSprite = scene.add.image(0, 0, pipploHybridTextureKey(1)).setOrigin(0.5, 184 / 192);
+    this.root.add(this.hybridSprite);
   }
 
   private buildCharacter(scene: Phaser.Scene): void {
     const style = this.style;
 
     if (this.form === "pipplo") {
-      this.buildRasterPipplo(scene);
+      this.buildHybridPipplo(scene);
       return;
     }
     if (this.form === "clackback") {
@@ -606,6 +549,26 @@ class PuppetLeader {
     const squash = Math.sin(this.phase * 1.9) * 0.018 * motionScale;
     const facing = this.side === "enemy" ? -1 : 1;
     const reactionShove = this.reaction * 4 * facing;
+    if (this.hybridSprite) {
+      this.hybridClock += deltaSeconds * (live ? 1 : 0.46);
+      const frameRate = reducedMotion ? 3.5 : 8;
+      const nextFrame = Math.floor(this.hybridClock * frameRate) % PIPPLO_HYBRID_IDLE_FRAME_COUNT + 1;
+      if (nextFrame !== this.hybridFrame) {
+        this.hybridFrame = nextFrame;
+        this.hybridSprite.setTexture(pipploHybridTextureKey(nextFrame));
+      }
+      this.root
+        .setPosition(this.homeX + this.summonPulse * 3 * facing - reactionShove, GROUND_Y + healthDroop - this.summonPulse * 3 - this.eatPulse * 4)
+        .setScale(
+          facing * this.visualScale * (1 + this.summonPulse * 0.035 + this.eatPulse * 0.06),
+          this.visualScale * (1 - this.summonPulse * 0.025 + this.reaction * 0.02 - this.eatPulse * 0.045),
+        )
+        .setAngle(this.reaction * 2.8 * facing);
+      this.shadow
+        .setPosition(this.homeX, GROUND_Y + 3)
+        .setScale(this.visualScale * (1 + this.summonPulse * 0.05), this.visualScale);
+      return;
+    }
     this.root
       .setPosition(this.homeX + this.summonPulse * 3 * facing - reactionShove, GROUND_Y + bob + healthDroop - this.summonPulse * 3 - this.eatPulse * 4)
       .setScale(
@@ -791,8 +754,9 @@ class GooKeepScene extends Phaser.Scene {
     for (const [kind, path] of Object.entries(UNIT_TEXTURES)) {
       this.load.image(textureKey(kind as CastleUnitKind), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
     }
-    for (const [part, filename] of Object.entries(PIPPLO_RIG_TEXTURES)) {
-      this.load.image(pipploTextureKey(part as PipploRigPart), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/rig-v2-flat/layers/${filename}`);
+    for (let frame = 1; frame <= PIPPLO_HYBRID_IDLE_FRAME_COUNT; frame += 1) {
+      const filename = `${frame.toString().padStart(2, "0")}.png`;
+      this.load.image(pipploHybridTextureKey(frame), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/hybrid-idle/${filename}`);
     }
   }
 
