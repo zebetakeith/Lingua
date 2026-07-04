@@ -13,7 +13,7 @@ Pipplo must always be recognizable from the silhouette alone:
 - two coral cheek dots on Pipplo's right cheek;
 - no armor, costume, castle, or generic slime decorations on the canonical body.
 
-The production master is `public/assets/goo-keep/characters/pipplo/master/pipplo-master-v2.png`.
+The current animation master is `art-source/goo-keep/characters/pipplo/whole-sprite-v1/pipplo-base.png`. It deliberately returns to the original reference's squat, broad proportions.
 
 ## Shape language
 
@@ -27,25 +27,25 @@ The production master is `public/assets/goo-keep/characters/pipplo/master/pipplo
 
 Core colors: lemon yellow, moss green, lake teal, lavender, coral pink, tangerine, warm brown, mist gray, and cream.
 
-Pipplo uses solid flat fills with no simulated lighting or material texture. Dark contours may be used on tiny lane units for legibility, but large characters and scenery should favor shape separation over heavy outlines.
+Pipplo uses clean 2D color regions with restrained soft shading. The shading may help the round silhouette read, but must not create a glossy plastic or fully rendered 3D material. Dark contours may be used on tiny lane units for legibility, while large characters and scenery should favor shape separation over heavy outlines.
 
-## Articulated motion
+## Whole-sprite motion
 
-Characters are flat 2D puppets with false depth. The body, arms, feet, antennae, wings, caps, roots, horns, shells, and held props are separate pieces attached at deliberate pivots.
+Hero motion uses cohesive authored frames. Arms, feet, faces, antennae, and props remain inside one complete sprite, so the character can bend and squash without seams opening or pieces drifting away.
 
-- Never animate rectangular crops cut from a complete painted character. Overlapping pixels and missing seams make the character tear apart in motion.
-- A limb may rotate and squash around its shoulder or hip, but its attachment point stays inside the body silhouette. Secondary motion is angle-limited.
-- Faces live on their own shallow plane. Eyes and pupils can slide, compress, and softly occlude toward the far edge to suggest a turn without changing to a 3D render.
-- Battlefield leaders may use polished raster cutout parts when every part is authored separately from one approved master. Preserve one shared palette, shading direction, and edge treatment; the runtime may transform the art, but it must never redraw the identity with geometric stand-ins.
-- Pipplo is the hybrid-animation reference. The approved flat layers remain under `public/assets/goo-keep/characters/pipplo/rig-v2-flat/layers`, but they are composited offline into twelve cohesive bottom-anchored frames under `public/assets/goo-keep/characters/pipplo/hybrid-idle`. Phaser animates only the complete frames, so arms, feet, face, and antenna can never separate at runtime. The reproducible strip, contact sheet, and motion preview live under `art-source/goo-keep/characters/pipplo/hybrid-idle`.
+- Never animate rectangular crops or separately transform parts cut from a complete painted character. Overlapping pixels and missing seams make the character tear apart in motion.
+- Pipplo is the whole-sprite reference. His idle, summon, hit, and devour actions use 12–16 complete bottom-anchored frames under `public/assets/goo-keep/characters/pipplo/whole-sprite-v1`.
+- The reproducible builder and motion previews live in `scripts/build-pipplo-whole-sprite-animations.py` and `art-source/goo-keep/characters/pipplo/whole-sprite-v1`.
+- Phaser may add tiny 60fps whole-character scale, rotation, lift, and wobble between frames. It must not move a limb or facial feature independently.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.
-- Travel: body squash follows speed; feet, fins, roots, or wings alternate rather than bobbing as one rigid card.
-- Summon: body compresses while arms or props open, then attached parts settle without separating.
-- Hit: the body absorbs the impact first; attached parts lag by a few degrees rather than flying away.
+- Travel: the complete silhouette stretches into motion, compresses on contact, and settles back into its anchor.
+- Summon: anticipation squash, upward stretch, soft landing, and a short wobbling settle.
+- Hit: impact compression, directional recoil, and a quickly decaying whole-body wobble.
+- Devour: anticipation, forward gulp, satisfied squash, and buoyant recovery.
 - Reduced motion: keep state readability but reduce displacement and overshoot.
 
-Four- or five-frame loops are too coarse for hero characters. Use 8–16 cohesive authored frames for silhouette-changing motion, then reserve runtime transforms for whole-character recoil, squash, placement, and impact—not live limb assembly.
+Four- or five-frame loops are too coarse for hero characters. Use 12–16 cohesive frames for silhouette-changing hero motion, then reserve runtime transforms for subtle whole-character interpolation—not live limb assembly.
 
 ## Battlefield and effects
 

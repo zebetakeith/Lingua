@@ -32,10 +32,17 @@ const UNIT_TEXTURES: Partial<Record<CastleUnitKind, string>> = {
   rootLump: "units/enemy/rootLump/seed-v2.png",
 };
 
-const PIPPLO_HYBRID_IDLE_FRAME_COUNT = 12;
+type PipploAnimation = "idle" | "summon" | "hit" | "devour";
 
-function pipploHybridTextureKey(frame: number): string {
-  return `pipplo-hybrid-idle-${frame.toString().padStart(2, "0")}`;
+const PIPPLO_ANIMATIONS: Record<PipploAnimation, { frames: number; fps: number; loop: boolean }> = {
+  idle: { frames: 16, fps: 8, loop: true },
+  summon: { frames: 16, fps: 12, loop: false },
+  hit: { frames: 12, fps: 14, loop: false },
+  devour: { frames: 16, fps: 11, loop: false },
+};
+
+function pipploTextureKey(animation: PipploAnimation, frame: number): string {
+  return `pipplo-whole-sprite-${animation}-${frame.toString().padStart(2, "0")}`;
 }
 
 const FRIENDLY_UNIT_KINDS = new Set<CastleUnitKind>(["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]);
@@ -309,9 +316,10 @@ class PuppetLeader {
   private bodyRoot!: Phaser.GameObjects.Container;
   private faceRoot!: Phaser.GameObjects.Container;
   private mouthRoot!: Phaser.GameObjects.Container;
-  private hybridSprite?: Phaser.GameObjects.Image;
-  private hybridClock = 0;
-  private hybridFrame = -1;
+  private pipploSprite?: Phaser.GameObjects.Image;
+  private pipploAnimation: PipploAnimation = "idle";
+  private pipploClock = 0;
+  private pipploFrame = -1;
   private reaction = 0;
   private summonPulse = 0;
   private eatPulse = 0;
@@ -354,16 +362,16 @@ class PuppetLeader {
     return node;
   }
 
-  private buildHybridPipplo(scene: Phaser.Scene): void {
-    this.hybridSprite = scene.add.image(0, 0, pipploHybridTextureKey(1)).setOrigin(0.5, 184 / 192);
-    this.root.add(this.hybridSprite);
+  private buildWholeSpritePipplo(scene: Phaser.Scene): void {
+    this.pipploSprite = scene.add.image(0, 0, pipploTextureKey("idle", 1)).setOrigin(0.5, 246 / 256).setScale(0.75);
+    this.root.add(this.pipploSprite);
   }
 
   private buildCharacter(scene: Phaser.Scene): void {
     const style = this.style;
 
     if (this.form === "pipplo") {
-      this.buildHybridPipplo(scene);
+      this.buildWholeSpritePipplo(scene);
       return;
     }
     if (this.form === "clackback") {
@@ -523,14 +531,24 @@ class PuppetLeader {
 
   hit(): void {
     this.reaction = 1;
+    this.playPipploAction("hit");
   }
 
   summon(): void {
     this.summonPulse = 1;
+    this.playPipploAction("summon");
   }
 
   devour(): void {
     this.eatPulse = 1;
+    this.playPipploAction("devour");
+  }
+
+  private playPipploAction(animation: Exclude<PipploAnimation, "idle">): void {
+    if (!this.pipploSprite) return;
+    this.pipploAnimation = animation;
+    this.pipploClock = 0;
+    this.pipploFrame = -1;
   }
 
   setVisible(visible: boolean): void {
@@ -549,24 +567,47 @@ class PuppetLeader {
     const squash = Math.sin(this.phase * 1.9) * 0.018 * motionScale;
     const facing = this.side === "enemy" ? -1 : 1;
     const reactionShove = this.reaction * 4 * facing;
-    if (this.hybridSprite) {
-      this.hybridClock += deltaSeconds * (live ? 1 : 0.46);
-      const frameRate = reducedMotion ? 3.5 : 8;
-      const nextFrame = Math.floor(this.hybridClock * frameRate) % PIPPLO_HYBRID_IDLE_FRAME_COUNT + 1;
-      if (nextFrame !== this.hybridFrame) {
-        this.hybridFrame = nextFrame;
-        this.hybridSprite.setTexture(pipploHybridTextureKey(nextFrame));
+    if (this.pipploSprite) {
+      const config = PIPPLO_ANIMATIONS[this.pipploAnimation];
+      const clockRate = this.pipploAnimation === "idle" ? (live ? 1 : 0.5) : 1;
+      this.pipploClock += deltaSeconds * clockRate;
+      const duration = config.frames / config.fps;
+      if (!config.loop && this.pipploClock >= duration) {
+        this.pipploAnimation = "idle";
+        this.pipploClock = 0;
+        this.pipploFrame = -1;
       }
+      const activeConfig = PIPPLO_ANIMATIONS[this.pipploAnimation];
+      const playbackFps = this.pipploAnimation === "idle" && reducedMotion ? 3.5 : activeConfig.fps;
+      const nextFrame = activeConfig.loop
+        ? Math.floor(this.pipploClock * playbackFps) % activeConfig.frames + 1
+        : Math.min(activeConfig.frames, Math.floor(this.pipploClock * playbackFps) + 1);
+      if (nextFrame !== this.pipploFrame) {
+        this.pipploFrame = nextFrame;
+        this.pipploSprite.setTexture(pipploTextureKey(this.pipploAnimation, nextFrame));
+      }
+
+      // High-frame authored poses do the acting; these tiny 60fps transforms
+      // bridge the poses so the complete sprite still feels soft and elastic.
+      const actionProgress = activeConfig.loop ? 0 : Phaser.Math.Clamp(this.pipploClock / (activeConfig.frames / activeConfig.fps), 0, 1);
+      const idleWave = Math.sin(this.pipploClock * Math.PI * 2) * motionScale;
+      const actionEnvelope = activeConfig.loop ? 0 : Math.sin(actionProgress * Math.PI) * motionScale;
+      const bridgeWobble = activeConfig.loop
+        ? idleWave
+        : Math.sin(actionProgress * Math.PI * 5) * actionEnvelope;
+      const bridgeScaleX = 1 + (activeConfig.loop ? idleWave * 0.006 : bridgeWobble * 0.012);
+      const bridgeScaleY = 1 - (activeConfig.loop ? idleWave * 0.005 : bridgeWobble * 0.009);
+      const bridgeLift = activeConfig.loop ? Math.max(0, idleWave) * 0.8 : actionEnvelope * 1.8;
       this.root
-        .setPosition(this.homeX + this.summonPulse * 3 * facing - reactionShove, GROUND_Y + healthDroop - this.summonPulse * 3 - this.eatPulse * 4)
+        .setPosition(this.homeX, GROUND_Y + healthDroop - bridgeLift)
         .setScale(
-          facing * this.visualScale * (1 + this.summonPulse * 0.035 + this.eatPulse * 0.06),
-          this.visualScale * (1 - this.summonPulse * 0.025 + this.reaction * 0.02 - this.eatPulse * 0.045),
+          facing * this.visualScale * bridgeScaleX,
+          this.visualScale * bridgeScaleY,
         )
-        .setAngle(this.reaction * 2.8 * facing);
+        .setAngle(bridgeWobble * 0.55 * facing);
       this.shadow
         .setPosition(this.homeX, GROUND_Y + 3)
-        .setScale(this.visualScale * (1 + this.summonPulse * 0.05), this.visualScale);
+        .setScale(this.visualScale * (1 - bridgeLift * 0.015), this.visualScale * (1 - bridgeLift * 0.008));
       return;
     }
     this.root
@@ -754,9 +795,11 @@ class GooKeepScene extends Phaser.Scene {
     for (const [kind, path] of Object.entries(UNIT_TEXTURES)) {
       this.load.image(textureKey(kind as CastleUnitKind), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
     }
-    for (let frame = 1; frame <= PIPPLO_HYBRID_IDLE_FRAME_COUNT; frame += 1) {
-      const filename = `${frame.toString().padStart(2, "0")}.png`;
-      this.load.image(pipploHybridTextureKey(frame), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/hybrid-idle/${filename}`);
+    for (const [animation, config] of Object.entries(PIPPLO_ANIMATIONS) as Array<[PipploAnimation, typeof PIPPLO_ANIMATIONS[PipploAnimation]]>) {
+      for (let frame = 1; frame <= config.frames; frame += 1) {
+        const filename = `${frame.toString().padStart(2, "0")}.png`;
+        this.load.image(pipploTextureKey(animation, frame), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/whole-sprite-v1/${animation}/${filename}`);
+      }
     }
   }
 

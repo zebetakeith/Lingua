@@ -16,10 +16,10 @@ assert.ok(battlefieldSource.includes("maxDisplacement"), "articulated unit piece
 assert.ok(battlefieldSource.includes('get("rigAction")'), "leader action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
-assert.ok(battlefieldSource.includes("PIPPLO_HYBRID_IDLE_FRAME_COUNT"), "Pipplo should load the cohesive hybrid idle strip");
-assert.ok(battlefieldSource.includes("buildHybridPipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
+assert.ok(battlefieldSource.includes("PIPPLO_ANIMATIONS"), "Pipplo should load the complete whole-sprite animation library");
+assert.ok(battlefieldSource.includes("buildWholeSpritePipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
 assert.ok(!battlefieldSource.includes("buildRasterPipplo"), "Pipplo must not return to the independent runtime limb puppet");
-assert.ok(battlefieldSource.includes("hybrid-idle"), "Pipplo's shipping idle should use the palette-locked hybrid frame set");
+assert.ok(battlefieldSource.includes("whole-sprite-v1"), "Pipplo's shipping actions should use the cohesive whole-sprite frame set");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {
@@ -49,8 +49,10 @@ for (const [part, dimensions] of Object.entries({
 })) {
   expected.set(path.join("characters", "pipplo", "rig-v2-flat", "layers", part), dimensions);
 }
-for (let frame = 1; frame <= 12; frame += 1) {
-  expected.set(path.join("characters", "pipplo", "hybrid-idle", `${frame.toString().padStart(2, "0")}.png`), 192);
+for (const [animation, frameCount] of Object.entries({ idle: 16, summon: 16, hit: 12, devour: 16 })) {
+  for (let frame = 1; frame <= frameCount; frame += 1) {
+    expected.set(path.join("characters", "pipplo", "whole-sprite-v1", animation, `${frame.toString().padStart(2, "0")}.png`), 256);
+  }
 }
 expected.set(path.join("characters", "generals", "clackback", "clackback-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "puffmaestro", "puffmaestro-master-v1.png"), 1254);
@@ -88,8 +90,11 @@ for (const [relative, expectedSize] of expected) {
   const filename = path.join(assetRoot, relative);
   const fileStat = await stat(filename);
   assert.ok(fileStat.size > 100, `${relative} must not be empty`);
-  if (relative.includes(`${path.sep}rig-v2-flat${path.sep}`) || relative.includes(`${path.sep}hybrid-idle${path.sep}`)) {
+  if (relative.includes(`${path.sep}rig-v2-flat${path.sep}`)) {
     assert.ok(fileStat.size < 20_000, `${relative} should remain flat-color art without baked texture or gradient data`);
+  }
+  if (relative.includes(`${path.sep}whole-sprite-v1${path.sep}`)) {
+    assert.ok(fileStat.size < 180_000, `${relative} should remain a mobile-sized whole-sprite frame`);
   }
   const bytes = await readFile(filename);
   assert.deepEqual([...bytes.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], `${relative} must be a PNG`);
