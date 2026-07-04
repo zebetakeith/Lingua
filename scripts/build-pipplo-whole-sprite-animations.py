@@ -15,9 +15,9 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v1" / "pipplo-base.png"
-PUBLIC_OUT = ROOT / "public" / "assets" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v1"
-ART_OUT = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v1"
+SOURCE = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2" / "pipplo-base.png"
+PUBLIC_OUT = ROOT / "public" / "assets" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2"
+ART_OUT = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2"
 
 FRAME_SIZE = 256
 GROUND_Y = 246

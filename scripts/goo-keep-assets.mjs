@@ -19,7 +19,8 @@ assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sp
 assert.ok(battlefieldSource.includes("PIPPLO_ANIMATIONS"), "Pipplo should load the complete whole-sprite animation library");
 assert.ok(battlefieldSource.includes("buildWholeSpritePipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
 assert.ok(!battlefieldSource.includes("buildRasterPipplo"), "Pipplo must not return to the independent runtime limb puppet");
-assert.ok(battlefieldSource.includes("whole-sprite-v1"), "Pipplo's shipping actions should use the cohesive whole-sprite frame set");
+assert.ok(battlefieldSource.includes("whole-sprite-v2"), "Pipplo's shipping actions should use the selected leaf-collar whole-sprite frame set");
+assert.ok(battlefieldSource.includes("reducedMotion && !activeConfig.loop"), "Pipplo actions should avoid large baked displacement in reduced-motion mode");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {
@@ -51,7 +52,7 @@ for (const [part, dimensions] of Object.entries({
 }
 for (const [animation, frameCount] of Object.entries({ idle: 16, summon: 16, hit: 12, devour: 16 })) {
   for (let frame = 1; frame <= frameCount; frame += 1) {
-    expected.set(path.join("characters", "pipplo", "whole-sprite-v1", animation, `${frame.toString().padStart(2, "0")}.png`), 256);
+    expected.set(path.join("characters", "pipplo", "whole-sprite-v2", animation, `${frame.toString().padStart(2, "0")}.png`), 256);
   }
 }
 expected.set(path.join("characters", "generals", "clackback", "clackback-master-v1.png"), 1254);
@@ -93,7 +94,7 @@ for (const [relative, expectedSize] of expected) {
   if (relative.includes(`${path.sep}rig-v2-flat${path.sep}`)) {
     assert.ok(fileStat.size < 20_000, `${relative} should remain flat-color art without baked texture or gradient data`);
   }
-  if (relative.includes(`${path.sep}whole-sprite-v1${path.sep}`)) {
+  if (relative.includes(`${path.sep}whole-sprite-v2${path.sep}`)) {
     assert.ok(fileStat.size < 180_000, `${relative} should remain a mobile-sized whole-sprite frame`);
   }
   const bytes = await readFile(filename);

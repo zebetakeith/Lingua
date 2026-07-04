@@ -579,9 +579,13 @@ class PuppetLeader {
       }
       const activeConfig = PIPPLO_ANIMATIONS[this.pipploAnimation];
       const playbackFps = this.pipploAnimation === "idle" && reducedMotion ? 3.5 : activeConfig.fps;
-      const nextFrame = activeConfig.loop
-        ? Math.floor(this.pipploClock * playbackFps) % activeConfig.frames + 1
-        : Math.min(activeConfig.frames, Math.floor(this.pipploClock * playbackFps) + 1);
+      const activeDuration = activeConfig.frames / activeConfig.fps;
+      const actionProgress = activeConfig.loop ? 0 : Phaser.Math.Clamp(this.pipploClock / activeDuration, 0, 1);
+      const nextFrame = reducedMotion && !activeConfig.loop
+        ? (actionProgress < 0.55 ? 2 : activeConfig.frames)
+        : activeConfig.loop
+          ? Math.floor(this.pipploClock * playbackFps) % activeConfig.frames + 1
+          : Math.min(activeConfig.frames, Math.floor(this.pipploClock * playbackFps) + 1);
       if (nextFrame !== this.pipploFrame) {
         this.pipploFrame = nextFrame;
         this.pipploSprite.setTexture(pipploTextureKey(this.pipploAnimation, nextFrame));
@@ -589,7 +593,6 @@ class PuppetLeader {
 
       // High-frame authored poses do the acting; these tiny 60fps transforms
       // bridge the poses so the complete sprite still feels soft and elastic.
-      const actionProgress = activeConfig.loop ? 0 : Phaser.Math.Clamp(this.pipploClock / (activeConfig.frames / activeConfig.fps), 0, 1);
       const idleWave = Math.sin(this.pipploClock * Math.PI * 2) * motionScale;
       const actionEnvelope = activeConfig.loop ? 0 : Math.sin(actionProgress * Math.PI) * motionScale;
       const bridgeWobble = activeConfig.loop
@@ -798,7 +801,7 @@ class GooKeepScene extends Phaser.Scene {
     for (const [animation, config] of Object.entries(PIPPLO_ANIMATIONS) as Array<[PipploAnimation, typeof PIPPLO_ANIMATIONS[PipploAnimation]]>) {
       for (let frame = 1; frame <= config.frames; frame += 1) {
         const filename = `${frame.toString().padStart(2, "0")}.png`;
-        this.load.image(pipploTextureKey(animation, frame), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/whole-sprite-v1/${animation}/${filename}`);
+        this.load.image(pipploTextureKey(animation, frame), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/whole-sprite-v2/${animation}/${filename}`);
       }
     }
   }

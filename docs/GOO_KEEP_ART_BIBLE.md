@@ -13,7 +13,7 @@ Pipplo must always be recognizable from the silhouette alone:
 - two coral cheek dots on Pipplo's right cheek;
 - no armor, costume, castle, or generic slime decorations on the canonical body.
 
-The current animation master is `art-source/goo-keep/characters/pipplo/whole-sprite-v1/pipplo-base.png`. It deliberately returns to the original reference's squat, broad proportions.
+The current animation master is `art-source/goo-keep/characters/pipplo/whole-sprite-v2/pipplo-base.png`. Its asymmetrical goo skirt, body hollows, soft crown fold, leaf collar, and coral clasp give the protagonist a silhouette and role-specific identity equal to the enemy generals.
 
 ## Shape language
 
@@ -34,8 +34,8 @@ Pipplo uses clean 2D color regions with restrained soft shading. The shading may
 Hero motion uses cohesive authored frames. Arms, feet, faces, antennae, and props remain inside one complete sprite, so the character can bend and squash without seams opening or pieces drifting away.
 
 - Never animate rectangular crops or separately transform parts cut from a complete painted character. Overlapping pixels and missing seams make the character tear apart in motion.
-- Pipplo is the whole-sprite reference. His idle, summon, hit, and devour actions use 12–16 complete bottom-anchored frames under `public/assets/goo-keep/characters/pipplo/whole-sprite-v1`.
-- The reproducible builder and motion previews live in `scripts/build-pipplo-whole-sprite-animations.py` and `art-source/goo-keep/characters/pipplo/whole-sprite-v1`.
+- Pipplo is the whole-sprite reference. His idle, summon, hit, and devour actions use 12–16 complete bottom-anchored frames under `public/assets/goo-keep/characters/pipplo/whole-sprite-v2`.
+- The reproducible builder and motion previews live in `scripts/build-pipplo-whole-sprite-animations.py` and `art-source/goo-keep/characters/pipplo/whole-sprite-v2`.
 - Phaser may add tiny 60fps whole-character scale, rotation, lift, and wobble between frames. It must not move a limb or facial feature independently.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.
