@@ -36,7 +36,7 @@ type PipploAnimation = "idle" | "summon" | "hit" | "devour";
 
 const PIPPLO_ANIMATIONS: Record<PipploAnimation, { frames: number; fps: number; loop: boolean }> = {
   idle: { frames: 16, fps: 8, loop: true },
-  summon: { frames: 16, fps: 12, loop: false },
+  summon: { frames: 8, fps: 8.5, loop: false },
   hit: { frames: 12, fps: 14, loop: false },
   devour: { frames: 16, fps: 11, loop: false },
 };
@@ -363,7 +363,7 @@ class PuppetLeader {
   }
 
   private buildWholeSpritePipplo(scene: Phaser.Scene): void {
-    this.pipploSprite = scene.add.image(0, 0, pipploTextureKey("idle", 1)).setOrigin(0.5, 246 / 256).setScale(0.75);
+    this.pipploSprite = scene.add.image(0, 0, pipploTextureKey("idle", 1)).setOrigin(0.5, 246 / 256).setScale(0.75).setFlipX(true);
     this.root.add(this.pipploSprite);
   }
 

@@ -34,7 +34,7 @@ Pipplo uses clean 2D color regions with restrained soft shading. The shading may
 Hero motion uses cohesive authored frames. Arms, feet, faces, antennae, and props remain inside one complete sprite, so the character can bend and squash without seams opening or pieces drifting away.
 
 - Never animate rectangular crops or separately transform parts cut from a complete painted character. Overlapping pixels and missing seams make the character tear apart in motion.
-- Pipplo is the whole-sprite reference. His idle, summon, hit, and devour actions use 12–16 complete bottom-anchored frames under `public/assets/goo-keep/characters/pipplo/whole-sprite-v2`.
+- Pipplo is the whole-sprite reference. Idle, hit, and devour use 12–16 complete bottom-anchored deformation frames. Summon is the authored-pose pilot: eight identity-locked key poses created together on one shared sheet, normalized to the same scale and anchor, then bridged with restrained whole-sprite motion at runtime.
 - The reproducible builder and motion previews live in `scripts/build-pipplo-whole-sprite-animations.py` and `art-source/goo-keep/characters/pipplo/whole-sprite-v2`.
 - Phaser may add tiny 60fps whole-character scale, rotation, lift, and wobble between frames. It must not move a limb or facial feature independently.
 

@@ -20,6 +20,7 @@ assert.ok(battlefieldSource.includes("PIPPLO_ANIMATIONS"), "Pipplo should load t
 assert.ok(battlefieldSource.includes("buildWholeSpritePipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
 assert.ok(!battlefieldSource.includes("buildRasterPipplo"), "Pipplo must not return to the independent runtime limb puppet");
 assert.ok(battlefieldSource.includes("whole-sprite-v2"), "Pipplo's shipping actions should use the selected leaf-collar whole-sprite frame set");
+assert.ok(battlefieldSource.includes("setFlipX(true)"), "Pipplo should face inward toward the enemy lane");
 assert.ok(battlefieldSource.includes("reducedMotion && !activeConfig.loop"), "Pipplo actions should avoid large baked displacement in reduced-motion mode");
 
 function expectFrames(relativeRoot, animations, size) {
@@ -50,7 +51,7 @@ for (const [part, dimensions] of Object.entries({
 })) {
   expected.set(path.join("characters", "pipplo", "rig-v2-flat", "layers", part), dimensions);
 }
-for (const [animation, frameCount] of Object.entries({ idle: 16, summon: 16, hit: 12, devour: 16 })) {
+for (const [animation, frameCount] of Object.entries({ idle: 16, summon: 8, hit: 12, devour: 16 })) {
   for (let frame = 1; frame <= frameCount; frame += 1) {
     expected.set(path.join("characters", "pipplo", "whole-sprite-v2", animation, `${frame.toString().padStart(2, "0")}.png`), 256);
   }

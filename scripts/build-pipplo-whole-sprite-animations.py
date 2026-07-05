@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2" / "pipplo-base.png"
 PUBLIC_OUT = ROOT / "public" / "assets" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2"
 ART_OUT = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2"
+POSED_SUMMON_GRID = ART_OUT / "posed-summon" / "pipplo-summon-grid.png"
 
 FRAME_SIZE = 256
 GROUND_Y = 246
@@ -76,18 +77,6 @@ def idle_pose(value: float) -> Pose:
     )
 
 
-def summon_pose(value: float) -> Pose:
-    return keyframed(value, [
-        (0.00, Pose()),
-        (0.16, Pose(scale_x=1.09, scale_y=0.91, lift=-1, angle=-1.5, shear=-0.018)),
-        (0.38, Pose(scale_x=0.91, scale_y=1.11, x=2, lift=20, angle=2.5, shear=0.025)),
-        (0.56, Pose(scale_x=0.96, scale_y=1.07, x=3, lift=26, angle=-2, shear=-0.018)),
-        (0.72, Pose(scale_x=1.13, scale_y=0.87, lift=-2, angle=1.2, shear=0.014)),
-        (0.86, Pose(scale_x=0.98, scale_y=1.025, lift=2, angle=-0.8)),
-        (1.00, Pose()),
-    ])
-
-
 def hit_pose(value: float) -> Pose:
     return keyframed(value, [
         (0.00, Pose()),
@@ -113,7 +102,6 @@ def devour_pose(value: float) -> Pose:
 
 ANIMATIONS = {
     "idle": (16, idle_pose, 125),
-    "summon": (16, summon_pose, 82),
     "hit": (12, hit_pose, 70),
     "devour": (16, devour_pose, 92),
 }
@@ -155,6 +143,46 @@ def render_pose(source: Image.Image, pose: Pose) -> Image.Image:
     return frame
 
 
+def build_posed_summon(source: Image.Image) -> list[Image.Image]:
+    """Normalize one shared 4x2 authored sheet into eight locked frames."""
+    grid = Image.open(POSED_SUMMON_GRID).convert("RGBA")
+    keyframes: list[Image.Image] = []
+    bounds: list[tuple[int, int, int, int]] = []
+    for index in range(8):
+        column = index % 4
+        row = index // 4
+        left = round(grid.width * column / 4)
+        right = round(grid.width * (column + 1) / 4)
+        top = round(grid.height * row / 2)
+        bottom = round(grid.height * (row + 1) / 2)
+        cell = grid.crop((left, top, right, bottom))
+        alpha_bounds = cell.getchannel("A").getbbox()
+        if not alpha_bounds:
+            raise RuntimeError(f"Pipplo posed summon cell {index + 1} has no visible pixels")
+        keyframes.append(cell)
+        bounds.append(alpha_bounds)
+
+    anchor_width = bounds[0][2] - bounds[0][0]
+    anchor_height = bounds[0][3] - bounds[0][1]
+    shared_scale = min(NEUTRAL_HEIGHT / anchor_height, (FRAME_SIZE - 28) / anchor_width)
+    frames: list[Image.Image] = []
+    exact_neutral = render_pose(source, Pose())
+    for index, (cell, alpha_bounds) in enumerate(zip(keyframes, bounds)):
+        if index in (0, 7):
+            frames.append(exact_neutral.copy())
+            continue
+        sprite = cell.crop(alpha_bounds)
+        width = max(1, round(sprite.width * shared_scale))
+        height = max(1, round(sprite.height * shared_scale))
+        sprite = sprite.resize((width, height), Image.Resampling.LANCZOS)
+        frame = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE), (0, 0, 0, 0))
+        x = round(FRAME_SIZE / 2 - sprite.width / 2)
+        y = round(GROUND_Y - sprite.height)
+        frame.alpha_composite(sprite, (x, y))
+        frames.append(frame)
+    return frames
+
+
 def save_preview(name: str, frames: list[Image.Image], frame_duration: int) -> None:
     columns = 4
     rows = math.ceil(len(frames) / columns)
@@ -185,6 +213,8 @@ def main() -> None:
     for name, (count, pose_factory, frame_duration) in ANIMATIONS.items():
         animation_out = PUBLIC_OUT / name
         animation_out.mkdir(parents=True, exist_ok=True)
+        for stale_frame in animation_out.glob("*.png"):
+            stale_frame.unlink()
         frames = [
             render_pose(source, pose_factory(index / (count - 1)))
             for index in range(count)
@@ -193,6 +223,16 @@ def main() -> None:
             frame.save(animation_out / f"{index:02d}.png", optimize=True)
         save_preview(name, frames, frame_duration)
         print(f"Built Pipplo {name}: {count} cohesive frames")
+
+    summon_out = PUBLIC_OUT / "summon"
+    summon_out.mkdir(parents=True, exist_ok=True)
+    for stale_frame in summon_out.glob("*.png"):
+        stale_frame.unlink()
+    summon_frames = build_posed_summon(source)
+    for index, frame in enumerate(summon_frames, start=1):
+        frame.save(summon_out / f"{index:02d}.png", optimize=True)
+    save_preview("summon", summon_frames, 110)
+    print(f"Built Pipplo summon: {len(summon_frames)} authored poses")
 
 
 if __name__ == "__main__":
