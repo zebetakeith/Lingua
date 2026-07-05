@@ -51,6 +51,8 @@ Motion must explain what a creature is about to do, when the action lands, and h
 - Shadows stay planted on the ground while a creature jumps. Their scale and opacity may change to sell height, but they never ride upward with the sprite.
 - Idle animation yields to action animation. It must never blur a telegraph, change the contact point, or continue at full strength during hit recovery.
 - Defeat is a character pose, not a generic flattened transform. Pipplo's authored eight-pose defeat sequence is the reference: surprise, brace, recoil, buckle, fall, defeated hold, tired recovery, stable rest.
+- Summoned units begin as a readable bud at their leader's body, then enter according to their family: runners shoot forward, buoyant casters inflate and rise, and heavy units arc up before a broad landing. Their health and status marks wait until the entrance is nearly complete.
+- Damage particles and numbers land on the attacker's contact beat. Melee effects must not announce damage before the authored lunge or slam reaches impact; projectiles may launch earlier because their travel supplies the delay.
 - Reduced motion keeps the clearest anticipation and impact poses while removing rapid oscillation and large displacement.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.

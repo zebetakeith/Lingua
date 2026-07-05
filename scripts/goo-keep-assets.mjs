@@ -34,7 +34,9 @@ assert.ok(battlefieldSource.includes("this.artSprite = scene.add.image"), "minio
 assert.ok(battlefieldSource.includes("UNIT_ASSET_ROOTS"), "every minion should load its complete authored walk and attack poses");
 assert.ok(battlefieldSource.includes("unitTextureKey(this.kind, animation, frame)"), "minions should animate by swapping intact authored frames");
 assert.ok(battlefieldSource.includes("UNIT_MOTION_PROFILES"), "every minion should have a distinct anticipation and impact profile");
+assert.ok(battlefieldSource.includes("spawnDuration"), "every minion should enter through a timed summon performance instead of a generic pop-in tween");
 assert.ok(battlefieldSource.includes("preImpactStretch"), "attack motion should accelerate into a stronger pre-impact stretch");
+assert.ok(battlefieldSource.includes("getUnitImpactDelay"), "melee hit effects should wait for the attacker's visual contact beat");
 assert.ok(battlefieldSource.includes("pipploMotion"), "Pipplo actions should use distinct semantic motion curves");
 assert.ok(battlefieldSource.includes("GENERAL_MOTION_PROFILES"), "enemy generals should not share one generic motion rhythm");
 assert.ok(battlefieldSource.includes("retire(reducedMotion"), "defeated minions should animate out instead of disappearing immediately");

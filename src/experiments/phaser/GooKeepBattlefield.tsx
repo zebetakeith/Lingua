@@ -42,6 +42,8 @@ type MotionAxis = "horizontal" | "vertical" | "radial";
 
 interface UnitMotionProfile {
   duration: number;
+  spawnDuration: number;
+  spawnLift: number;
   anticipationEnd: number;
   impactAt: number;
   frameBeats: readonly [number, number, number];
@@ -62,18 +64,18 @@ interface UnitMotionProfile {
 }
 
 const UNIT_MOTION_PROFILES: Record<CastleUnitKind, UnitMotionProfile> = {
-  piplet: { duration: 0.44, anticipationEnd: 0.18, impactAt: 0.58, frameBeats: [0.16, 0.54, 0.76], axis: "vertical", travel: 15, windup: 5, lift: 10, preImpactStretch: 0.09, impactSquash: 0.12, recoil: 3, angle: 5, walkRate: 1.2, walkBob: 2.6, walkTilt: 2, walkStretch: 0.035, idleLift: 0, hitRecoil: 7 },
-  dartlet: { duration: 0.38, anticipationEnd: 0.14, impactAt: 0.5, frameBeats: [0.13, 0.46, 0.7], axis: "horizontal", travel: 24, windup: 8, lift: 4, preImpactStretch: 0.13, impactSquash: 0.05, recoil: 7, angle: 10, walkRate: 1.5, walkBob: 1.8, walkTilt: 4, walkStretch: 0.045, idleLift: 2, hitRecoil: 9 },
-  bubbleBud: { duration: 0.54, anticipationEnd: 0.22, impactAt: 0.62, frameBeats: [0.2, 0.58, 0.8], axis: "radial", travel: 11, windup: 5, lift: 14, preImpactStretch: 0.1, impactSquash: 0.11, recoil: 4, angle: 4, walkRate: 1.05, walkBob: 3.4, walkTilt: 2, walkStretch: 0.05, idleLift: 3, hitRecoil: 7 },
-  mendlet: { duration: 0.66, anticipationEnd: 0.25, impactAt: 0.68, frameBeats: [0.22, 0.62, 0.82], axis: "radial", travel: 4, windup: 2, lift: 12, preImpactStretch: 0.07, impactSquash: 0.05, recoil: 2, angle: 3, walkRate: 0.9, walkBob: 3, walkTilt: 1.5, walkStretch: 0.028, idleLift: 3, hitRecoil: 6 },
-  spitlet: { duration: 0.5, anticipationEnd: 0.2, impactAt: 0.56, frameBeats: [0.18, 0.52, 0.76], axis: "horizontal", travel: 8, windup: 6, lift: 4, preImpactStretch: 0.12, impactSquash: 0.07, recoil: 10, angle: 8, walkRate: 1.1, walkBob: 2, walkTilt: 2.5, walkStretch: 0.035, idleLift: 1, hitRecoil: 8 },
-  bigChonk: { duration: 0.7, anticipationEnd: 0.22, impactAt: 0.72, frameBeats: [0.2, 0.68, 0.82], axis: "vertical", travel: 18, windup: 7, lift: 25, preImpactStretch: 0.17, impactSquash: 0.19, recoil: 3, angle: 4, walkRate: 0.72, walkBob: 2.4, walkTilt: 1.5, walkStretch: 0.025, idleLift: 0, hitRecoil: 6 },
-  shellSlime: { duration: 0.52, anticipationEnd: 0.2, impactAt: 0.58, frameBeats: [0.18, 0.54, 0.78], axis: "horizontal", travel: 14, windup: 5, lift: 3, preImpactStretch: 0.08, impactSquash: 0.1, recoil: 5, angle: 7, walkRate: 0.82, walkBob: 1.6, walkTilt: 1.4, walkStretch: 0.022, idleLift: 0, hitRecoil: 6 },
-  nibbleImp: { duration: 0.42, anticipationEnd: 0.16, impactAt: 0.5, frameBeats: [0.14, 0.46, 0.7], axis: "horizontal", travel: 22, windup: 8, lift: 8, preImpactStretch: 0.13, impactSquash: 0.08, recoil: 8, angle: 12, walkRate: 1.4, walkBob: 2.5, walkTilt: 4, walkStretch: 0.04, idleLift: 0, hitRecoil: 9 },
-  sporeBud: { duration: 0.58, anticipationEnd: 0.22, impactAt: 0.62, frameBeats: [0.2, 0.58, 0.8], axis: "radial", travel: 4, windup: 3, lift: 8, preImpactStretch: 0.07, impactSquash: 0.09, recoil: 4, angle: 4, walkRate: 0.88, walkBob: 2.2, walkTilt: 1.5, walkStretch: 0.025, idleLift: 0, hitRecoil: 7 },
-  boomcap: { duration: 0.64, anticipationEnd: 0.24, impactAt: 0.66, frameBeats: [0.22, 0.62, 0.82], axis: "radial", travel: 7, windup: 4, lift: 12, preImpactStretch: 0.13, impactSquash: 0.18, recoil: 7, angle: 8, walkRate: 0.78, walkBob: 2.8, walkTilt: 2, walkStretch: 0.035, idleLift: 0, hitRecoil: 8 },
-  echoMoth: { duration: 0.54, anticipationEnd: 0.2, impactAt: 0.6, frameBeats: [0.18, 0.56, 0.8], axis: "horizontal", travel: 5, windup: 3, lift: 16, preImpactStretch: 0.09, impactSquash: 0.06, recoil: 8, angle: 5, walkRate: 1.65, walkBob: 4.2, walkTilt: 4, walkStretch: 0.025, idleLift: 10, hitRecoil: 8 },
-  rootLump: { duration: 0.74, anticipationEnd: 0.26, impactAt: 0.7, frameBeats: [0.24, 0.66, 0.82], axis: "vertical", travel: 9, windup: 6, lift: 8, preImpactStretch: 0.11, impactSquash: 0.2, recoil: 3, angle: 3, walkRate: 0.62, walkBob: 1.5, walkTilt: 1.2, walkStretch: 0.018, idleLift: 0, hitRecoil: 5 },
+  piplet: { duration: 0.44, spawnDuration: 0.5, spawnLift: 15, anticipationEnd: 0.18, impactAt: 0.58, frameBeats: [0.16, 0.54, 0.76], axis: "vertical", travel: 15, windup: 5, lift: 10, preImpactStretch: 0.09, impactSquash: 0.12, recoil: 3, angle: 5, walkRate: 1.2, walkBob: 2.6, walkTilt: 2, walkStretch: 0.035, idleLift: 0, hitRecoil: 7 },
+  dartlet: { duration: 0.38, spawnDuration: 0.38, spawnLift: 7, anticipationEnd: 0.14, impactAt: 0.5, frameBeats: [0.13, 0.46, 0.7], axis: "horizontal", travel: 24, windup: 8, lift: 4, preImpactStretch: 0.13, impactSquash: 0.05, recoil: 7, angle: 10, walkRate: 1.5, walkBob: 1.8, walkTilt: 4, walkStretch: 0.045, idleLift: 2, hitRecoil: 9 },
+  bubbleBud: { duration: 0.54, spawnDuration: 0.62, spawnLift: 21, anticipationEnd: 0.22, impactAt: 0.62, frameBeats: [0.2, 0.58, 0.8], axis: "radial", travel: 11, windup: 5, lift: 14, preImpactStretch: 0.1, impactSquash: 0.11, recoil: 4, angle: 4, walkRate: 1.05, walkBob: 3.4, walkTilt: 2, walkStretch: 0.05, idleLift: 3, hitRecoil: 7 },
+  mendlet: { duration: 0.66, spawnDuration: 0.66, spawnLift: 18, anticipationEnd: 0.25, impactAt: 0.68, frameBeats: [0.22, 0.62, 0.82], axis: "radial", travel: 4, windup: 2, lift: 12, preImpactStretch: 0.07, impactSquash: 0.05, recoil: 2, angle: 3, walkRate: 0.9, walkBob: 3, walkTilt: 1.5, walkStretch: 0.028, idleLift: 3, hitRecoil: 6 },
+  spitlet: { duration: 0.5, spawnDuration: 0.46, spawnLift: 8, anticipationEnd: 0.2, impactAt: 0.56, frameBeats: [0.18, 0.52, 0.76], axis: "horizontal", travel: 8, windup: 6, lift: 4, preImpactStretch: 0.12, impactSquash: 0.07, recoil: 10, angle: 8, walkRate: 1.1, walkBob: 2, walkTilt: 2.5, walkStretch: 0.035, idleLift: 1, hitRecoil: 8 },
+  bigChonk: { duration: 0.7, spawnDuration: 0.78, spawnLift: 30, anticipationEnd: 0.22, impactAt: 0.72, frameBeats: [0.2, 0.68, 0.82], axis: "vertical", travel: 18, windup: 7, lift: 25, preImpactStretch: 0.17, impactSquash: 0.19, recoil: 3, angle: 4, walkRate: 0.72, walkBob: 2.4, walkTilt: 1.5, walkStretch: 0.025, idleLift: 0, hitRecoil: 6 },
+  shellSlime: { duration: 0.52, spawnDuration: 0.56, spawnLift: 8, anticipationEnd: 0.2, impactAt: 0.58, frameBeats: [0.18, 0.54, 0.78], axis: "horizontal", travel: 14, windup: 5, lift: 3, preImpactStretch: 0.08, impactSquash: 0.1, recoil: 5, angle: 7, walkRate: 0.82, walkBob: 1.6, walkTilt: 1.4, walkStretch: 0.022, idleLift: 0, hitRecoil: 6 },
+  nibbleImp: { duration: 0.42, spawnDuration: 0.4, spawnLift: 11, anticipationEnd: 0.16, impactAt: 0.5, frameBeats: [0.14, 0.46, 0.7], axis: "horizontal", travel: 22, windup: 8, lift: 8, preImpactStretch: 0.13, impactSquash: 0.08, recoil: 8, angle: 12, walkRate: 1.4, walkBob: 2.5, walkTilt: 4, walkStretch: 0.04, idleLift: 0, hitRecoil: 9 },
+  sporeBud: { duration: 0.58, spawnDuration: 0.64, spawnLift: 14, anticipationEnd: 0.22, impactAt: 0.62, frameBeats: [0.2, 0.58, 0.8], axis: "radial", travel: 4, windup: 3, lift: 8, preImpactStretch: 0.07, impactSquash: 0.09, recoil: 4, angle: 4, walkRate: 0.88, walkBob: 2.2, walkTilt: 1.5, walkStretch: 0.025, idleLift: 0, hitRecoil: 7 },
+  boomcap: { duration: 0.64, spawnDuration: 0.7, spawnLift: 19, anticipationEnd: 0.24, impactAt: 0.66, frameBeats: [0.22, 0.62, 0.82], axis: "radial", travel: 7, windup: 4, lift: 12, preImpactStretch: 0.13, impactSquash: 0.18, recoil: 7, angle: 8, walkRate: 0.78, walkBob: 2.8, walkTilt: 2, walkStretch: 0.035, idleLift: 0, hitRecoil: 8 },
+  echoMoth: { duration: 0.54, spawnDuration: 0.56, spawnLift: 25, anticipationEnd: 0.2, impactAt: 0.6, frameBeats: [0.18, 0.56, 0.8], axis: "horizontal", travel: 5, windup: 3, lift: 16, preImpactStretch: 0.09, impactSquash: 0.06, recoil: 8, angle: 5, walkRate: 1.65, walkBob: 4.2, walkTilt: 4, walkStretch: 0.025, idleLift: 10, hitRecoil: 8 },
+  rootLump: { duration: 0.74, spawnDuration: 0.84, spawnLift: 13, anticipationEnd: 0.26, impactAt: 0.7, frameBeats: [0.24, 0.66, 0.82], axis: "vertical", travel: 9, windup: 6, lift: 8, preImpactStretch: 0.11, impactSquash: 0.2, recoil: 3, angle: 3, walkRate: 0.62, walkBob: 1.5, walkTilt: 1.2, walkStretch: 0.018, idleLift: 0, hitRecoil: 5 },
 };
 
 function clamp01(value: number): number {
@@ -602,6 +604,7 @@ class UnitRig {
   private lastHp: number;
   private attackSignal = 0;
   private hitSignal = 0;
+  private spawnSignal: number;
   private textureState = "";
   private retired = false;
 
@@ -610,6 +613,7 @@ class UnitRig {
     this.side = unit.side;
     this.kind = unit.kind;
     this.profile = UNIT_MOTION_PROFILES[unit.kind];
+    this.spawnSignal = this.profile.spawnDuration;
     this.x = spawnX;
     this.y = GROUND_Y + 1;
     this.lastHp = unit.hp;
@@ -623,8 +627,7 @@ class UnitRig {
     this.barY = unit.kind === "rootLump" || unit.kind === "bigChonk" ? -76 : -61;
     this.badge = scene.add.text(0, this.barY - 9, "", { fontFamily: "Nunito, sans-serif", fontSize: "9px", fontStyle: "bold", color: "#ffffff", stroke: "#194f53", strokeThickness: 3 }).setOrigin(0.5);
     this.container = scene.add.container(this.x, this.y, [this.shadow, this.artRoot, this.hpBar, this.badge]).setDepth(12);
-    this.container.setScale(0.18);
-    scene.tweens.add({ targets: this.container, scaleX: 1, scaleY: 1, duration: 420, ease: "Back.Out" });
+    this.container.setAlpha(0);
   }
 
   update(unit: CastleUnitState, targetX: number, deltaSeconds: number, live: boolean, reducedMotion: boolean): void {
@@ -646,6 +649,7 @@ class UnitRig {
     }
     this.attackSignal = Math.max(0, this.attackSignal - deltaSeconds);
     this.hitSignal = Math.max(0, this.hitSignal - deltaSeconds);
+    this.spawnSignal = Math.max(0, this.spawnSignal - deltaSeconds);
 
     const attacking = this.attackSignal > 0;
     const attackProgress = attacking ? 1 - this.attackSignal / profile.duration : 0;
@@ -666,6 +670,41 @@ class UnitRig {
     const walkSquash = Math.sin(walkPhase * 2) * profile.walkStretch * motion;
     const movementStretch = Math.min(0.1, Math.abs(this.vx) / 700) * motion;
     const facing = this.side === "enemy" ? -1 : 1;
+
+    const spawning = this.spawnSignal > 0;
+    const spawnProgress = spawning ? 1 - this.spawnSignal / profile.spawnDuration : 1;
+    const spawnRelease = easeOutCubic(rangeProgress(spawnProgress, 0.04, 0.58));
+    const spawnArcProgress = rangeProgress(spawnProgress, 0.12, 0.7);
+    const spawnArc = spawnProgress > 0.12 && spawnProgress < 0.7 ? Math.sin(spawnArcProgress * Math.PI) : 0;
+    const spawnPreImpact = spawnProgress < 0.7 ? easeInCubic(rangeProgress(spawnProgress, 0.53, 0.7)) : 0;
+    const spawnImpact = sharpPulse(spawnProgress, 0.71, 0.08);
+    const spawnSettle = dampedSettle(spawnProgress, 0.7, profile.axis === "radial" ? 2.75 : 2.1);
+    const spawnStartScale = reducedMotion ? 0.7 : profile.axis === "radial" ? 0.12 : 0.24;
+    let spawnScaleX = spawnStartScale + (1 - spawnStartScale) * spawnRelease;
+    let spawnScaleY = spawnStartScale + (1 - spawnStartScale) * spawnRelease;
+    let spawnAngle = 0;
+    if (spawning && !reducedMotion) {
+      if (profile.axis === "vertical") {
+        spawnScaleX += spawnPreImpact * -0.12 + spawnImpact * 0.17 + spawnSettle * 0.022;
+        spawnScaleY += spawnPreImpact * 0.17 - spawnImpact * 0.15 - spawnSettle * 0.018;
+        spawnAngle = facing * (spawnSettle * profile.angle * 0.45);
+      } else if (profile.axis === "horizontal") {
+        spawnScaleX += spawnPreImpact * 0.15 + spawnImpact * 0.08 + spawnSettle * 0.02;
+        spawnScaleY += spawnPreImpact * -0.08 - spawnImpact * 0.07 - spawnSettle * 0.014;
+        spawnAngle = facing * (-5 * (1 - spawnRelease) + spawnSettle * profile.angle * 0.65);
+      } else {
+        const inflate = Math.sin(rangeProgress(spawnProgress, 0.04, 0.58) * Math.PI) * 0.12;
+        spawnScaleX += inflate + spawnImpact * 0.13 + spawnSettle * 0.025;
+        spawnScaleY += inflate - spawnImpact * 0.11 - spawnSettle * 0.018;
+        spawnAngle = facing * spawnSettle * profile.angle * 0.4;
+      }
+    }
+    const spawnLiftFactor = profile.axis === "horizontal" ? 0.42 : profile.axis === "radial" ? 0.82 : 1;
+    const spawnAirborne = spawning ? spawnArc * profile.spawnLift * spawnLiftFactor * motion : 0;
+    const spawnOffset = spawning
+      ? -facing * (1 - spawnRelease) * (profile.axis === "horizontal" ? 12 : 5) * motion
+      : 0;
+    const spawnAlpha = spawning ? smoothStep(rangeProgress(spawnProgress, 0, reducedMotion ? 0.18 : 0.1)) : 1;
 
     let lunge = 0;
     let airborne = 0;
@@ -721,25 +760,35 @@ class UnitRig {
     const hitScaleY = hitImpact * 0.09 - hitRecovery * 0.025;
     const hitAngle = -facing * (hitImpact * 7 + hitRecovery * 4) * motion;
 
-    this.container.setPosition(this.x + lunge + hitOffset, this.y + bob - profile.idleLift - airborne);
+    this.container
+      .setPosition(this.x + lunge + hitOffset + spawnOffset, this.y + bob - profile.idleLift - airborne - spawnAirborne)
+      .setAlpha(spawnAlpha);
     this.artRoot
       .setScale(
-        facing * (1 + movementStretch + walkSquash + attackScaleX + hitScaleX),
-        1 - movementStretch * 0.65 - walkSquash * 0.7 + attackScaleY + hitScaleY,
+        facing * spawnScaleX * (1 + movementStretch + walkSquash + attackScaleX + hitScaleX),
+        spawnScaleY * (1 - movementStretch * 0.65 - walkSquash * 0.7 + attackScaleY + hitScaleY),
       )
       .setAngle(
         Math.sin(walkPhase * 0.5) * profile.walkTilt * motion
         + Phaser.Math.Clamp(this.vx / 90, -5, 5)
         + attackAngle
-        + hitAngle,
+        + hitAngle
+        + spawnAngle,
       );
 
-    const liftRatio = profile.lift > 0 ? airborne / profile.lift : 0;
+    const totalAirborne = airborne + spawnAirborne;
+    const liftRatio = Math.max(
+      profile.lift > 0 ? airborne / profile.lift : 0,
+      profile.spawnLift > 0 ? spawnAirborne / profile.spawnLift : 0,
+    );
     this.shadow
-      .setY(3 - bob + profile.idleLift + airborne)
+      .setY(3 - bob + profile.idleLift + totalAirborne)
       .setScale(1 - Math.abs(bob) / 22 - liftRatio * 0.18 + Math.max(0, attackScaleX) * 0.25, 1 - liftRatio * 0.1)
-      .setAlpha(1 - liftRatio * 0.38);
+      .setAlpha(spawnAlpha * (1 - liftRatio * 0.38));
     this.drawStatus(unit);
+    const showStatus = !spawning || spawnProgress > 0.76;
+    this.hpBar.setVisible(showStatus);
+    this.badge.setVisible(showStatus);
   }
 
   retire(reducedMotion: boolean): void {
@@ -768,10 +817,11 @@ class UnitRig {
     this.scene.tweens.add({ targets: this.shadow, scaleX: 0.25, alpha: 0, duration });
   }
 
-  previewAction(action: "attack" | "hit", progress: number): void {
+  previewAction(action: "attack" | "hit" | "spawn", progress: number): void {
     const clamped = Phaser.Math.Clamp(progress, 0, 0.999);
     if (action === "attack") this.attackSignal = this.profile.duration * (1 - clamped);
-    else this.hitSignal = UNIT_HIT_ANIMATION_SECONDS * (1 - clamped);
+    else if (action === "hit") this.hitSignal = UNIT_HIT_ANIMATION_SECONDS * (1 - clamped);
+    else this.spawnSignal = this.profile.spawnDuration * (1 - clamped);
   }
 
 
@@ -1027,7 +1077,7 @@ class GooKeepScene extends Phaser.Scene {
           rig = new UnitRig(this, unit, this.leaderX(side));
           this.unitRigs.set(id, rig);
         }
-        if (fixedProgress !== null && (action === "attack" || action === "hit")) rig.previewAction(action, fixedProgress);
+        if (fixedProgress !== null && (action === "attack" || action === "hit" || action === "spawn")) rig.previewAction(action, fixedProgress);
         rig.update(unit, this.laneX(50), deltaSeconds, true, this.reducedMotion);
         return;
       }
@@ -1054,12 +1104,30 @@ class GooKeepScene extends Phaser.Scene {
     for (const event of this.snapshot.battle.fxEvents) {
       if (this.handledFxIds.has(event.id)) continue;
       this.handledFxIds.add(event.id);
-      this.playFx(event);
+      const visualDelay = this.getUnitImpactDelay(event);
+      if (visualDelay > 0) this.time.delayedCall(visualDelay, () => this.playFx(event));
+      else this.playFx(event);
     }
     if (this.handledFxIds.size > 160) {
       const latest = Math.max(...this.handledFxIds);
       this.handledFxIds = new Set(Array.from(this.handledFxIds).filter(id => id > latest - 80));
     }
+  }
+
+  private getUnitImpactDelay(event: CastleFxEvent): number {
+    if (event.kind !== "hit") return 0;
+    const attacker = this.snapshot.battle.units
+      .filter(unit => (
+        unit.side === event.side
+        && unit.hp > 0
+        && unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs * 0.55
+        && Math.abs(unit.position - event.position) <= 12
+      ))
+      .sort((a, b) => Math.abs(a.position - event.position) - Math.abs(b.position - event.position))[0];
+    if (!attacker) return 0;
+    const profile = UNIT_MOTION_PROFILES[attacker.kind];
+    const motionScale = this.reducedMotion ? 0.38 : 1;
+    return Math.round(profile.duration * profile.impactAt * 1_000 * motionScale);
   }
 
   private playFx(event: CastleFxEvent): void {
