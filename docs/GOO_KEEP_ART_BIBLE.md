@@ -70,6 +70,7 @@ Four- or five-frame loops are too coarse for hero characters. Use 12–16 cohesi
 - Scenery uses the same rounded geometry as the cast: bubble trees, floating islands, soft mushrooms, flowers, and curved hills.
 - Keep the center lane readable. Decorative shapes belong in the sky, far hills, and outer thirds.
 - Spells should have a visual verb: seeds arc, bubbles rise, roots crack the road, tongues stretch, spores drift, and impacts splat or starburst.
+- Unit effects inherit the caster's identity: Mendlet sends arcing dew, Bubble Bud launches an expanding shield bubble, Spitlet spits a compact violet shot, Spore Bud lobs a loose rotating cluster, and Echo Moth pushes concentric sound rings. Damage labels appear at arrival, never at launch.
 - Combat UI stays above the action or at the outer edges. Never cover feet, contact points, or the middle clash with a full-width strip.
 
 ## UI surfaces

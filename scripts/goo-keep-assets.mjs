@@ -20,6 +20,7 @@ assert.ok(battlefieldSource.includes('get("rigAction")'), "leader action poses n
 assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("rigActionProgress")'), "leader action timing needs exact-progress visual QA");
 assert.ok(battlefieldSource.includes('get("unitActionProgress")'), "unit action timing needs exact-progress visual QA");
+assert.ok(battlefieldSource.includes('get("fxAction")'), "unit projectiles and support effects need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes("PIPPLO_ANIMATIONS"), "Pipplo should load the complete whole-sprite animation library");
 assert.ok(battlefieldSource.includes("buildWholeSpritePipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
@@ -36,7 +37,9 @@ assert.ok(battlefieldSource.includes("unitTextureKey(this.kind, animation, frame
 assert.ok(battlefieldSource.includes("UNIT_MOTION_PROFILES"), "every minion should have a distinct anticipation and impact profile");
 assert.ok(battlefieldSource.includes("spawnDuration"), "every minion should enter through a timed summon performance instead of a generic pop-in tween");
 assert.ok(battlefieldSource.includes("preImpactStretch"), "attack motion should accelerate into a stronger pre-impact stretch");
-assert.ok(battlefieldSource.includes("getUnitImpactDelay"), "melee hit effects should wait for the attacker's visual contact beat");
+assert.ok(battlefieldSource.includes("getUnitFxDelay"), "unit hit and support effects should wait for their visual release or contact beat");
+assert.ok(battlefieldSource.includes("playUnitProjectile"), "ranged creature families should fire distinct projectile silhouettes");
+assert.ok(battlefieldSource.includes("playUnitSupportFx"), "healing and shielding should travel visibly from caster to target");
 assert.ok(battlefieldSource.includes("pipploMotion"), "Pipplo actions should use distinct semantic motion curves");
 assert.ok(battlefieldSource.includes("GENERAL_MOTION_PROFILES"), "enemy generals should not share one generic motion rhythm");
 assert.ok(battlefieldSource.includes("retire(reducedMotion"), "defeated minions should animate out instead of disappearing immediately");

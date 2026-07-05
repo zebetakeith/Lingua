@@ -856,6 +856,7 @@ class GooKeepScene extends Phaser.Scene {
   private viewHeight = WORLD_HEIGHT;
   private lastPhase: CastleRunState["phase"];
   private debugActionBeat = -1;
+  private debugFxBeat = -1;
 
   constructor(snapshot: CastleRunState, reducedMotion: boolean) {
     super({ key: "goo-keep-battlefield" });
@@ -925,7 +926,52 @@ class GooKeepScene extends Phaser.Scene {
     this.player.update(deltaSeconds, live, this.reducedMotion);
     this.enemy.update(deltaSeconds, live, this.reducedMotion);
     this.syncUnits(deltaSeconds, live);
+    this.runDebugFx(time);
     this.syncFx();
+  }
+
+  private runDebugFx(time: number): void {
+    if (!import.meta.env.DEV) return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("fxAction");
+    if (action !== "projectile" && action !== "heal" && action !== "shield") return;
+    const requestedKind = params.get("unit");
+    const fallbackKind: CastleUnitKind = action === "heal" ? "mendlet" : action === "shield" ? "bubbleBud" : "spitlet";
+    const kind = requestedKind && requestedKind in CASTLE_UNIT_DEFS ? requestedKind as CastleUnitKind : fallbackKind;
+    const side: CastleSide = FRIENDLY_UNIT_KINDS.has(kind) ? "player" : "enemy";
+    const beat = Math.floor(time / 1_050);
+    if (beat === this.debugFxBeat) return;
+    this.debugFxBeat = beat;
+    const sourcePosition = 50;
+    const targetPosition = side === "player" ? 78 : 22;
+    const source: CastleUnitState = {
+      id: "sprite-qa-fx-source",
+      side,
+      kind,
+      affix: null,
+      hp: 10,
+      maxHp: 10,
+      shield: 0,
+      position: sourcePosition,
+      attackCooldownMs: CASTLE_UNIT_DEFS[kind].attackMs,
+      slowMs: 0,
+      damageBonus: 0,
+      kills: 0,
+      origin: side === "player" ? "paid" : "enemy",
+      overfed: false,
+    };
+    const event: CastleFxEvent = {
+      id: -beat,
+      kind: action,
+      side,
+      position: targetPosition,
+      fromPosition: sourcePosition,
+      ttlMs: 1_000,
+    };
+    const x = this.laneX(targetPosition);
+    const fromX = this.laneX(sourcePosition);
+    if (action === "projectile") this.playUnitProjectile(event, source, x, fromX);
+    else this.playUnitSupportFx(event, source, x, fromX);
   }
 
   private runDebugActions(time: number): void {
@@ -1104,7 +1150,7 @@ class GooKeepScene extends Phaser.Scene {
     for (const event of this.snapshot.battle.fxEvents) {
       if (this.handledFxIds.has(event.id)) continue;
       this.handledFxIds.add(event.id);
-      const visualDelay = this.getUnitImpactDelay(event);
+      const visualDelay = this.getUnitFxDelay(event);
       if (visualDelay > 0) this.time.delayedCall(visualDelay, () => this.playFx(event));
       else this.playFx(event);
     }
@@ -1114,9 +1160,16 @@ class GooKeepScene extends Phaser.Scene {
     }
   }
 
-  private getUnitImpactDelay(event: CastleFxEvent): number {
-    if (event.kind !== "hit") return 0;
-    const attacker = this.snapshot.battle.units
+  private findUnitFxSource(event: CastleFxEvent): CastleUnitState | undefined {
+    const sourcePosition = event.fromPosition;
+    if (sourcePosition !== undefined) {
+      const source = this.snapshot.battle.units
+        .filter(unit => unit.side === event.side && unit.hp > 0)
+        .sort((a, b) => Math.abs(a.position - sourcePosition) - Math.abs(b.position - sourcePosition))[0];
+      if (source && Math.abs(source.position - sourcePosition) <= 8) return source;
+    }
+    if (event.kind !== "hit") return undefined;
+    return this.snapshot.battle.units
       .filter(unit => (
         unit.side === event.side
         && unit.hp > 0
@@ -1124,37 +1177,131 @@ class GooKeepScene extends Phaser.Scene {
         && Math.abs(unit.position - event.position) <= 12
       ))
       .sort((a, b) => Math.abs(a.position - event.position) - Math.abs(b.position - event.position))[0];
-    if (!attacker) return 0;
-    const profile = UNIT_MOTION_PROFILES[attacker.kind];
+  }
+
+  private getUnitFxDelay(event: CastleFxEvent): number {
+    if (event.kind !== "hit" && event.kind !== "heal" && event.kind !== "shield") return 0;
+    const source = this.findUnitFxSource(event);
+    if (!source) return 0;
+    const profile = UNIT_MOTION_PROFILES[source.kind];
     const motionScale = this.reducedMotion ? 0.38 : 1;
-    return Math.round(profile.duration * profile.impactAt * 1_000 * motionScale);
+    const actionBeat = event.kind === "hit" ? profile.impactAt : profile.frameBeats[1];
+    return Math.round(profile.duration * actionBeat * 1_000 * motionScale);
   }
 
   private playFx(event: CastleFxEvent): void {
     const x = this.laneX(event.position);
     const fromX = this.laneX(event.fromPosition ?? event.position);
-    if ((event.kind === "hit" || event.kind === "projectile") && event.position <= 3) this.player?.hit();
-    if ((event.kind === "hit" || event.kind === "projectile") && event.position >= 97) this.enemy?.hit();
+    const source = this.findUnitFxSource(event);
+    const hitLeader = () => {
+      if (event.position <= 3) this.player?.hit();
+      if (event.position >= 97) this.enemy?.hit();
+    };
+    if (event.kind === "hit") hitLeader();
     if (event.powerId) {
       this.playPowerFx(event.powerId, x, fromX);
       return;
     }
     if (event.kind === "power" && event.side === "enemy") this.playGeneralFx(event, x);
+    let labelDelay = 0;
     if (event.kind === "projectile") {
-      const orb = this.add.circle(fromX, GROUND_Y - 55, 8, event.side === "player" ? 0x68ead8 : 0xe392ee, 1).setDepth(30);
-      this.tweens.add({ targets: orb, x, y: GROUND_Y - 48, scale: 1.5, duration: this.reducedMotion ? 160 : 380, ease: "Sine.In", onComplete: () => { this.burst(x, GROUND_Y - 48, event.side === "player" ? 0x68ead8 : 0xe392ee, 7); orb.destroy(); } });
+      labelDelay = this.playUnitProjectile(event, source, x, fromX);
+      if (event.position <= 3 || event.position >= 97) this.time.delayedCall(labelDelay, hitLeader);
     } else if (event.kind === "heal" || event.kind === "shield") {
-      const ring = this.add.circle(x, GROUND_Y - 40, 16).setStrokeStyle(5, event.kind === "heal" ? 0x78dc83 : 0x79d5ef, 0.9).setDepth(30);
-      this.tweens.add({ targets: ring, y: GROUND_Y - 86, scale: 2.1, alpha: 0, duration: 620, onComplete: () => ring.destroy() });
+      labelDelay = this.playUnitSupportFx(event, source, x, fromX);
     } else if (event.kind === "hit" || event.kind === "pop") {
       this.burst(x, GROUND_Y - 42, event.kind === "pop" ? 0xef86ae : 0xffe66d, event.kind === "pop" ? 10 : 6);
     } else if (event.kind === "power") {
       this.burst(x, GROUND_Y - 52, event.side === "player" ? 0xffd86a : 0xd58ce6, 12);
     }
     if (event.label) {
-      const label = this.add.text(x, GROUND_Y - 74, event.label, { fontFamily: "Nunito, sans-serif", fontSize: "17px", fontStyle: "bold", color: "#ffffff", stroke: "#194f53", strokeThickness: 5 }).setOrigin(0.5).setDepth(40);
-      this.tweens.add({ targets: label, y: label.y - 34, alpha: 0, duration: 760, ease: "Cubic.Out", onComplete: () => label.destroy() });
+      const showLabel = () => {
+        const label = this.add.text(x, GROUND_Y - 74, event.label || "", { fontFamily: "Nunito, sans-serif", fontSize: "17px", fontStyle: "bold", color: "#ffffff", stroke: "#194f53", strokeThickness: 5 }).setOrigin(0.5).setDepth(40);
+        this.tweens.add({ targets: label, y: label.y - 34, alpha: 0, duration: 760, ease: "Cubic.Out", onComplete: () => label.destroy() });
+      };
+      if (labelDelay > 0) this.time.delayedCall(labelDelay, showLabel);
+      else showLabel();
     }
+  }
+
+  private playUnitProjectile(event: CastleFxEvent, source: CastleUnitState | undefined, x: number, fromX: number): number {
+    const duration = this.reducedMotion ? 170 : 390;
+    const friendly = event.side === "player";
+    const color = source?.kind === "sporeBud" ? 0xd77bb7
+      : source?.kind === "echoMoth" ? 0x8175d5
+        : source?.kind === "spitlet" ? 0xa785e5
+          : friendly ? 0x68ead8 : 0xe392ee;
+    let projectile: Phaser.GameObjects.GameObject;
+    if (source?.kind === "sporeBud") {
+      const spores = [
+        this.add.circle(-7, 2, 6, 0xd77bb7, 0.9),
+        this.add.circle(1, -5, 8, 0x96c976, 0.92),
+        this.add.circle(8, 3, 5, 0xe9a8d2, 0.9),
+      ];
+      projectile = this.add.container(fromX, GROUND_Y - 55, spores).setDepth(30);
+    } else if (source?.kind === "echoMoth") {
+      const waves = [10, 16, 22].map(radius => this.add.arc(0, 0, radius, 225, 495, false).setStrokeStyle(3, 0xa99fe8, 0.86));
+      projectile = this.add.container(fromX, GROUND_Y - 55, waves).setDepth(30);
+    } else if (source?.kind === "spitlet") {
+      projectile = this.add.ellipse(fromX, GROUND_Y - 55, 18, 10, color, 0.96).setAngle(friendly ? -12 : 12).setDepth(30);
+    } else {
+      projectile = this.add.circle(fromX, GROUND_Y - 55, 8, color, 1).setDepth(30);
+    }
+    this.tweens.add({
+      targets: projectile,
+      x,
+      y: GROUND_Y - 48,
+      scale: source?.kind === "echoMoth" ? 1.35 : 1.5,
+      angle: source?.kind === "sporeBud" ? (friendly ? 110 : -110) : 0,
+      duration,
+      ease: source?.kind === "sporeBud" ? "Sine.InOut" : "Cubic.In",
+      onComplete: () => {
+        this.burst(x, GROUND_Y - 48, color, source?.kind === "sporeBud" ? 10 : 7);
+        projectile.destroy();
+      },
+    });
+    return duration;
+  }
+
+  private playUnitSupportFx(event: CastleFxEvent, source: CastleUnitState | undefined, x: number, fromX: number): number {
+    const color = event.kind === "heal" ? 0x78dc83 : 0x79d5ef;
+    const travelDuration = source ? (this.reducedMotion ? 150 : 360) : 0;
+    const finish = () => {
+      const ring = this.add.circle(x, GROUND_Y - 40, 16).setStrokeStyle(5, color, 0.9).setDepth(30);
+      this.tweens.add({ targets: ring, y: GROUND_Y - 86, scale: 2.1, alpha: 0, duration: this.reducedMotion ? 280 : 620, onComplete: () => ring.destroy() });
+      this.burst(x, GROUND_Y - 42, color, event.kind === "heal" ? 6 : 8);
+    };
+    if (!source) {
+      finish();
+      return 0;
+    }
+    const count = this.reducedMotion ? 1 : event.kind === "heal" ? 3 : 1;
+    for (let index = 0; index < count; index += 1) {
+      const particle = event.kind === "heal"
+        ? this.add.ellipse(fromX, GROUND_Y - 50, 8, 12, color, 0.95).setDepth(31)
+        : this.add.circle(fromX, GROUND_Y - 50, 13).setStrokeStyle(4, color, 0.9).setDepth(31);
+      const curve = new Phaser.Curves.QuadraticBezier(
+        new Phaser.Math.Vector2(fromX, GROUND_Y - 50),
+        new Phaser.Math.Vector2((fromX + x) / 2, GROUND_Y - 100 - index * 8),
+        new Phaser.Math.Vector2(x, GROUND_Y - 44),
+      );
+      const travel = { progress: 0 };
+      this.tweens.add({
+        targets: travel,
+        progress: 1,
+        duration: travelDuration,
+        delay: index * 45,
+        ease: "Sine.InOut",
+        onUpdate: () => {
+          const point = curve.getPoint(travel.progress);
+          particle.setPosition(point.x, point.y).setScale(0.72 + travel.progress * 0.45);
+        },
+        onComplete: () => particle.destroy(),
+      });
+    }
+    const arrival = travelDuration + (count - 1) * 45;
+    this.time.delayedCall(arrival, finish);
+    return arrival;
   }
 
   private playPowerFx(powerId: CastlePowerId, x: number, fromX: number): void {

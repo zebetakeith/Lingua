@@ -1582,7 +1582,7 @@ function resolveBattleStep(
       const ally = bubbleShieldTarget(unit);
       if (ally) {
         shieldById.set(ally.id, (shieldById.get(ally.id) || 0) + 3);
-        generatedFx.push({ kind: "shield", side: "player", position: ally.position, label: "+3" });
+        generatedFx.push({ kind: "shield", side: "player", position: ally.position, fromPosition: unit.position, label: "+3" });
         return { ...unit, attackCooldownMs: 1_500 };
       }
     }
@@ -1593,7 +1593,7 @@ function resolveBattleStep(
         healById.set(ally.id, (healById.get(ally.id) || 0) + healing);
         if (hasUpgrade(upgrades, "pollenPuff")) {
           shieldById.set(ally.id, (shieldById.get(ally.id) || 0) + 2);
-          generatedFx.push({ kind: "shield", side: "player", position: ally.position, label: "+2" });
+          generatedFx.push({ kind: "shield", side: "player", position: ally.position, fromPosition: unit.position, label: "+2" });
         }
         generatedFx.push({ kind: "heal", side: "player", position: ally.position, fromPosition: unit.position, label: `+${healing}` });
         return { ...unit, attackCooldownMs: stats.attackMs };
