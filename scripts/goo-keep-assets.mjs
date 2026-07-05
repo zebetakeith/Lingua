@@ -9,10 +9,13 @@ const assetRoot = path.join(repoRoot, "public", "assets", "goo-keep");
 const expected = new Map();
 const battlefieldSource = await readFile(path.join(repoRoot, "src", "experiments", "phaser", "GooKeepBattlefield.tsx"), "utf8");
 
-assert.ok(battlefieldSource.includes("FLAT_LEADER_STYLES"), "battlefield leaders should use the flat articulated rig");
+assert.ok(!battlefieldSource.includes("FLAT_LEADER_STYLES"), "leaders must not return to procedural SVG-style geometry");
+assert.ok(!battlefieldSource.includes("UNIT_PUPPET_SPECS"), "minions must not return to independent crop-piece puppets");
+assert.ok(!battlefieldSource.includes("PuppetBone"), "the tearing-prone crop-bone renderer should stay removed");
+assert.ok(battlefieldSource.includes("class WholeSpriteLeader"), "leaders should use the cohesive whole-sprite renderer");
 assert.ok(!battlefieldSource.includes("const PUPPET_SPECS"), "leaders must not return to rectangular crops of complete painted characters");
 assert.ok(!battlefieldSource.includes("leaderTextureKey"), "moving leader bodies must not be assembled from raster master crops");
-assert.ok(battlefieldSource.includes("maxDisplacement"), "articulated unit pieces need hard movement limits so they cannot tear away");
+assert.ok(!battlefieldSource.includes("maxDisplacement"), "independent sprite pieces should not re-enter the runtime");
 assert.ok(battlefieldSource.includes('get("rigAction")'), "leader action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
@@ -22,6 +25,12 @@ assert.ok(!battlefieldSource.includes("buildRasterPipplo"), "Pipplo must not ret
 assert.ok(battlefieldSource.includes("whole-sprite-v2"), "Pipplo's shipping actions should use the selected leaf-collar whole-sprite frame set");
 assert.ok(battlefieldSource.includes("setFlipX(true)"), "Pipplo should face inward toward the enemy lane");
 assert.ok(battlefieldSource.includes("reducedMotion && !activeConfig.loop"), "Pipplo actions should avoid large baked displacement in reduced-motion mode");
+assert.ok(battlefieldSource.includes("GENERAL_TEXTURES"), "every enemy general should load a normalized cohesive master sprite");
+assert.ok(battlefieldSource.includes("buildWholeSpriteGeneral"), "enemy generals should render as complete painted sprites");
+assert.ok(battlefieldSource.includes("UNIT_WHOLE_SPRITE_CONFIGS"), "every active minion should have a whole-sprite scale and anchor");
+assert.ok(battlefieldSource.includes("this.artSprite = scene.add.image"), "minions should render as one complete image instead of moving crop pieces");
+assert.ok(battlefieldSource.includes("UNIT_ASSET_ROOTS"), "every minion should load its complete authored walk and attack poses");
+assert.ok(battlefieldSource.includes("unitTextureKey(this.kind, animation, frame)"), "minions should animate by swapping intact authored frames");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {
@@ -61,6 +70,9 @@ expected.set(path.join("characters", "generals", "puffmaestro", "puffmaestro-mas
 expected.set(path.join("characters", "generals", "thumblestump", "thumblestump-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "broodle", "broodle-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "mallow", "mallow-moon-master-v1.png"), 1254);
+for (const form of ["clackback", "puffmaestro", "thumblestump", "broodle", "mallow"]) {
+  expected.set(path.join("characters", "generals", "runtime-v1", `${form}.png`), 320);
+}
 expectFrames(path.join("characters", "mallow"), ["idle", "cast", "hurt", "cheer"], 160);
 
 for (const kind of ["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]) {
