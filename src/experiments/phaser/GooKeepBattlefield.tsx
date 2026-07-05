@@ -78,6 +78,30 @@ const UNIT_MOTION_PROFILES: Record<CastleUnitKind, UnitMotionProfile> = {
   rootLump: { duration: 0.74, spawnDuration: 0.84, spawnLift: 13, anticipationEnd: 0.26, impactAt: 0.7, frameBeats: [0.24, 0.66, 0.82], axis: "vertical", travel: 9, windup: 6, lift: 8, preImpactStretch: 0.11, impactSquash: 0.2, recoil: 3, angle: 3, walkRate: 0.62, walkBob: 1.5, walkTilt: 1.2, walkStretch: 0.018, idleLift: 0, hitRecoil: 5 },
 };
 
+interface UnitDefeatProfile {
+  duration: number;
+  slide: number;
+  drop: number;
+  scaleX: number;
+  scaleY: number;
+  angle: number;
+}
+
+const UNIT_DEFEAT_PROFILES: Record<CastleUnitKind, UnitDefeatProfile> = {
+  piplet: { duration: 300, slide: 4, drop: 7, scaleX: 0.48, scaleY: 0.48, angle: 8 },
+  dartlet: { duration: 260, slide: 12, drop: 4, scaleX: 0.38, scaleY: 0.42, angle: 22 },
+  bubbleBud: { duration: 340, slide: 4, drop: 8, scaleX: 0.55, scaleY: 0.55, angle: 10 },
+  mendlet: { duration: 360, slide: 3, drop: 6, scaleX: 0.58, scaleY: 0.58, angle: 8 },
+  spitlet: { duration: 300, slide: 10, drop: 5, scaleX: 0.45, scaleY: 0.45, angle: 18 },
+  bigChonk: { duration: 480, slide: 7, drop: 10, scaleX: 1.02, scaleY: 0.75, angle: 10 },
+  shellSlime: { duration: 420, slide: 7, drop: 8, scaleX: 0.96, scaleY: 0.8, angle: 15 },
+  nibbleImp: { duration: 280, slide: 14, drop: 5, scaleX: 0.4, scaleY: 0.42, angle: 25 },
+  sporeBud: { duration: 360, slide: 5, drop: 7, scaleX: 0.5, scaleY: 0.5, angle: 12 },
+  boomcap: { duration: 420, slide: 2, drop: 2, scaleX: 1.35, scaleY: 1.35, angle: 6 },
+  echoMoth: { duration: 380, slide: 10, drop: 15, scaleX: 0.72, scaleY: 0.72, angle: 42 },
+  rootLump: { duration: 500, slide: 5, drop: 10, scaleX: 1.04, scaleY: 0.74, angle: 8 },
+};
+
 function clamp01(value: number): number {
   return Phaser.Math.Clamp(value, 0, 1);
 }
@@ -234,6 +258,22 @@ const GENERAL_MOTION_PROFILES: Record<GeneralForm, GeneralMotionProfile> = {
   thumblestump: { axis: "vertical", summonDuration: 0.72, hitDuration: 0.56, specialDuration: 1.02, specialReleaseAt: 0.7, anticipationEnd: 0.28, impactAt: 0.7, travel: 5, windup: 5, lift: 6, preImpactStretch: 0.09, impactSquash: 0.15, recoil: 2, angle: 2, idleBob: 1.2, idleSquash: 0.009, idleTilt: 0.35, hitRecoil: 4 },
   broodle: { axis: "radial", summonDuration: 0.66, hitDuration: 0.5, specialDuration: 0.94, specialReleaseAt: 0.6, anticipationEnd: 0.24, impactAt: 0.62, travel: 6, windup: 4, lift: 8, preImpactStretch: 0.09, impactSquash: 0.1, recoil: 4, angle: 6, idleBob: 2.2, idleSquash: 0.013, idleTilt: 0.75, hitRecoil: 6 },
   mallow: { axis: "radial", summonDuration: 0.82, hitDuration: 0.52, specialDuration: 1.14, specialReleaseAt: 0.72, anticipationEnd: 0.3, impactAt: 0.7, travel: 2, windup: 1, lift: 14, preImpactStretch: 0.065, impactSquash: 0.055, recoil: 2, angle: 2.2, idleBob: 3.2, idleSquash: 0.012, idleTilt: 0.6, hitRecoil: 5 },
+};
+
+interface GeneralDefeatProfile {
+  angle: number;
+  slide: number;
+  drop: number;
+  widen: number;
+  squash: number;
+}
+
+const GENERAL_DEFEAT_PROFILES: Record<GeneralForm, GeneralDefeatProfile> = {
+  clackback: { angle: 17, slide: 10, drop: 6, widen: 0.035, squash: 0.09 },
+  puffmaestro: { angle: 18, slide: 9, drop: 13, widen: 0.015, squash: 0.055 },
+  thumblestump: { angle: 9, slide: 5, drop: 8, widen: 0.055, squash: 0.13 },
+  broodle: { angle: 20, slide: 11, drop: 7, widen: 0.025, squash: 0.075 },
+  mallow: { angle: 20, slide: 10, drop: 15, widen: 0.012, squash: 0.05 },
 };
 
 const GENERAL_TEXTURES: Record<Exclude<LeaderForm, "pipplo">, string> = {
@@ -555,6 +595,7 @@ class WholeSpriteLeader {
       const settle = dampedSettle(progress, 0.68, 2);
       const reducedScale = reducedMotion ? 0.42 : 1;
       const authoredPipploDefeat = !!this.pipploSprite;
+      const generalDefeat = authoredPipploDefeat ? null : GENERAL_DEFEAT_PROFILES[this.form as GeneralForm];
       if (this.pipploSprite) {
         const defeatFrame = reducedMotion
           ? (progress < 0.5 ? 2 : PIPPLO_ANIMATIONS.defeat.frames)
@@ -567,17 +608,19 @@ class WholeSpriteLeader {
       const proceduralStrength = authoredPipploDefeat ? 0 : reducedScale;
       this.root
         .setPosition(
-          this.homeX - facing * collapse * 4 * proceduralStrength,
-          GROUND_Y + healthDroop + collapse * 7 * proceduralStrength,
+          this.homeX - facing * collapse * (generalDefeat?.slide || 0) * proceduralStrength,
+          GROUND_Y + healthDroop + collapse * (generalDefeat?.drop || 0) * proceduralStrength,
         )
         .setScale(
-          facing * this.visualScale * (1 - brace * 0.04 * proceduralStrength + collapse * 0.1 * proceduralStrength + settle * 0.01),
-          this.visualScale * (1 + brace * 0.05 * proceduralStrength - collapse * 0.3 * proceduralStrength - settle * 0.008),
+          facing * this.visualScale * (1 - brace * 0.04 * proceduralStrength + collapse * (generalDefeat?.widen || 0) * proceduralStrength + settle * 0.01),
+          this.visualScale * (1 + brace * 0.05 * proceduralStrength - collapse * (generalDefeat?.squash || 0) * proceduralStrength - settle * 0.008),
         )
-        .setAngle(facing * (-brace * 1.5 * proceduralStrength - collapse * 8 * proceduralStrength + settle * 1.2));
+        .setAngle(facing * (-brace * 1.5 * proceduralStrength - collapse * (generalDefeat?.angle || 0) * proceduralStrength + settle * 1.2));
+      const shadowWiden = authoredPipploDefeat ? 0.08 : ((generalDefeat?.widen || 0) * 1.8 + 0.04) * proceduralStrength;
+      const shadowSquash = authoredPipploDefeat ? 0.18 : ((generalDefeat?.squash || 0) * 0.8 + 0.06) * proceduralStrength;
       this.shadow
         .setPosition(this.homeX, GROUND_Y + 3)
-        .setScale(this.visualScale * (1 + collapse * (authoredPipploDefeat ? 0.08 : 0.15)), this.visualScale * (1 - collapse * (authoredPipploDefeat ? 0.18 : 0.28)))
+        .setScale(this.visualScale * (1 + collapse * shadowWiden), this.visualScale * (1 - collapse * shadowSquash))
         .setAlpha(1 - collapse * 0.16);
       return;
     }
@@ -677,6 +720,7 @@ class UnitRig {
   private attackSignal = 0;
   private hitSignal = 0;
   private spawnSignal: number;
+  private defeatPreview: number | null = null;
   private textureState = "";
   private retired = false;
 
@@ -861,6 +905,31 @@ class UnitRig {
     const showStatus = !spawning || spawnProgress > 0.76;
     this.hpBar.setVisible(showStatus);
     this.badge.setVisible(showStatus);
+    if (this.defeatPreview !== null) {
+      const defeat = UNIT_DEFEAT_PROFILES[this.kind];
+      const progress = easeOutCubic(this.defeatPreview);
+      const targetScaleX = reducedMotion ? 0.86 : defeat.scaleX;
+      const targetScaleY = reducedMotion ? 0.86 : defeat.scaleY;
+      const defeatStrength = reducedMotion ? 0.35 : 1;
+      this.container
+        .setPosition(
+          this.x + facing * defeat.slide * progress * defeatStrength,
+          this.y + defeat.drop * progress * (reducedMotion ? 0.45 : 1),
+        )
+        .setAlpha(1 - progress * 0.38);
+      this.artRoot
+        .setScale(
+          facing * Phaser.Math.Linear(1, targetScaleX, progress),
+          Phaser.Math.Linear(1, targetScaleY, progress),
+        )
+        .setAngle(facing * defeat.angle * progress * defeatStrength);
+      this.shadow
+        .setPosition(0, 3)
+        .setScale(Phaser.Math.Linear(1, this.kind === "boomcap" ? 1.3 : 0.35, progress), Phaser.Math.Linear(1, 0.45, progress))
+        .setAlpha(1 - progress * 0.7);
+      this.hpBar.setVisible(false);
+      this.badge.setVisible(false);
+    }
   }
 
   retire(reducedMotion: boolean): void {
@@ -869,31 +938,34 @@ class UnitRig {
     this.hpBar.setVisible(false);
     this.badge.setVisible(false);
     const facing = this.side === "enemy" ? -1 : 1;
-    const duration = reducedMotion ? 160 : this.kind === "bigChonk" || this.kind === "rootLump" ? 460 : 340;
+    const profile = UNIT_DEFEAT_PROFILES[this.kind];
+    const duration = reducedMotion ? 160 : profile.duration;
     this.scene.tweens.add({
       targets: this.container,
-      y: this.y + (reducedMotion ? 4 : 11),
+      x: this.container.x + facing * profile.slide * (reducedMotion ? 0.3 : 1),
+      y: this.y + profile.drop * (reducedMotion ? 0.45 : 1),
       alpha: 0,
       duration,
       ease: "Cubic.In",
     });
     this.scene.tweens.add({
       targets: this.artRoot,
-      scaleX: facing * (reducedMotion ? 0.92 : 1.16),
-      scaleY: reducedMotion ? 0.82 : 0.28,
-      angle: facing * (this.kind === "echoMoth" ? -18 : 10),
+      scaleX: facing * (reducedMotion ? 0.86 : profile.scaleX),
+      scaleY: reducedMotion ? 0.86 : profile.scaleY,
+      angle: facing * profile.angle * (reducedMotion ? 0.35 : 1),
       duration,
-      ease: "Back.In",
+      ease: this.kind === "boomcap" ? "Back.Out" : "Cubic.In",
       onComplete: () => this.destroy(),
     });
-    this.scene.tweens.add({ targets: this.shadow, scaleX: 0.25, alpha: 0, duration });
+    this.scene.tweens.add({ targets: this.shadow, scaleX: this.kind === "boomcap" ? 1.3 : 0.35, scaleY: 0.45, alpha: 0, duration });
   }
 
-  previewAction(action: "attack" | "hit" | "spawn", progress: number): void {
+  previewAction(action: "attack" | "hit" | "spawn" | "defeat", progress: number): void {
     const clamped = Phaser.Math.Clamp(progress, 0, 0.999);
     if (action === "attack") this.attackSignal = this.profile.duration * (1 - clamped);
     else if (action === "hit") this.hitSignal = UNIT_HIT_ANIMATION_SECONDS * (1 - clamped);
-    else this.spawnSignal = this.profile.spawnDuration * (1 - clamped);
+    else if (action === "spawn") this.spawnSignal = this.profile.spawnDuration * (1 - clamped);
+    else this.defeatPreview = clamped;
   }
 
 
@@ -1197,7 +1269,7 @@ class GooKeepScene extends Phaser.Scene {
           rig = new UnitRig(this, unit, this.leaderX(side));
           this.unitRigs.set(id, rig);
         }
-        if (fixedProgress !== null && (action === "attack" || action === "hit" || action === "spawn")) rig.previewAction(action, fixedProgress);
+        if (fixedProgress !== null && (action === "attack" || action === "hit" || action === "spawn" || action === "defeat")) rig.previewAction(action, fixedProgress);
         rig.update(unit, this.laneX(50), deltaSeconds, true, this.reducedMotion);
         return;
       }

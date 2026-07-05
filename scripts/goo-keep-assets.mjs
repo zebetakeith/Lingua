@@ -36,6 +36,7 @@ assert.ok(battlefieldSource.includes("UNIT_ASSET_ROOTS"), "every minion should l
 assert.ok(battlefieldSource.includes("unitTextureKey(this.kind, animation, frame)"), "minions should animate by swapping intact authored frames");
 assert.ok(battlefieldSource.includes("UNIT_MOTION_PROFILES"), "every minion should have a distinct anticipation and impact profile");
 assert.ok(battlefieldSource.includes("spawnDuration"), "every minion should enter through a timed summon performance instead of a generic pop-in tween");
+assert.ok(battlefieldSource.includes("UNIT_DEFEAT_PROFILES"), "every minion family should retire with an identity-preserving defeat instead of a shared pancake tween");
 assert.ok(battlefieldSource.includes("preImpactStretch"), "attack motion should accelerate into a stronger pre-impact stretch");
 assert.ok(battlefieldSource.includes("getUnitFxDelay"), "unit hit and support effects should wait for their visual release or contact beat");
 assert.ok(battlefieldSource.includes("playUnitProjectile"), "ranged creature families should fire distinct projectile silhouettes");
@@ -44,6 +45,7 @@ assert.ok(battlefieldSource.includes("pipploMotion"), "Pipplo actions should use
 assert.ok(battlefieldSource.includes("GENERAL_MOTION_PROFILES"), "enemy generals should not share one generic motion rhythm");
 assert.ok(battlefieldSource.includes("specialReleaseAt"), "each enemy general needs a timed signature-power release beat");
 assert.ok(battlefieldSource.includes("isGeneralSignatureFx"), "guardian world effects should wait for the general's telegraphed power action");
+assert.ok(battlefieldSource.includes("GENERAL_DEFEAT_PROFILES"), "general defeats should preserve identity through distinct falls instead of one shared flattening collapse");
 assert.ok(battlefieldSource.includes("retire(reducedMotion"), "defeated minions should animate out instead of disappearing immediately");
 assert.ok(battlefieldSource.includes("LEADER_DEFEAT_SECONDS"), "leaders should have a persistent defeat arc instead of only vanishing");
 

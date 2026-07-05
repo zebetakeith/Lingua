@@ -62,6 +62,7 @@ Motion must explain what a creature is about to do, when the action lands, and h
 - Hit: impact compression, directional recoil, and a quickly decaying whole-body wobble.
 - Devour: anticipation, forward gulp, satisfied squash, and buoyant recovery.
 - Defeat: readable loss of balance, protected identity and face, grounded final pose, and no pancake-like collapse.
+- Small-unit defeats follow role and material: runners skid and tumble, support blobs shrink softly, armored and heavy creatures slump, Echo Moth spirals down, and Boomcap swells into its burst. Uniform vertical flattening is forbidden.
 - Reduced motion: keep state readability but reduce displacement and overshoot.
 
 Four- or five-frame loops are too coarse for hero characters. Use 12–16 cohesive frames for silhouette-changing hero motion, then reserve runtime transforms for subtle whole-character interpolation—not live limb assembly. Small lane units may use four strong key poses when each remains readable at actual phone scale.
