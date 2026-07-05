@@ -205,12 +205,14 @@ const FRIENDLY_UNIT_KINDS = new Set<CastleUnitKind>(["piplet", "dartlet", "bubbl
 
 type LeaderForm = "pipplo" | "mallow" | "clackback" | "puffmaestro" | "thumblestump" | "broodle";
 type GeneralForm = Exclude<LeaderForm, "pipplo">;
-type GeneralAction = "idle" | "summon" | "hit";
+type GeneralAction = "idle" | "summon" | "hit" | "special";
 
 interface GeneralMotionProfile {
   axis: MotionAxis;
   summonDuration: number;
   hitDuration: number;
+  specialDuration: number;
+  specialReleaseAt: number;
   anticipationEnd: number;
   impactAt: number;
   travel: number;
@@ -227,11 +229,11 @@ interface GeneralMotionProfile {
 }
 
 const GENERAL_MOTION_PROFILES: Record<GeneralForm, GeneralMotionProfile> = {
-  clackback: { axis: "horizontal", summonDuration: 0.58, hitDuration: 0.48, anticipationEnd: 0.22, impactAt: 0.6, travel: 9, windup: 5, lift: 3, preImpactStretch: 0.06, impactSquash: 0.08, recoil: 5, angle: 5, idleBob: 1.5, idleSquash: 0.01, idleTilt: 0.55, hitRecoil: 6 },
-  puffmaestro: { axis: "radial", summonDuration: 0.76, hitDuration: 0.54, anticipationEnd: 0.28, impactAt: 0.68, travel: 3, windup: 2, lift: 12, preImpactStretch: 0.08, impactSquash: 0.07, recoil: 2, angle: 2.5, idleBob: 2.8, idleSquash: 0.014, idleTilt: 0.7, hitRecoil: 5 },
-  thumblestump: { axis: "vertical", summonDuration: 0.72, hitDuration: 0.56, anticipationEnd: 0.28, impactAt: 0.7, travel: 5, windup: 5, lift: 6, preImpactStretch: 0.09, impactSquash: 0.15, recoil: 2, angle: 2, idleBob: 1.2, idleSquash: 0.009, idleTilt: 0.35, hitRecoil: 4 },
-  broodle: { axis: "radial", summonDuration: 0.66, hitDuration: 0.5, anticipationEnd: 0.24, impactAt: 0.62, travel: 6, windup: 4, lift: 8, preImpactStretch: 0.09, impactSquash: 0.1, recoil: 4, angle: 6, idleBob: 2.2, idleSquash: 0.013, idleTilt: 0.75, hitRecoil: 6 },
-  mallow: { axis: "radial", summonDuration: 0.82, hitDuration: 0.52, anticipationEnd: 0.3, impactAt: 0.7, travel: 2, windup: 1, lift: 14, preImpactStretch: 0.065, impactSquash: 0.055, recoil: 2, angle: 2.2, idleBob: 3.2, idleSquash: 0.012, idleTilt: 0.6, hitRecoil: 5 },
+  clackback: { axis: "horizontal", summonDuration: 0.58, hitDuration: 0.48, specialDuration: 0.9, specialReleaseAt: 0.62, anticipationEnd: 0.22, impactAt: 0.6, travel: 9, windup: 5, lift: 3, preImpactStretch: 0.06, impactSquash: 0.08, recoil: 5, angle: 5, idleBob: 1.5, idleSquash: 0.01, idleTilt: 0.55, hitRecoil: 6 },
+  puffmaestro: { axis: "radial", summonDuration: 0.76, hitDuration: 0.54, specialDuration: 1.08, specialReleaseAt: 0.68, anticipationEnd: 0.28, impactAt: 0.68, travel: 3, windup: 2, lift: 12, preImpactStretch: 0.08, impactSquash: 0.07, recoil: 2, angle: 2.5, idleBob: 2.8, idleSquash: 0.014, idleTilt: 0.7, hitRecoil: 5 },
+  thumblestump: { axis: "vertical", summonDuration: 0.72, hitDuration: 0.56, specialDuration: 1.02, specialReleaseAt: 0.7, anticipationEnd: 0.28, impactAt: 0.7, travel: 5, windup: 5, lift: 6, preImpactStretch: 0.09, impactSquash: 0.15, recoil: 2, angle: 2, idleBob: 1.2, idleSquash: 0.009, idleTilt: 0.35, hitRecoil: 4 },
+  broodle: { axis: "radial", summonDuration: 0.66, hitDuration: 0.5, specialDuration: 0.94, specialReleaseAt: 0.6, anticipationEnd: 0.24, impactAt: 0.62, travel: 6, windup: 4, lift: 8, preImpactStretch: 0.09, impactSquash: 0.1, recoil: 4, angle: 6, idleBob: 2.2, idleSquash: 0.013, idleTilt: 0.75, hitRecoil: 6 },
+  mallow: { axis: "radial", summonDuration: 0.82, hitDuration: 0.52, specialDuration: 1.14, specialReleaseAt: 0.72, anticipationEnd: 0.3, impactAt: 0.7, travel: 2, windup: 1, lift: 14, preImpactStretch: 0.065, impactSquash: 0.055, recoil: 2, angle: 2.2, idleBob: 3.2, idleSquash: 0.012, idleTilt: 0.6, hitRecoil: 5 },
 };
 
 const GENERAL_TEXTURES: Record<Exclude<LeaderForm, "pipplo">, string> = {
@@ -270,6 +272,64 @@ function generalMotion(form: GeneralForm, action: GeneralAction, progress: numbe
       scaleX: (-impact * 0.075 + recoil * 0.025 + settle * 0.015) * motionScale,
       scaleY: (impact * 0.085 - recoil * 0.02 - settle * 0.012) * motionScale,
       angle: (-impact * profile.angle - recoil * profile.angle * 0.5 + settle * profile.angle * 0.55) * motionScale,
+    };
+  }
+
+  if (action === "special") {
+    const releaseAt = profile.specialReleaseAt;
+    const anticipation = progress < releaseAt
+      ? smoothStep(rangeProgress(progress, 0, releaseAt))
+      : 1 - easeOutCubic(rangeProgress(progress, releaseAt, 0.84));
+    const preRelease = progress < releaseAt ? easeInCubic(rangeProgress(progress, Math.max(0, releaseAt - 0.2), releaseAt)) : 0;
+    const release = sharpPulse(progress, releaseAt, 0.075);
+    const settle = dampedSettle(progress, releaseAt, form === "thumblestump" ? 1.7 : 2.5);
+    const postRelease = Math.sin(rangeProgress(progress, releaseAt, 1) * Math.PI);
+    if (form === "clackback") {
+      return {
+        offsetX: (-anticipation * 5 + preRelease * 13 - postRelease * 4) * motionScale,
+        lift: Math.sin(rangeProgress(progress, 0.22, releaseAt) * Math.PI) * 2 * motionScale,
+        scaleX: (-anticipation * 0.08 + preRelease * 0.14 + release * 0.08 + settle * 0.025) * motionScale,
+        scaleY: (anticipation * 0.09 - preRelease * 0.06 - release * 0.07 - settle * 0.018) * motionScale,
+        angle: (-anticipation * 4 + preRelease * 6 + settle * 2.5) * motionScale,
+      };
+    }
+    if (form === "puffmaestro") {
+      return {
+        offsetX: settle * 2 * motionScale,
+        lift: (anticipation * 11 + Math.sin(rangeProgress(progress, 0.18, releaseAt) * Math.PI) * 5 - postRelease * 3) * motionScale,
+        scaleX: (anticipation * 0.13 + preRelease * 0.05 + release * 0.1 + settle * 0.03) * motionScale,
+        scaleY: (anticipation * 0.1 + preRelease * 0.04 - release * 0.12 - settle * 0.02) * motionScale,
+        angle: (anticipation * -2 + settle * 3) * motionScale,
+      };
+    }
+    if (form === "thumblestump") {
+      const airborne = progress > 0.26 && progress < releaseAt
+        ? Math.sin(rangeProgress(progress, 0.26, releaseAt) * Math.PI) : 0;
+      return {
+        offsetX: settle * 1.5 * motionScale,
+        lift: airborne * 20 * motionScale,
+        scaleX: (anticipation * 0.08 - preRelease * 0.16 + release * 0.2 + settle * 0.02) * motionScale,
+        scaleY: (-anticipation * 0.07 + preRelease * 0.2 - release * 0.18 - settle * 0.015) * motionScale,
+        angle: settle * 1.8 * motionScale,
+      };
+    }
+    if (form === "broodle") {
+      const firstDrum = sharpPulse(progress, 0.34, 0.1);
+      const secondDrum = sharpPulse(progress, releaseAt, 0.09);
+      return {
+        offsetX: (firstDrum * -3 + secondDrum * 5 + settle * 2) * motionScale,
+        lift: (firstDrum * 4 + secondDrum * 7) * motionScale,
+        scaleX: (firstDrum * 0.1 + secondDrum * 0.14 + settle * 0.025) * motionScale,
+        scaleY: (-firstDrum * 0.09 - secondDrum * 0.12 - settle * 0.018) * motionScale,
+        angle: (-firstDrum * 6 + secondDrum * 8 + settle * 4) * motionScale,
+      };
+    }
+    return {
+      offsetX: (preRelease * 4 - postRelease * 2) * motionScale,
+      lift: (Math.sin(rangeProgress(progress, 0.14, 0.86) * Math.PI) * 15 + anticipation * 3) * motionScale,
+      scaleX: (anticipation * 0.07 + preRelease * 0.04 + release * 0.08 + settle * 0.02) * motionScale,
+      scaleY: (anticipation * 0.05 + preRelease * 0.08 - release * 0.1 - settle * 0.015) * motionScale,
+      angle: (-anticipation * 3.5 + preRelease * 5 + settle * 2) * motionScale,
     };
   }
 
@@ -419,6 +479,13 @@ class WholeSpriteLeader {
     this.playPipploAction("summon");
   }
 
+  special(): number {
+    if (!this.generalSprite) return 0;
+    const profile = GENERAL_MOTION_PROFILES[this.form as GeneralForm];
+    this.playGeneralAction("special");
+    return profile.specialDuration * profile.specialReleaseAt * 1_000;
+  }
+
   devour(): void {
     this.playPipploAction("devour");
   }
@@ -446,7 +513,7 @@ class WholeSpriteLeader {
     this.pipploFrame = -1;
   }
 
-  previewAction(action: "hit" | "summon" | "eat" | "defeat", progress: number): void {
+  previewAction(action: "hit" | "summon" | "eat" | "defeat" | "special", progress: number): void {
     const clamped = Phaser.Math.Clamp(progress, 0, 0.995);
     if (action === "defeat") {
       this.defeat();
@@ -454,6 +521,7 @@ class WholeSpriteLeader {
       return;
     }
     if (this.pipploSprite) {
+      if (action === "special") return;
       const animation: Exclude<PipploAnimation, "idle"> = action === "eat" ? "devour" : action;
       this.pipploAnimation = animation;
       this.pipploClock = (PIPPLO_ANIMATIONS[animation].frames / PIPPLO_ANIMATIONS[animation].fps) * clamped;
@@ -464,7 +532,9 @@ class WholeSpriteLeader {
     const form = this.form as GeneralForm;
     const profile = GENERAL_MOTION_PROFILES[form];
     this.generalAction = action;
-    this.generalActionClock = (action === "summon" ? profile.summonDuration : profile.hitDuration) * clamped;
+    const duration = action === "summon" ? profile.summonDuration
+      : action === "special" ? profile.specialDuration : profile.hitDuration;
+    this.generalActionClock = duration * clamped;
   }
 
   setVisible(visible: boolean): void {
@@ -556,13 +626,15 @@ class WholeSpriteLeader {
     const profile = GENERAL_MOTION_PROFILES[form];
     if (this.generalAction !== "idle") {
       this.generalActionClock += deltaSeconds;
-      const duration = this.generalAction === "summon" ? profile.summonDuration : profile.hitDuration;
+      const duration = this.generalAction === "summon" ? profile.summonDuration
+        : this.generalAction === "special" ? profile.specialDuration : profile.hitDuration;
       if (this.generalActionClock >= duration) {
         this.generalAction = "idle";
         this.generalActionClock = 0;
       }
     }
-    const actionDuration = this.generalAction === "summon" ? profile.summonDuration : profile.hitDuration;
+    const actionDuration = this.generalAction === "summon" ? profile.summonDuration
+      : this.generalAction === "special" ? profile.specialDuration : profile.hitDuration;
     const actionProgress = this.generalAction === "idle" ? 0 : Phaser.Math.Clamp(this.generalActionClock / actionDuration, 0, 1);
     const motion = generalMotion(form, this.generalAction, actionProgress, this.phase, motionScale);
     this.root
@@ -978,7 +1050,7 @@ class GooKeepScene extends Phaser.Scene {
     if (!import.meta.env.DEV) return;
     const params = new URLSearchParams(window.location.search);
     const action = params.get("rigAction");
-    if (action !== "hit" && action !== "summon" && action !== "eat" && action !== "defeat") return;
+    if (action !== "hit" && action !== "summon" && action !== "eat" && action !== "defeat" && action !== "special") return;
     const progressParam = params.get("rigActionProgress");
     const requestedProgress = progressParam === null ? Number.NaN : Number(progressParam);
     if (Number.isFinite(requestedProgress)) {
@@ -999,6 +1071,8 @@ class GooKeepScene extends Phaser.Scene {
     } else if (action === "defeat") {
       this.player?.defeat();
       this.enemy?.defeat();
+    } else if (action === "special") {
+      this.enemy?.special();
     } else {
       this.player?.devour();
     }
@@ -1150,7 +1224,11 @@ class GooKeepScene extends Phaser.Scene {
     for (const event of this.snapshot.battle.fxEvents) {
       if (this.handledFxIds.has(event.id)) continue;
       this.handledFxIds.add(event.id);
-      const visualDelay = this.getUnitFxDelay(event);
+      let visualDelay = this.getUnitFxDelay(event);
+      if (this.isGeneralSignatureFx(event)) {
+        const releaseDelay = this.enemy?.special() || 0;
+        visualDelay = Math.max(visualDelay, Math.round(releaseDelay * (this.reducedMotion ? 0.38 : 1)));
+      }
       if (visualDelay > 0) this.time.delayedCall(visualDelay, () => this.playFx(event));
       else this.playFx(event);
     }
@@ -1158,6 +1236,11 @@ class GooKeepScene extends Phaser.Scene {
       const latest = Math.max(...this.handledFxIds);
       this.handledFxIds = new Set(Array.from(this.handledFxIds).filter(id => id > latest - 80));
     }
+  }
+
+  private isGeneralSignatureFx(event: CastleFxEvent): boolean {
+    if (event.side !== "enemy" || !event.label) return false;
+    return ["Shell", "Spore", "Root", "Brood", "Moon"].some(token => event.label?.includes(token));
   }
 
   private findUnitFxSource(event: CastleFxEvent): CastleUnitState | undefined {

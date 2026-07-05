@@ -53,6 +53,7 @@ Motion must explain what a creature is about to do, when the action lands, and h
 - Defeat is a character pose, not a generic flattened transform. Pipplo's authored eight-pose defeat sequence is the reference: surprise, brace, recoil, buckle, fall, defeated hold, tired recovery, stable rest.
 - Summoned units begin as a readable bud at their leader's body, then enter according to their family: runners shoot forward, buoyant casters inflate and rise, and heavy units arc up before a broad landing. Their health and status marks wait until the entrance is nearly complete.
 - Damage particles and numbers land on the attacker's contact beat. Melee effects must not announce damage before the authored lunge or slam reaches impact; projectiles may launch earlier because their travel supplies the delay.
+- Guardian powers begin on the general, not in the scenery. Clackback braces and thrusts, Puffmaestro inhales and rises, Thumblestump leaves the ground before its quake, Broodle strikes a double beat, and Mallow levitates into a moon cast. The lane-wide effect waits for that performance's release pose.
 - Reduced motion keeps the clearest anticipation and impact poses while removing rapid oscillation and large displacement.
 
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.

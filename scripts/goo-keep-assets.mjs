@@ -42,6 +42,8 @@ assert.ok(battlefieldSource.includes("playUnitProjectile"), "ranged creature fam
 assert.ok(battlefieldSource.includes("playUnitSupportFx"), "healing and shielding should travel visibly from caster to target");
 assert.ok(battlefieldSource.includes("pipploMotion"), "Pipplo actions should use distinct semantic motion curves");
 assert.ok(battlefieldSource.includes("GENERAL_MOTION_PROFILES"), "enemy generals should not share one generic motion rhythm");
+assert.ok(battlefieldSource.includes("specialReleaseAt"), "each enemy general needs a timed signature-power release beat");
+assert.ok(battlefieldSource.includes("isGeneralSignatureFx"), "guardian world effects should wait for the general's telegraphed power action");
 assert.ok(battlefieldSource.includes("retire(reducedMotion"), "defeated minions should animate out instead of disappearing immediately");
 assert.ok(battlefieldSource.includes("LEADER_DEFEAT_SECONDS"), "leaders should have a persistent defeat arc instead of only vanishing");
 
