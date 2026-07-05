@@ -40,11 +40,25 @@ All creature motion uses cohesive authored frames. Arms, feet, faces, antennae, 
 - All twelve lane units use their intact 160px four-frame walk and attack sequences. Four clear poses are appropriate at their small playfield scale; frame swaps are bridged by restrained whole-character lift, squash, and recoil.
 - Phaser may add tiny 60fps whole-character scale, rotation, lift, and wobble between frames. It must not move a limb or facial feature independently.
 
+### Action timing is a performance
+
+Motion must explain what a creature is about to do, when the action lands, and how much force it carried. A constant-speed wiggle is texture, not an animation.
+
+- Divide every action into anticipation, commitment, impact, recoil or follow-through, and recovery. Do not give those phases equal duration.
+- Hold the readable anticipation pose long enough to telegraph danger or intent, then accelerate into contact. The last stretch before a jump lands should be faster and stronger than the early lift.
+- Place sprite-frame changes on authored action beats. Runtime stretch and wobble should bridge toward the next pose, peak just before or at the matching frame change, then decay instead of fighting the artwork.
+- Heavy creatures anticipate longer, travel farther vertically, squash harder on impact, and recover slowly. Fast creatures use a short coil, a sharp directional streak, and a quick recoil. Casters rise or open outward before releasing energy.
+- Shadows stay planted on the ground while a creature jumps. Their scale and opacity may change to sell height, but they never ride upward with the sprite.
+- Idle animation yields to action animation. It must never blur a telegraph, change the contact point, or continue at full strength during hit recovery.
+- Defeat is a character pose, not a generic flattened transform. Pipplo's authored eight-pose defeat sequence is the reference: surprise, brace, recoil, buckle, fall, defeated hold, tired recovery, stable rest.
+- Reduced motion keeps the clearest anticipation and impact poses while removing rapid oscillation and large displacement.
+
 - Idle: slow breathing, asymmetrical secondary motion, tiny weight shifts.
 - Travel: the complete silhouette stretches into motion, compresses on contact, and settles back into its anchor.
 - Summon: anticipation squash, upward stretch, soft landing, and a short wobbling settle.
 - Hit: impact compression, directional recoil, and a quickly decaying whole-body wobble.
 - Devour: anticipation, forward gulp, satisfied squash, and buoyant recovery.
+- Defeat: readable loss of balance, protected identity and face, grounded final pose, and no pancake-like collapse.
 - Reduced motion: keep state readability but reduce displacement and overshoot.
 
 Four- or five-frame loops are too coarse for hero characters. Use 12–16 cohesive frames for silhouette-changing hero motion, then reserve runtime transforms for subtle whole-character interpolation—not live limb assembly. Small lane units may use four strong key poses when each remains readable at actual phone scale.
@@ -63,3 +77,5 @@ Use warm cream cards, deep teal ink, coral danger, lemon rewards, and soft trans
 ## Quality gate
 
 Before a visual is accepted, verify it at desktop and phone size in motion. A passing source audit is not enough. Check silhouette, crop, anchor, overlap with the HUD, reduced motion, and whether the action is readable without its text label.
+
+Animation work is iterative rather than roster-complete. After every full-cast pass, replay the actions without labels, identify the weakest telegraphs, most mechanical timing, and noisiest transitions, then begin the next pass. Each new action must earn its motion by communicating gameplay state or character personality.

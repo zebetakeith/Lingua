@@ -16,6 +16,7 @@ import {
 
 const WORLD_HEIGHT = 300;
 const GROUND_Y = 252;
+const LEADER_DEFEAT_SECONDS = 0.9;
 
 type UnitAnimation = "walk" | "attack";
 
@@ -35,15 +36,163 @@ const UNIT_ASSET_ROOTS: Record<CastleUnitKind, string> = {
 };
 
 const UNIT_ANIMATION_FRAMES = 4;
-const UNIT_ATTACK_ANIMATION_SECONDS = 0.38;
+const UNIT_HIT_ANIMATION_SECONDS = 0.34;
 
-type PipploAnimation = "idle" | "summon" | "hit" | "devour";
+type MotionAxis = "horizontal" | "vertical" | "radial";
+
+interface UnitMotionProfile {
+  duration: number;
+  anticipationEnd: number;
+  impactAt: number;
+  frameBeats: readonly [number, number, number];
+  axis: MotionAxis;
+  travel: number;
+  windup: number;
+  lift: number;
+  preImpactStretch: number;
+  impactSquash: number;
+  recoil: number;
+  angle: number;
+  walkRate: number;
+  walkBob: number;
+  walkTilt: number;
+  walkStretch: number;
+  idleLift: number;
+  hitRecoil: number;
+}
+
+const UNIT_MOTION_PROFILES: Record<CastleUnitKind, UnitMotionProfile> = {
+  piplet: { duration: 0.44, anticipationEnd: 0.18, impactAt: 0.58, frameBeats: [0.16, 0.54, 0.76], axis: "vertical", travel: 15, windup: 5, lift: 10, preImpactStretch: 0.09, impactSquash: 0.12, recoil: 3, angle: 5, walkRate: 1.2, walkBob: 2.6, walkTilt: 2, walkStretch: 0.035, idleLift: 0, hitRecoil: 7 },
+  dartlet: { duration: 0.38, anticipationEnd: 0.14, impactAt: 0.5, frameBeats: [0.13, 0.46, 0.7], axis: "horizontal", travel: 24, windup: 8, lift: 4, preImpactStretch: 0.13, impactSquash: 0.05, recoil: 7, angle: 10, walkRate: 1.5, walkBob: 1.8, walkTilt: 4, walkStretch: 0.045, idleLift: 2, hitRecoil: 9 },
+  bubbleBud: { duration: 0.54, anticipationEnd: 0.22, impactAt: 0.62, frameBeats: [0.2, 0.58, 0.8], axis: "radial", travel: 11, windup: 5, lift: 14, preImpactStretch: 0.1, impactSquash: 0.11, recoil: 4, angle: 4, walkRate: 1.05, walkBob: 3.4, walkTilt: 2, walkStretch: 0.05, idleLift: 3, hitRecoil: 7 },
+  mendlet: { duration: 0.66, anticipationEnd: 0.25, impactAt: 0.68, frameBeats: [0.22, 0.62, 0.82], axis: "radial", travel: 4, windup: 2, lift: 12, preImpactStretch: 0.07, impactSquash: 0.05, recoil: 2, angle: 3, walkRate: 0.9, walkBob: 3, walkTilt: 1.5, walkStretch: 0.028, idleLift: 3, hitRecoil: 6 },
+  spitlet: { duration: 0.5, anticipationEnd: 0.2, impactAt: 0.56, frameBeats: [0.18, 0.52, 0.76], axis: "horizontal", travel: 8, windup: 6, lift: 4, preImpactStretch: 0.12, impactSquash: 0.07, recoil: 10, angle: 8, walkRate: 1.1, walkBob: 2, walkTilt: 2.5, walkStretch: 0.035, idleLift: 1, hitRecoil: 8 },
+  bigChonk: { duration: 0.7, anticipationEnd: 0.22, impactAt: 0.72, frameBeats: [0.2, 0.68, 0.82], axis: "vertical", travel: 18, windup: 7, lift: 25, preImpactStretch: 0.17, impactSquash: 0.19, recoil: 3, angle: 4, walkRate: 0.72, walkBob: 2.4, walkTilt: 1.5, walkStretch: 0.025, idleLift: 0, hitRecoil: 6 },
+  shellSlime: { duration: 0.52, anticipationEnd: 0.2, impactAt: 0.58, frameBeats: [0.18, 0.54, 0.78], axis: "horizontal", travel: 14, windup: 5, lift: 3, preImpactStretch: 0.08, impactSquash: 0.1, recoil: 5, angle: 7, walkRate: 0.82, walkBob: 1.6, walkTilt: 1.4, walkStretch: 0.022, idleLift: 0, hitRecoil: 6 },
+  nibbleImp: { duration: 0.42, anticipationEnd: 0.16, impactAt: 0.5, frameBeats: [0.14, 0.46, 0.7], axis: "horizontal", travel: 22, windup: 8, lift: 8, preImpactStretch: 0.13, impactSquash: 0.08, recoil: 8, angle: 12, walkRate: 1.4, walkBob: 2.5, walkTilt: 4, walkStretch: 0.04, idleLift: 0, hitRecoil: 9 },
+  sporeBud: { duration: 0.58, anticipationEnd: 0.22, impactAt: 0.62, frameBeats: [0.2, 0.58, 0.8], axis: "radial", travel: 4, windup: 3, lift: 8, preImpactStretch: 0.07, impactSquash: 0.09, recoil: 4, angle: 4, walkRate: 0.88, walkBob: 2.2, walkTilt: 1.5, walkStretch: 0.025, idleLift: 0, hitRecoil: 7 },
+  boomcap: { duration: 0.64, anticipationEnd: 0.24, impactAt: 0.66, frameBeats: [0.22, 0.62, 0.82], axis: "radial", travel: 7, windup: 4, lift: 12, preImpactStretch: 0.13, impactSquash: 0.18, recoil: 7, angle: 8, walkRate: 0.78, walkBob: 2.8, walkTilt: 2, walkStretch: 0.035, idleLift: 0, hitRecoil: 8 },
+  echoMoth: { duration: 0.54, anticipationEnd: 0.2, impactAt: 0.6, frameBeats: [0.18, 0.56, 0.8], axis: "horizontal", travel: 5, windup: 3, lift: 16, preImpactStretch: 0.09, impactSquash: 0.06, recoil: 8, angle: 5, walkRate: 1.65, walkBob: 4.2, walkTilt: 4, walkStretch: 0.025, idleLift: 10, hitRecoil: 8 },
+  rootLump: { duration: 0.74, anticipationEnd: 0.26, impactAt: 0.7, frameBeats: [0.24, 0.66, 0.82], axis: "vertical", travel: 9, windup: 6, lift: 8, preImpactStretch: 0.11, impactSquash: 0.2, recoil: 3, angle: 3, walkRate: 0.62, walkBob: 1.5, walkTilt: 1.2, walkStretch: 0.018, idleLift: 0, hitRecoil: 5 },
+};
+
+function clamp01(value: number): number {
+  return Phaser.Math.Clamp(value, 0, 1);
+}
+
+function rangeProgress(progress: number, start: number, end: number): number {
+  return clamp01((progress - start) / Math.max(0.0001, end - start));
+}
+
+function easeInCubic(value: number): number {
+  const t = clamp01(value);
+  return t * t * t;
+}
+
+function easeOutCubic(value: number): number {
+  const t = 1 - clamp01(value);
+  return 1 - t * t * t;
+}
+
+function smoothStep(value: number): number {
+  const t = clamp01(value);
+  return t * t * (3 - 2 * t);
+}
+
+function sharpPulse(progress: number, center: number, halfWidth: number): number {
+  return Math.pow(clamp01(1 - Math.abs(progress - center) / halfWidth), 2);
+}
+
+function dampedSettle(progress: number, start: number, cycles = 2.5): number {
+  const t = rangeProgress(progress, start, 1);
+  return progress < start ? 0 : Math.sin(t * Math.PI * cycles * 2) * Math.exp(-3.8 * t);
+}
+
+function animationFrameForBeats(progress: number, beats: UnitMotionProfile["frameBeats"]): number {
+  if (progress < beats[0]) return 1;
+  if (progress < beats[1]) return 2;
+  if (progress < beats[2]) return 3;
+  return 4;
+}
+
+interface WholeSpriteMotion {
+  offsetX: number;
+  lift: number;
+  scaleX: number;
+  scaleY: number;
+  angle: number;
+}
+
+function pipploMotion(animation: PipploAnimation, progress: number, clock: number, motionScale: number): WholeSpriteMotion {
+  if (animation === "idle") {
+    const breath = Math.sin(clock * Math.PI * 2);
+    const sway = Math.sin(clock * Math.PI * 0.85 + 0.4);
+    return {
+      offsetX: 0,
+      lift: Math.max(0, breath) * 0.75 * motionScale,
+      scaleX: breath * 0.006 * motionScale,
+      scaleY: -breath * 0.005 * motionScale,
+      angle: sway * 0.45 * motionScale,
+    };
+  }
+
+  if (animation === "summon") {
+    const anticipation = progress < 0.18
+      ? smoothStep(rangeProgress(progress, 0, 0.18))
+      : progress < 0.34 ? 1 - easeOutCubic(rangeProgress(progress, 0.18, 0.34)) : 0;
+    const launchT = rangeProgress(progress, 0.2, 0.64);
+    const airborne = progress > 0.2 && progress < 0.64 ? Math.sin(launchT * Math.PI) : 0;
+    const preLandingStretch = progress < 0.64 ? easeInCubic(rangeProgress(progress, 0.49, 0.64)) : 0;
+    const impact = sharpPulse(progress, 0.66, 0.07);
+    const settle = dampedSettle(progress, 0.66, 2.5);
+    return {
+      offsetX: (easeOutCubic(rangeProgress(progress, 0.2, 0.5)) - easeOutCubic(rangeProgress(progress, 0.66, 1))) * 2.5 * motionScale,
+      lift: airborne * 7.5 * motionScale,
+      scaleX: (anticipation * 0.075 - preLandingStretch * 0.085 + impact * 0.12 + settle * 0.022) * motionScale,
+      scaleY: (-anticipation * 0.065 + preLandingStretch * 0.125 - impact * 0.105 - settle * 0.018) * motionScale,
+      angle: (-anticipation * 1.8 + settle * 1.5) * motionScale,
+    };
+  }
+
+  if (animation === "hit") {
+    const impact = sharpPulse(progress, 0.08, 0.1);
+    const recoil = progress < 0.62 ? Math.sin(rangeProgress(progress, 0.04, 0.62) * Math.PI) : 0;
+    const settle = dampedSettle(progress, 0.22, 3);
+    return {
+      offsetX: -(impact * 5.5 + recoil * 3) * motionScale,
+      lift: recoil * 1.5 * motionScale,
+      scaleX: (-impact * 0.09 + recoil * 0.025 + settle * 0.016) * motionScale,
+      scaleY: (impact * 0.11 - recoil * 0.02 - settle * 0.012) * motionScale,
+      angle: (-impact * 5.5 - recoil * 2.8 + settle * 2.2) * motionScale,
+    };
+  }
+
+  const anticipation = progress < 0.24
+    ? smoothStep(rangeProgress(progress, 0, 0.24))
+    : progress < 0.42 ? 1 - easeOutCubic(rangeProgress(progress, 0.24, 0.42)) : 0;
+  const gulpWindup = progress < 0.58 ? easeInCubic(rangeProgress(progress, 0.28, 0.58)) : 0;
+  const gulp = sharpPulse(progress, 0.6, 0.09);
+  const satisfied = dampedSettle(progress, 0.62, 2.25);
+  const forward = progress <= 0.62
+    ? easeInCubic(rangeProgress(progress, 0.26, 0.62))
+    : 1 - easeOutCubic(rangeProgress(progress, 0.62, 1));
+  return {
+    offsetX: (forward * 7 - anticipation * 2) * motionScale,
+    lift: Math.sin(rangeProgress(progress, 0.28, 0.72) * Math.PI) * 2.2 * motionScale,
+    scaleX: (-anticipation * 0.055 + gulpWindup * 0.075 + gulp * 0.14 + satisfied * 0.028) * motionScale,
+    scaleY: (anticipation * 0.045 - gulpWindup * 0.055 - gulp * 0.12 - satisfied * 0.022) * motionScale,
+    angle: (anticipation * 1.4 - forward * 2.1 + satisfied * 1.7) * motionScale,
+  };
+}
+
+type PipploAnimation = "idle" | "summon" | "hit" | "devour" | "defeat";
 
 const PIPPLO_ANIMATIONS: Record<PipploAnimation, { frames: number; fps: number; loop: boolean }> = {
   idle: { frames: 16, fps: 8, loop: true },
   summon: { frames: 8, fps: 8.5, loop: false },
   hit: { frames: 12, fps: 14, loop: false },
   devour: { frames: 16, fps: 11, loop: false },
+  defeat: { frames: 8, fps: 8.7, loop: false },
 };
 
 function pipploTextureKey(animation: PipploAnimation, frame: number): string {
@@ -53,6 +202,35 @@ function pipploTextureKey(animation: PipploAnimation, frame: number): string {
 const FRIENDLY_UNIT_KINDS = new Set<CastleUnitKind>(["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]);
 
 type LeaderForm = "pipplo" | "mallow" | "clackback" | "puffmaestro" | "thumblestump" | "broodle";
+type GeneralForm = Exclude<LeaderForm, "pipplo">;
+type GeneralAction = "idle" | "summon" | "hit";
+
+interface GeneralMotionProfile {
+  axis: MotionAxis;
+  summonDuration: number;
+  hitDuration: number;
+  anticipationEnd: number;
+  impactAt: number;
+  travel: number;
+  windup: number;
+  lift: number;
+  preImpactStretch: number;
+  impactSquash: number;
+  recoil: number;
+  angle: number;
+  idleBob: number;
+  idleSquash: number;
+  idleTilt: number;
+  hitRecoil: number;
+}
+
+const GENERAL_MOTION_PROFILES: Record<GeneralForm, GeneralMotionProfile> = {
+  clackback: { axis: "horizontal", summonDuration: 0.58, hitDuration: 0.48, anticipationEnd: 0.22, impactAt: 0.6, travel: 9, windup: 5, lift: 3, preImpactStretch: 0.06, impactSquash: 0.08, recoil: 5, angle: 5, idleBob: 1.5, idleSquash: 0.01, idleTilt: 0.55, hitRecoil: 6 },
+  puffmaestro: { axis: "radial", summonDuration: 0.76, hitDuration: 0.54, anticipationEnd: 0.28, impactAt: 0.68, travel: 3, windup: 2, lift: 12, preImpactStretch: 0.08, impactSquash: 0.07, recoil: 2, angle: 2.5, idleBob: 2.8, idleSquash: 0.014, idleTilt: 0.7, hitRecoil: 5 },
+  thumblestump: { axis: "vertical", summonDuration: 0.72, hitDuration: 0.56, anticipationEnd: 0.28, impactAt: 0.7, travel: 5, windup: 5, lift: 6, preImpactStretch: 0.09, impactSquash: 0.15, recoil: 2, angle: 2, idleBob: 1.2, idleSquash: 0.009, idleTilt: 0.35, hitRecoil: 4 },
+  broodle: { axis: "radial", summonDuration: 0.66, hitDuration: 0.5, anticipationEnd: 0.24, impactAt: 0.62, travel: 6, windup: 4, lift: 8, preImpactStretch: 0.09, impactSquash: 0.1, recoil: 4, angle: 6, idleBob: 2.2, idleSquash: 0.013, idleTilt: 0.75, hitRecoil: 6 },
+  mallow: { axis: "radial", summonDuration: 0.82, hitDuration: 0.52, anticipationEnd: 0.3, impactAt: 0.7, travel: 2, windup: 1, lift: 14, preImpactStretch: 0.065, impactSquash: 0.055, recoil: 2, angle: 2.2, idleBob: 3.2, idleSquash: 0.012, idleTilt: 0.6, hitRecoil: 5 },
+};
 
 const GENERAL_TEXTURES: Record<Exclude<LeaderForm, "pipplo">, string> = {
   mallow: "characters/generals/runtime-v1/mallow.png",
@@ -64,6 +242,71 @@ const GENERAL_TEXTURES: Record<Exclude<LeaderForm, "pipplo">, string> = {
 
 function generalTextureKey(form: Exclude<LeaderForm, "pipplo">): string {
   return `goo-general-${form}`;
+}
+
+function generalMotion(form: GeneralForm, action: GeneralAction, progress: number, phase: number, motionScale: number): WholeSpriteMotion {
+  const profile = GENERAL_MOTION_PROFILES[form];
+  if (action === "idle") {
+    const bob = Math.sin(phase * 1.12);
+    const squash = Math.sin(phase * 1.9);
+    return {
+      offsetX: 0,
+      lift: bob * profile.idleBob * motionScale,
+      scaleX: squash * profile.idleSquash * motionScale,
+      scaleY: -squash * profile.idleSquash * 0.8 * motionScale,
+      angle: Math.sin(phase * 0.5) * profile.idleTilt * motionScale,
+    };
+  }
+
+  if (action === "hit") {
+    const impact = sharpPulse(progress, 0.09, 0.11);
+    const recoil = progress < 0.7 ? Math.sin(rangeProgress(progress, 0.04, 0.7) * Math.PI) : 0;
+    const settle = dampedSettle(progress, 0.22, profile.axis === "vertical" ? 1.8 : 2.5);
+    return {
+      offsetX: -(impact * profile.hitRecoil + recoil * profile.hitRecoil * 0.5) * motionScale,
+      lift: recoil * (profile.axis === "radial" ? 2.4 : 1.2) * motionScale,
+      scaleX: (-impact * 0.075 + recoil * 0.025 + settle * 0.015) * motionScale,
+      scaleY: (impact * 0.085 - recoil * 0.02 - settle * 0.012) * motionScale,
+      angle: (-impact * profile.angle - recoil * profile.angle * 0.5 + settle * profile.angle * 0.55) * motionScale,
+    };
+  }
+
+  const anticipation = progress < profile.anticipationEnd
+    ? smoothStep(rangeProgress(progress, 0, profile.anticipationEnd))
+    : progress < profile.impactAt
+      ? 1 - easeOutCubic(rangeProgress(progress, profile.anticipationEnd, profile.impactAt))
+      : 0;
+  const forward = progress <= profile.impactAt
+    ? easeInCubic(rangeProgress(progress, profile.anticipationEnd, profile.impactAt))
+    : 1 - easeOutCubic(rangeProgress(progress, profile.impactAt, 1));
+  const preImpact = progress < profile.impactAt
+    ? easeInCubic(rangeProgress(progress, Math.max(profile.anticipationEnd, profile.impactAt - 0.16), profile.impactAt))
+    : 0;
+  const impact = sharpPulse(progress, profile.impactAt, 0.07);
+  const settle = dampedSettle(progress, profile.impactAt, profile.axis === "radial" ? 2.75 : 2);
+  const jumpT = rangeProgress(progress, profile.anticipationEnd, profile.impactAt);
+  const airborne = progress > profile.anticipationEnd && progress < profile.impactAt ? Math.sin(jumpT * Math.PI) : 0;
+  const axisLift = profile.axis === "vertical" ? 0.55 : profile.axis === "radial" ? 1 : 0.2;
+
+  let scaleX = 0;
+  let scaleY = 0;
+  if (profile.axis === "vertical") {
+    scaleX = anticipation * 0.06 - preImpact * profile.preImpactStretch + impact * profile.impactSquash + settle * 0.018;
+    scaleY = -anticipation * 0.05 + preImpact * profile.preImpactStretch * 1.2 - impact * profile.impactSquash + settle * -0.014;
+  } else if (profile.axis === "horizontal") {
+    scaleX = -anticipation * 0.045 + preImpact * profile.preImpactStretch + impact * profile.impactSquash * 0.45 + settle * 0.018;
+    scaleY = anticipation * 0.04 - preImpact * profile.preImpactStretch * 0.45 - impact * profile.impactSquash * 0.35 + settle * -0.012;
+  } else {
+    scaleX = anticipation * profile.preImpactStretch * 0.55 + preImpact * 0.025 + impact * profile.impactSquash + settle * 0.02;
+    scaleY = anticipation * profile.preImpactStretch * 0.55 + preImpact * 0.025 - impact * profile.impactSquash * 0.8 + settle * -0.015;
+  }
+  return {
+    offsetX: (forward * profile.travel - anticipation * profile.windup - Math.sin(rangeProgress(progress, profile.impactAt, 1) * Math.PI) * profile.recoil) * motionScale,
+    lift: airborne * profile.lift * axisLift * motionScale,
+    scaleX: scaleX * motionScale,
+    scaleY: scaleY * motionScale,
+    angle: (-anticipation * profile.angle + forward * profile.angle * 0.25 + settle * profile.angle * 0.55) * motionScale,
+  };
 }
 
 const UNIT_WHOLE_SPRITE_CONFIGS: Record<CastleUnitKind, { scale: number; originY: number }> = {
@@ -124,9 +367,10 @@ class WholeSpriteLeader {
   private pipploAnimation: PipploAnimation = "idle";
   private pipploClock = 0;
   private pipploFrame = -1;
-  private reaction = 0;
-  private summonPulse = 0;
-  private eatPulse = 0;
+  private generalAction: GeneralAction = "idle";
+  private generalActionClock = 0;
+  private defeated = false;
+  private defeatClock = 0;
   private phase = 0;
   private hpRatio = 1;
 
@@ -164,18 +408,33 @@ class WholeSpriteLeader {
   }
 
   hit(): void {
-    this.reaction = 1;
+    this.playGeneralAction("hit");
     this.playPipploAction("hit");
   }
 
   summon(): void {
-    this.summonPulse = 1;
+    this.playGeneralAction("summon");
     this.playPipploAction("summon");
   }
 
   devour(): void {
-    this.eatPulse = 1;
     this.playPipploAction("devour");
+  }
+
+  defeat(): void {
+    this.defeated = true;
+    this.defeatClock = 0;
+    if (this.pipploSprite) {
+      this.pipploAnimation = "defeat";
+      this.pipploClock = 0;
+      this.pipploFrame = -1;
+    }
+  }
+
+  private playGeneralAction(action: Exclude<GeneralAction, "idle">): void {
+    if (!this.generalSprite) return;
+    this.generalAction = action;
+    this.generalActionClock = 0;
   }
 
   private playPipploAction(animation: Exclude<PipploAnimation, "idle">): void {
@@ -185,6 +444,27 @@ class WholeSpriteLeader {
     this.pipploFrame = -1;
   }
 
+  previewAction(action: "hit" | "summon" | "eat" | "defeat", progress: number): void {
+    const clamped = Phaser.Math.Clamp(progress, 0, 0.995);
+    if (action === "defeat") {
+      this.defeat();
+      this.defeatClock = LEADER_DEFEAT_SECONDS * clamped;
+      return;
+    }
+    if (this.pipploSprite) {
+      const animation: Exclude<PipploAnimation, "idle"> = action === "eat" ? "devour" : action;
+      this.pipploAnimation = animation;
+      this.pipploClock = (PIPPLO_ANIMATIONS[animation].frames / PIPPLO_ANIMATIONS[animation].fps) * clamped;
+      this.pipploFrame = -1;
+      return;
+    }
+    if (action === "eat") return;
+    const form = this.form as GeneralForm;
+    const profile = GENERAL_MOTION_PROFILES[form];
+    this.generalAction = action;
+    this.generalActionClock = (action === "summon" ? profile.summonDuration : profile.hitDuration) * clamped;
+  }
+
   setVisible(visible: boolean): void {
     this.root.setVisible(visible);
     this.shadow.setVisible(visible);
@@ -192,13 +472,43 @@ class WholeSpriteLeader {
 
   update(deltaSeconds: number, live: boolean, reducedMotion: boolean): void {
     this.phase += deltaSeconds * (live ? 2.45 : 0.82);
-    this.reaction = Math.max(0, this.reaction - deltaSeconds * 3.4);
-    this.summonPulse = Math.max(0, this.summonPulse - deltaSeconds * 3.2);
-    this.eatPulse = Math.max(0, this.eatPulse - deltaSeconds * 2.15);
     const motionScale = reducedMotion ? 0.24 : 1;
     const healthDroop = (1 - this.hpRatio) * 7;
     const facing = this.side === "enemy" ? -1 : 1;
-    const reactionShove = this.reaction * 4 * facing;
+    if (this.defeated) {
+      this.defeatClock = Math.min(LEADER_DEFEAT_SECONDS, this.defeatClock + deltaSeconds);
+      const progress = this.defeatClock / LEADER_DEFEAT_SECONDS;
+      const brace = progress < 0.16 ? smoothStep(rangeProgress(progress, 0, 0.16)) : 0;
+      const collapse = easeOutCubic(rangeProgress(progress, 0.14, 0.78));
+      const settle = dampedSettle(progress, 0.68, 2);
+      const reducedScale = reducedMotion ? 0.42 : 1;
+      const authoredPipploDefeat = !!this.pipploSprite;
+      if (this.pipploSprite) {
+        const defeatFrame = reducedMotion
+          ? (progress < 0.5 ? 2 : PIPPLO_ANIMATIONS.defeat.frames)
+          : Math.min(PIPPLO_ANIMATIONS.defeat.frames, Math.floor(progress * PIPPLO_ANIMATIONS.defeat.frames) + 1);
+        if (defeatFrame !== this.pipploFrame) {
+          this.pipploFrame = defeatFrame;
+          this.pipploSprite.setTexture(pipploTextureKey("defeat", defeatFrame));
+        }
+      }
+      const proceduralStrength = authoredPipploDefeat ? 0 : reducedScale;
+      this.root
+        .setPosition(
+          this.homeX - facing * collapse * 4 * proceduralStrength,
+          GROUND_Y + healthDroop + collapse * 7 * proceduralStrength,
+        )
+        .setScale(
+          facing * this.visualScale * (1 - brace * 0.04 * proceduralStrength + collapse * 0.1 * proceduralStrength + settle * 0.01),
+          this.visualScale * (1 + brace * 0.05 * proceduralStrength - collapse * 0.3 * proceduralStrength - settle * 0.008),
+        )
+        .setAngle(facing * (-brace * 1.5 * proceduralStrength - collapse * 8 * proceduralStrength + settle * 1.2));
+      this.shadow
+        .setPosition(this.homeX, GROUND_Y + 3)
+        .setScale(this.visualScale * (1 + collapse * (authoredPipploDefeat ? 0.08 : 0.15)), this.visualScale * (1 - collapse * (authoredPipploDefeat ? 0.18 : 0.28)))
+        .setAlpha(1 - collapse * 0.16);
+      return;
+    }
     if (this.pipploSprite) {
       const config = PIPPLO_ANIMATIONS[this.pipploAnimation];
       const clockRate = this.pipploAnimation === "idle" ? (live ? 1 : 0.5) : 1;
@@ -223,40 +533,47 @@ class WholeSpriteLeader {
         this.pipploSprite.setTexture(pipploTextureKey(this.pipploAnimation, nextFrame));
       }
 
-      // High-frame authored poses do the acting; these tiny 60fps transforms
-      // bridge the poses so the complete sprite still feels soft and elastic.
-      const idleWave = Math.sin(this.pipploClock * Math.PI * 2) * motionScale;
-      const actionEnvelope = activeConfig.loop ? 0 : Math.sin(actionProgress * Math.PI) * motionScale;
-      const bridgeWobble = activeConfig.loop
-        ? idleWave
-        : Math.sin(actionProgress * Math.PI * 5) * actionEnvelope;
-      const bridgeScaleX = 1 + (activeConfig.loop ? idleWave * 0.006 : bridgeWobble * 0.012);
-      const bridgeScaleY = 1 - (activeConfig.loop ? idleWave * 0.005 : bridgeWobble * 0.009);
-      const bridgeLift = activeConfig.loop ? Math.max(0, idleWave) * 0.8 : actionEnvelope * 1.8;
+      // Each action gets its own anticipation, impact, and recovery curve.
+      // The complete authored sprite still moves as one object between frames.
+      const motion = pipploMotion(this.pipploAnimation, actionProgress, this.pipploClock, motionScale);
       this.root
-        .setPosition(this.homeX, GROUND_Y + healthDroop - bridgeLift)
+        .setPosition(this.homeX + motion.offsetX * facing, GROUND_Y + healthDroop - motion.lift)
         .setScale(
-          facing * this.visualScale * bridgeScaleX,
-          this.visualScale * bridgeScaleY,
+          facing * this.visualScale * (1 + motion.scaleX),
+          this.visualScale * (1 + motion.scaleY),
         )
-        .setAngle(bridgeWobble * 0.55 * facing);
+        .setAngle(motion.angle * facing);
       this.shadow
         .setPosition(this.homeX, GROUND_Y + 3)
-        .setScale(this.visualScale * (1 - bridgeLift * 0.015), this.visualScale * (1 - bridgeLift * 0.008));
+        .setScale(this.visualScale * (1 - motion.lift * 0.018 + Math.max(0, motion.scaleX) * 0.2), this.visualScale * (1 - motion.lift * 0.01))
+        .setAlpha(1 - Math.min(0.32, motion.lift * 0.025));
       return;
     }
-    const wholeBob = Math.sin(this.phase * 1.12) * 2.2 * motionScale;
-    const wholeSquash = Math.sin(this.phase * 1.9) * 0.014 * motionScale;
+
+    const form = this.form as GeneralForm;
+    const profile = GENERAL_MOTION_PROFILES[form];
+    if (this.generalAction !== "idle") {
+      this.generalActionClock += deltaSeconds;
+      const duration = this.generalAction === "summon" ? profile.summonDuration : profile.hitDuration;
+      if (this.generalActionClock >= duration) {
+        this.generalAction = "idle";
+        this.generalActionClock = 0;
+      }
+    }
+    const actionDuration = this.generalAction === "summon" ? profile.summonDuration : profile.hitDuration;
+    const actionProgress = this.generalAction === "idle" ? 0 : Phaser.Math.Clamp(this.generalActionClock / actionDuration, 0, 1);
+    const motion = generalMotion(form, this.generalAction, actionProgress, this.phase, motionScale);
     this.root
-      .setPosition(this.homeX + this.summonPulse * 3 * facing - reactionShove, GROUND_Y + wholeBob + healthDroop - this.summonPulse * 3)
+      .setPosition(this.homeX + motion.offsetX * facing, GROUND_Y + healthDroop - motion.lift)
       .setScale(
-        facing * this.visualScale * (1 + wholeSquash + this.summonPulse * 0.03 + this.reaction * 0.018),
-        this.visualScale * (1 - wholeSquash - this.summonPulse * 0.02 + this.reaction * 0.02),
+        facing * this.visualScale * (1 + motion.scaleX),
+        this.visualScale * (1 + motion.scaleY),
       )
-      .setAngle(Math.sin(this.phase * 0.5) * 0.65 * motionScale + this.reaction * 2.5 * facing);
+      .setAngle(motion.angle * facing);
     this.shadow
       .setPosition(this.homeX, GROUND_Y + 3)
-      .setScale(this.visualScale * (1 - Math.abs(wholeBob) / 30 + this.summonPulse * 0.04), this.visualScale);
+      .setScale(this.visualScale * (1 - Math.abs(motion.lift) / 34 + Math.max(0, motion.scaleX) * 0.2), this.visualScale * (1 - Math.abs(motion.lift) / 48))
+      .setAlpha(1 - Math.min(0.3, Math.max(0, motion.lift) * 0.018));
   }
 
 
@@ -276,6 +593,7 @@ class UnitRig {
   private readonly badge: Phaser.GameObjects.Text;
   private readonly side: CastleSide;
   private readonly kind: CastleUnitKind;
+  private readonly profile: UnitMotionProfile;
   private readonly barY: number;
   private x: number;
   private y: number;
@@ -285,11 +603,13 @@ class UnitRig {
   private attackSignal = 0;
   private hitSignal = 0;
   private textureState = "";
+  private retired = false;
 
   constructor(scene: Phaser.Scene, unit: CastleUnitState, spawnX: number) {
     this.scene = scene;
     this.side = unit.side;
     this.kind = unit.kind;
+    this.profile = UNIT_MOTION_PROFILES[unit.kind];
     this.x = spawnX;
     this.y = GROUND_Y + 1;
     this.lastHp = unit.hp;
@@ -308,49 +628,152 @@ class UnitRig {
   }
 
   update(unit: CastleUnitState, targetX: number, deltaSeconds: number, live: boolean, reducedMotion: boolean): void {
+    if (this.retired) return;
     const motion = reducedMotion ? 0.35 : 1;
+    const profile = this.profile;
     this.vx += (targetX - this.x) * 35 * deltaSeconds;
     this.vx *= Math.pow(0.012, deltaSeconds);
     this.x += this.vx * deltaSeconds;
     this.phase += deltaSeconds * (live ? 5.2 : 1.1);
+
     if (unit.hp < this.lastHp) {
       this.scene.tweens.add({ targets: this.artRoot, alpha: 0.25, yoyo: true, duration: 70, repeat: 1, onComplete: () => this.artRoot.setAlpha(1) });
-      this.container.x += this.side === "player" ? -8 : 8;
-      this.hitSignal = 1;
+      this.hitSignal = UNIT_HIT_ANIMATION_SECONDS;
     }
     this.lastHp = unit.hp;
     if (unit.attackCooldownMs > CASTLE_UNIT_DEFS[unit.kind].attackMs - 170 && this.attackSignal <= 0) {
-      this.attackSignal = UNIT_ATTACK_ANIMATION_SECONDS;
+      this.attackSignal = profile.duration;
     }
     this.attackSignal = Math.max(0, this.attackSignal - deltaSeconds);
-    this.hitSignal = Math.max(0, this.hitSignal - deltaSeconds * 5.5);
+    this.hitSignal = Math.max(0, this.hitSignal - deltaSeconds);
+
     const attacking = this.attackSignal > 0;
-    const attackProgress = attacking ? 1 - this.attackSignal / UNIT_ATTACK_ANIMATION_SECONDS : 0;
+    const attackProgress = attacking ? 1 - this.attackSignal / profile.duration : 0;
     const animation: UnitAnimation = attacking ? "attack" : "walk";
     const frame = reducedMotion
-      ? attacking ? (attackProgress < 0.55 ? 2 : UNIT_ANIMATION_FRAMES) : 1
+      ? attacking ? (attackProgress < profile.impactAt ? 2 : UNIT_ANIMATION_FRAMES) : 1
       : attacking
-        ? Math.min(UNIT_ANIMATION_FRAMES, Math.floor(attackProgress * UNIT_ANIMATION_FRAMES) + 1)
-        : Math.floor(this.phase * 1.25) % UNIT_ANIMATION_FRAMES + 1;
+        ? animationFrameForBeats(attackProgress, profile.frameBeats)
+        : Math.floor(this.phase * profile.walkRate) % UNIT_ANIMATION_FRAMES + 1;
     const nextTexture = unitTextureKey(this.kind, animation, frame);
     if (nextTexture !== this.textureState) {
       this.textureState = nextTexture;
       this.artSprite.setTexture(nextTexture);
     }
-    const bob = Math.sin(this.phase) * 2 * motion;
-    const lunge = attacking ? Math.sin((this.attackSignal / UNIT_ATTACK_ANIMATION_SECONDS) * Math.PI) * 12 * (this.side === "player" ? 1 : -1) : 0;
-    const stretch = Math.min(0.12, Math.abs(this.vx) / 650) * motion;
-    this.container.setPosition(this.x + lunge, this.y + bob);
+
+    const walkPhase = this.phase * profile.walkRate;
+    const bob = Math.sin(walkPhase) * profile.walkBob * motion;
+    const walkSquash = Math.sin(walkPhase * 2) * profile.walkStretch * motion;
+    const movementStretch = Math.min(0.1, Math.abs(this.vx) / 700) * motion;
     const facing = this.side === "enemy" ? -1 : 1;
+
+    let lunge = 0;
+    let airborne = 0;
+    let attackScaleX = 0;
+    let attackScaleY = 0;
+    let attackAngle = 0;
+    if (attacking) {
+      const anticipation = attackProgress < profile.anticipationEnd
+        ? smoothStep(rangeProgress(attackProgress, 0, profile.anticipationEnd))
+        : attackProgress < profile.impactAt
+          ? 1 - easeOutCubic(rangeProgress(attackProgress, profile.anticipationEnd, profile.impactAt))
+          : 0;
+      const forward = attackProgress <= profile.impactAt
+        ? easeInCubic(rangeProgress(attackProgress, profile.anticipationEnd, profile.impactAt))
+        : 1 - easeOutCubic(rangeProgress(attackProgress, profile.impactAt, 1));
+      const preImpactStart = Math.max(profile.anticipationEnd, profile.impactAt - 0.16);
+      const preImpact = attackProgress < profile.impactAt
+        ? easeInCubic(rangeProgress(attackProgress, preImpactStart, profile.impactAt))
+        : 0;
+      const impact = sharpPulse(attackProgress, profile.impactAt, 0.065);
+      const postImpact = rangeProgress(attackProgress, profile.impactAt, 1);
+      const recoil = attackProgress >= profile.impactAt ? Math.sin(postImpact * Math.PI) * profile.recoil : 0;
+      const settle = dampedSettle(attackProgress, profile.impactAt, profile.axis === "radial" ? 3 : 2.25);
+      const jumpProgress = rangeProgress(attackProgress, profile.anticipationEnd, profile.impactAt);
+      const liftFactor = attackProgress > profile.anticipationEnd && attackProgress < profile.impactAt
+        ? Math.sin(jumpProgress * Math.PI)
+        : 0;
+      const axisLift = profile.axis === "vertical" ? 1 : profile.axis === "radial" ? 0.65 : 0.28;
+
+      lunge = facing * (forward * profile.travel - anticipation * profile.windup - recoil);
+      airborne = liftFactor * profile.lift * axisLift * motion;
+
+      if (profile.axis === "vertical") {
+        attackScaleX = anticipation * 0.08 - preImpact * profile.preImpactStretch + impact * profile.impactSquash + settle * 0.025;
+        attackScaleY = -anticipation * 0.08 + preImpact * profile.preImpactStretch * 1.25 - impact * profile.impactSquash * 1.08 - settle * 0.02;
+      } else if (profile.axis === "horizontal") {
+        attackScaleX = -anticipation * 0.06 + preImpact * profile.preImpactStretch * 1.2 + impact * profile.impactSquash * 0.45 + settle * 0.02;
+        attackScaleY = anticipation * 0.06 - preImpact * profile.preImpactStretch * 0.5 - impact * profile.impactSquash * 0.4 - settle * 0.015;
+      } else {
+        const charge = anticipation * profile.preImpactStretch * 0.7;
+        attackScaleX = charge + preImpact * profile.preImpactStretch * 0.35 + impact * profile.impactSquash + settle * 0.025;
+        attackScaleY = charge + preImpact * profile.preImpactStretch * 0.35 - impact * profile.impactSquash * 0.85 - settle * 0.02;
+      }
+      attackAngle = facing * (-anticipation * profile.angle + forward * profile.angle * 0.32 + settle * profile.angle * 0.55) * motion;
+    }
+
+    const hitActive = this.hitSignal > 0;
+    const hitProgress = hitActive ? 1 - this.hitSignal / UNIT_HIT_ANIMATION_SECONDS : 0;
+    const hitImpact = hitActive ? sharpPulse(hitProgress, 0.1, 0.12) : 0;
+    const hitRecovery = hitActive ? Math.sin(hitProgress * Math.PI) * Math.exp(-1.25 * hitProgress) : 0;
+    const hitOffset = -facing * (hitImpact * profile.hitRecoil + hitRecovery * profile.hitRecoil * 0.45) * motion;
+    const hitScaleX = -hitImpact * 0.11 + hitRecovery * 0.035;
+    const hitScaleY = hitImpact * 0.09 - hitRecovery * 0.025;
+    const hitAngle = -facing * (hitImpact * 7 + hitRecovery * 4) * motion;
+
+    this.container.setPosition(this.x + lunge + hitOffset, this.y + bob - profile.idleLift - airborne);
     this.artRoot
       .setScale(
-        facing * (1 + stretch + (attacking ? 0.045 : 0) - this.hitSignal * 0.08),
-        1 - stretch * 0.65 - (attacking ? 0.035 : 0) + this.hitSignal * 0.07,
+        facing * (1 + movementStretch + walkSquash + attackScaleX + hitScaleX),
+        1 - movementStretch * 0.65 - walkSquash * 0.7 + attackScaleY + hitScaleY,
       )
-      .setAngle(Math.sin(this.phase * 0.5) * 1.5 * motion + Phaser.Math.Clamp(this.vx / 90, -5, 5) + this.hitSignal * 5 * facing);
-    this.shadow.setScale(1 - Math.abs(bob) / 18, 1);
+      .setAngle(
+        Math.sin(walkPhase * 0.5) * profile.walkTilt * motion
+        + Phaser.Math.Clamp(this.vx / 90, -5, 5)
+        + attackAngle
+        + hitAngle,
+      );
+
+    const liftRatio = profile.lift > 0 ? airborne / profile.lift : 0;
+    this.shadow
+      .setY(3 - bob + profile.idleLift + airborne)
+      .setScale(1 - Math.abs(bob) / 22 - liftRatio * 0.18 + Math.max(0, attackScaleX) * 0.25, 1 - liftRatio * 0.1)
+      .setAlpha(1 - liftRatio * 0.38);
     this.drawStatus(unit);
   }
+
+  retire(reducedMotion: boolean): void {
+    if (this.retired) return;
+    this.retired = true;
+    this.hpBar.setVisible(false);
+    this.badge.setVisible(false);
+    const facing = this.side === "enemy" ? -1 : 1;
+    const duration = reducedMotion ? 160 : this.kind === "bigChonk" || this.kind === "rootLump" ? 460 : 340;
+    this.scene.tweens.add({
+      targets: this.container,
+      y: this.y + (reducedMotion ? 4 : 11),
+      alpha: 0,
+      duration,
+      ease: "Cubic.In",
+    });
+    this.scene.tweens.add({
+      targets: this.artRoot,
+      scaleX: facing * (reducedMotion ? 0.92 : 1.16),
+      scaleY: reducedMotion ? 0.82 : 0.28,
+      angle: facing * (this.kind === "echoMoth" ? -18 : 10),
+      duration,
+      ease: "Back.In",
+      onComplete: () => this.destroy(),
+    });
+    this.scene.tweens.add({ targets: this.shadow, scaleX: 0.25, alpha: 0, duration });
+  }
+
+  previewAction(action: "attack" | "hit", progress: number): void {
+    const clamped = Phaser.Math.Clamp(progress, 0, 0.999);
+    if (action === "attack") this.attackSignal = this.profile.duration * (1 - clamped);
+    else this.hitSignal = UNIT_HIT_ANIMATION_SECONDS * (1 - clamped);
+  }
+
 
   destroy(): void {
     this.container.destroy(true);
@@ -441,6 +864,7 @@ class GooKeepScene extends Phaser.Scene {
     if (key !== this.battleKey) this.rebuildLeaders();
     if (this.snapshot.phase !== this.lastPhase) {
       if (this.snapshot.phase === "reward") this.playDevourCelebration();
+      if (this.snapshot.phase === "lost") this.player.defeat();
       this.lastPhase = this.snapshot.phase;
     }
     this.drawBackground();
@@ -456,8 +880,17 @@ class GooKeepScene extends Phaser.Scene {
 
   private runDebugActions(time: number): void {
     if (!import.meta.env.DEV) return;
-    const action = new URLSearchParams(window.location.search).get("rigAction");
-    if (action !== "hit" && action !== "summon" && action !== "eat") return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("rigAction");
+    if (action !== "hit" && action !== "summon" && action !== "eat" && action !== "defeat") return;
+    const progressParam = params.get("rigActionProgress");
+    const requestedProgress = progressParam === null ? Number.NaN : Number(progressParam);
+    if (Number.isFinite(requestedProgress)) {
+      const progress = Phaser.Math.Clamp(requestedProgress, 0, 0.995);
+      this.player?.previewAction(action, progress);
+      this.enemy?.previewAction(action, progress);
+      return;
+    }
     const beat = Math.floor(time / 1_100);
     if (beat === this.debugActionBeat) return;
     this.debugActionBeat = beat;
@@ -467,6 +900,9 @@ class GooKeepScene extends Phaser.Scene {
     } else if (action === "summon") {
       this.player?.summon();
       this.enemy?.summon();
+    } else if (action === "defeat") {
+      this.player?.defeat();
+      this.enemy?.defeat();
     } else {
       this.player?.devour();
     }
@@ -556,6 +992,9 @@ class GooKeepScene extends Phaser.Scene {
       if (debugKind && debugKind in CASTLE_UNIT_DEFS) {
         const kind = debugKind as CastleUnitKind;
         const action = params.get("unitAction");
+        const progressParam = params.get("unitActionProgress");
+        const requestedProgress = progressParam === null ? Number.NaN : Number(progressParam);
+        const fixedProgress = Number.isFinite(requestedProgress) ? Phaser.Math.Clamp(requestedProgress, 0, 0.999) : null;
         const id = "sprite-qa-unit";
         for (const [existingId, rig] of this.unitRigs) {
           if (existingId === id) continue;
@@ -564,8 +1003,8 @@ class GooKeepScene extends Phaser.Scene {
         }
         const def = CASTLE_UNIT_DEFS[kind];
         const cycleMs = this.time.now % 1_800;
-        const hitFrame = action === "hit" && cycleMs >= 800 && cycleMs < 1_550;
-        const attackFrame = action === "attack" && cycleMs >= 800 && cycleMs < 1_550;
+        const hitFrame = fixedProgress === null && action === "hit" && cycleMs >= 800 && cycleMs < 1_550;
+        const attackFrame = fixedProgress === null && action === "attack" && cycleMs >= 800 && cycleMs < 1_550;
         const side: CastleSide = FRIENDLY_UNIT_KINDS.has(kind) ? "player" : "enemy";
         const unit: CastleUnitState = {
           id,
@@ -588,6 +1027,7 @@ class GooKeepScene extends Phaser.Scene {
           rig = new UnitRig(this, unit, this.leaderX(side));
           this.unitRigs.set(id, rig);
         }
+        if (fixedProgress !== null && (action === "attack" || action === "hit")) rig.previewAction(action, fixedProgress);
         rig.update(unit, this.laneX(50), deltaSeconds, true, this.reducedMotion);
         return;
       }
@@ -595,7 +1035,7 @@ class GooKeepScene extends Phaser.Scene {
     const activeIds = new Set(this.snapshot.battle.units.map(unit => unit.id));
     for (const [id, rig] of this.unitRigs) {
       if (!activeIds.has(id)) {
-        this.tweens.add({ targets: rig, duration: 1, onComplete: () => rig.destroy() });
+        rig.retire(this.reducedMotion);
         this.unitRigs.delete(id);
       }
     }
@@ -729,7 +1169,7 @@ class GooKeepScene extends Phaser.Scene {
   private playDevourCelebration(): void {
     const startX = this.leaderX("enemy");
     const targetX = this.leaderX("player");
-    this.enemy?.hit();
+    this.enemy?.defeat();
     this.player?.devour();
     for (let index = 0; index < 16; index += 1) {
       const morsel = this.add.circle(startX + Phaser.Math.Between(-30, 30), 175 + Phaser.Math.Between(-35, 35), Phaser.Math.Between(4, 9), index % 3 === 0 ? 0xffdc72 : index % 2 === 0 ? 0x80d6a1 : 0xe78abf, 0.95).setDepth(42);

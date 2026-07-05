@@ -8,6 +8,7 @@ Phaser without exposing independent limbs, face pieces, or antenna parts.
 from __future__ import annotations
 
 import math
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,6 +20,7 @@ SOURCE = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-spr
 PUBLIC_OUT = ROOT / "public" / "assets" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2"
 ART_OUT = ROOT / "art-source" / "goo-keep" / "characters" / "pipplo" / "whole-sprite-v2"
 POSED_SUMMON_GRID = ART_OUT / "posed-summon" / "pipplo-summon-grid.png"
+POSED_DEFEAT_GRID = ART_OUT / "posed-defeat" / "pipplo-defeat-grid.png"
 
 FRAME_SIZE = 256
 GROUND_Y = 246
@@ -143,6 +145,45 @@ def render_pose(source: Image.Image, pose: Pose) -> Image.Image:
     return frame
 
 
+def retain_largest_alpha_component(image: Image.Image) -> Image.Image:
+    """Remove disconnected symbols or neighboring-slot fragments from a sprite cell."""
+    alpha = image.getchannel("A")
+    width, height = image.size
+    opaque = bytearray(1 if value > 8 else 0 for value in alpha.tobytes())
+    visited = bytearray(width * height)
+    largest: list[int] = []
+    for start, value in enumerate(opaque):
+        if not value or visited[start]:
+            continue
+        visited[start] = 1
+        queue = deque([start])
+        component: list[int] = []
+        while queue:
+            index = queue.popleft()
+            component.append(index)
+            x = index % width
+            y = index // width
+            for neighbor_x, neighbor_y in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                if neighbor_x < 0 or neighbor_x >= width or neighbor_y < 0 or neighbor_y >= height:
+                    continue
+                neighbor = neighbor_y * width + neighbor_x
+                if opaque[neighbor] and not visited[neighbor]:
+                    visited[neighbor] = 1
+                    queue.append(neighbor)
+        if len(component) > len(largest):
+            largest = component
+
+    if not largest:
+        return image
+    original_alpha = alpha.tobytes()
+    kept_alpha = bytearray(width * height)
+    for index in largest:
+        kept_alpha[index] = original_alpha[index]
+    cleaned = image.copy()
+    cleaned.putalpha(Image.frombytes("L", image.size, bytes(kept_alpha)))
+    return cleaned
+
+
 def build_posed_summon(source: Image.Image) -> list[Image.Image]:
     """Normalize one shared 4x2 authored sheet into eight locked frames."""
     grid = Image.open(POSED_SUMMON_GRID).convert("RGBA")
@@ -155,7 +196,7 @@ def build_posed_summon(source: Image.Image) -> list[Image.Image]:
         right = round(grid.width * (column + 1) / 4)
         top = round(grid.height * row / 2)
         bottom = round(grid.height * (row + 1) / 2)
-        cell = grid.crop((left, top, right, bottom))
+        cell = retain_largest_alpha_component(grid.crop((left, top, right, bottom)))
         alpha_bounds = cell.getchannel("A").getbbox()
         if not alpha_bounds:
             raise RuntimeError(f"Pipplo posed summon cell {index + 1} has no visible pixels")
@@ -169,6 +210,46 @@ def build_posed_summon(source: Image.Image) -> list[Image.Image]:
     exact_neutral = render_pose(source, Pose())
     for index, (cell, alpha_bounds) in enumerate(zip(keyframes, bounds)):
         if index in (0, 7):
+            frames.append(exact_neutral.copy())
+            continue
+        sprite = cell.crop(alpha_bounds)
+        width = max(1, round(sprite.width * shared_scale))
+        height = max(1, round(sprite.height * shared_scale))
+        sprite = sprite.resize((width, height), Image.Resampling.LANCZOS)
+        frame = Image.new("RGBA", (FRAME_SIZE, FRAME_SIZE), (0, 0, 0, 0))
+        x = round(FRAME_SIZE / 2 - sprite.width / 2)
+        y = round(GROUND_Y - sprite.height)
+        frame.alpha_composite(sprite, (x, y))
+        frames.append(frame)
+    return frames
+
+
+def build_posed_defeat(source: Image.Image) -> list[Image.Image]:
+    """Normalize one shared 4x2 defeat performance without identity drift."""
+    grid = Image.open(POSED_DEFEAT_GRID).convert("RGBA")
+    keyframes: list[Image.Image] = []
+    bounds: list[tuple[int, int, int, int]] = []
+    for index in range(8):
+        column = index % 4
+        row = index // 4
+        left = round(grid.width * column / 4)
+        right = round(grid.width * (column + 1) / 4)
+        top = round(grid.height * row / 2)
+        bottom = round(grid.height * (row + 1) / 2)
+        cell = retain_largest_alpha_component(grid.crop((left, top, right, bottom)))
+        alpha_bounds = cell.getchannel("A").getbbox()
+        if not alpha_bounds:
+            raise RuntimeError(f"Pipplo posed defeat cell {index + 1} has no visible pixels")
+        keyframes.append(cell)
+        bounds.append(alpha_bounds)
+
+    anchor_width = bounds[0][2] - bounds[0][0]
+    anchor_height = bounds[0][3] - bounds[0][1]
+    shared_scale = min(NEUTRAL_HEIGHT / anchor_height, (FRAME_SIZE - 22) / anchor_width)
+    frames: list[Image.Image] = []
+    exact_neutral = render_pose(source, Pose())
+    for index, (cell, alpha_bounds) in enumerate(zip(keyframes, bounds)):
+        if index == 0:
             frames.append(exact_neutral.copy())
             continue
         sprite = cell.crop(alpha_bounds)
@@ -233,6 +314,16 @@ def main() -> None:
         frame.save(summon_out / f"{index:02d}.png", optimize=True)
     save_preview("summon", summon_frames, 110)
     print(f"Built Pipplo summon: {len(summon_frames)} authored poses")
+
+    defeat_out = PUBLIC_OUT / "defeat"
+    defeat_out.mkdir(parents=True, exist_ok=True)
+    for stale_frame in defeat_out.glob("*.png"):
+        stale_frame.unlink()
+    defeat_frames = build_posed_defeat(source)
+    for index, frame in enumerate(defeat_frames, start=1):
+        frame.save(defeat_out / f"{index:02d}.png", optimize=True)
+    save_preview("defeat", defeat_frames, 115)
+    print(f"Built Pipplo defeat: {len(defeat_frames)} authored poses")
 
 
 if __name__ == "__main__":

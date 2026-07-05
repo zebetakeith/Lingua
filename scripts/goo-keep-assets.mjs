@@ -18,6 +18,8 @@ assert.ok(!battlefieldSource.includes("leaderTextureKey"), "moving leader bodies
 assert.ok(!battlefieldSource.includes("maxDisplacement"), "independent sprite pieces should not re-enter the runtime");
 assert.ok(battlefieldSource.includes('get("rigAction")'), "leader action poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes('get("unitAction")'), "unit action poses need a deterministic visual-QA route");
+assert.ok(battlefieldSource.includes('get("rigActionProgress")'), "leader action timing needs exact-progress visual QA");
+assert.ok(battlefieldSource.includes('get("unitActionProgress")'), "unit action timing needs exact-progress visual QA");
 assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sprite poses need a deterministic visual-QA route");
 assert.ok(battlefieldSource.includes("PIPPLO_ANIMATIONS"), "Pipplo should load the complete whole-sprite animation library");
 assert.ok(battlefieldSource.includes("buildWholeSpritePipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
@@ -31,6 +33,12 @@ assert.ok(battlefieldSource.includes("UNIT_WHOLE_SPRITE_CONFIGS"), "every active
 assert.ok(battlefieldSource.includes("this.artSprite = scene.add.image"), "minions should render as one complete image instead of moving crop pieces");
 assert.ok(battlefieldSource.includes("UNIT_ASSET_ROOTS"), "every minion should load its complete authored walk and attack poses");
 assert.ok(battlefieldSource.includes("unitTextureKey(this.kind, animation, frame)"), "minions should animate by swapping intact authored frames");
+assert.ok(battlefieldSource.includes("UNIT_MOTION_PROFILES"), "every minion should have a distinct anticipation and impact profile");
+assert.ok(battlefieldSource.includes("preImpactStretch"), "attack motion should accelerate into a stronger pre-impact stretch");
+assert.ok(battlefieldSource.includes("pipploMotion"), "Pipplo actions should use distinct semantic motion curves");
+assert.ok(battlefieldSource.includes("GENERAL_MOTION_PROFILES"), "enemy generals should not share one generic motion rhythm");
+assert.ok(battlefieldSource.includes("retire(reducedMotion"), "defeated minions should animate out instead of disappearing immediately");
+assert.ok(battlefieldSource.includes("LEADER_DEFEAT_SECONDS"), "leaders should have a persistent defeat arc instead of only vanishing");
 
 function expectFrames(relativeRoot, animations, size) {
   for (const animation of animations) {
@@ -60,7 +68,7 @@ for (const [part, dimensions] of Object.entries({
 })) {
   expected.set(path.join("characters", "pipplo", "rig-v2-flat", "layers", part), dimensions);
 }
-for (const [animation, frameCount] of Object.entries({ idle: 16, summon: 8, hit: 12, devour: 16 })) {
+for (const [animation, frameCount] of Object.entries({ idle: 16, summon: 8, hit: 12, devour: 16, defeat: 8 })) {
   for (let frame = 1; frame <= frameCount; frame += 1) {
     expected.set(path.join("characters", "pipplo", "whole-sprite-v2", animation, `${frame.toString().padStart(2, "0")}.png`), 256);
   }
