@@ -43,6 +43,8 @@ assert.ok(battlefieldSource.includes("getUnitFxDelay"), "unit hit and support ef
 assert.ok(battlefieldSource.includes("playUnitProjectile"), "ranged creature families should fire distinct projectile silhouettes");
 assert.ok(battlefieldSource.includes("playUnitSupportFx"), "healing and shielding should travel visibly from caster to target");
 assert.ok(battlefieldSource.includes("pipploMotion"), "Pipplo actions should use distinct semantic motion curves");
+assert.ok(battlefieldSource.includes("PIPPLO_POWER_PROFILES"), "Pipplo powers need semantic source motion profiles");
+assert.ok(battlefieldSource.includes("previewPower"), "Pipplo power timing needs deterministic visual-QA");
 assert.ok(battlefieldSource.includes("GENERAL_MOTION_PROFILES"), "enemy generals should not share one generic motion rhythm");
 assert.ok(battlefieldSource.includes("specialReleaseAt"), "each enemy general needs a timed signature-power release beat");
 assert.ok(battlefieldSource.includes("isGeneralSignatureFx"), "guardian world effects should wait for the general's telegraphed power action");

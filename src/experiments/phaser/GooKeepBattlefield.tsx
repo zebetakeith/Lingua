@@ -149,6 +149,27 @@ interface WholeSpriteMotion {
   angle: number;
 }
 
+interface PipploPowerProfile {
+  duration: number;
+  releaseAt: number;
+  axis: MotionAxis;
+  travel: number;
+  lift: number;
+  preStretch: number;
+  pulse: number;
+  angle: number;
+}
+
+const PIPPLO_POWER_PROFILES: Record<CastlePowerId, PipploPowerProfile> = {
+  slingshot: { duration: 0.82, releaseAt: 0.58, axis: "horizontal", travel: 8, lift: 4, preStretch: 0.12, pulse: 0.08, angle: 6 },
+  bubbleGate: { duration: 0.9, releaseAt: 0.64, axis: "radial", travel: 2, lift: 8, preStretch: 0.1, pulse: 0.12, angle: 3 },
+  snackCannon: { duration: 0.86, releaseAt: 0.55, axis: "horizontal", travel: 6, lift: 11, preStretch: 0.1, pulse: 0.1, angle: 5 },
+  gooMoat: { duration: 0.88, releaseAt: 0.66, axis: "vertical", travel: 2, lift: 4, preStretch: 0.14, pulse: 0.12, angle: 4 },
+  timewobble: { duration: 1.02, releaseAt: 0.7, axis: "radial", travel: 1, lift: 9, preStretch: 0.08, pulse: 0.1, angle: 14 },
+  tongueSnatch: { duration: 0.76, releaseAt: 0.5, axis: "horizontal", travel: 10, lift: 2, preStretch: 0.18, pulse: 0.08, angle: 8 },
+  sporeMortar: { duration: 0.94, releaseAt: 0.68, axis: "radial", travel: 3, lift: 10, preStretch: 0.12, pulse: 0.14, angle: 4 },
+};
+
 function pipploMotion(animation: PipploAnimation, progress: number, clock: number, motionScale: number): WholeSpriteMotion {
   if (animation === "idle") {
     const breath = Math.sin(clock * Math.PI * 2);
@@ -208,6 +229,27 @@ function pipploMotion(animation: PipploAnimation, progress: number, clock: numbe
     scaleX: (-anticipation * 0.055 + gulpWindup * 0.075 + gulp * 0.14 + satisfied * 0.028) * motionScale,
     scaleY: (anticipation * 0.045 - gulpWindup * 0.055 - gulp * 0.12 - satisfied * 0.022) * motionScale,
     angle: (anticipation * 1.4 - forward * 2.1 + satisfied * 1.7) * motionScale,
+  };
+}
+
+function pipploPowerMotion(powerId: CastlePowerId, progress: number, motionScale: number): WholeSpriteMotion {
+  const profile = PIPPLO_POWER_PROFILES[powerId];
+  const charge = progress < profile.releaseAt
+    ? smoothStep(rangeProgress(progress, 0, profile.releaseAt))
+    : 1 - easeOutCubic(rangeProgress(progress, profile.releaseAt, 0.86));
+  const preRelease = progress < profile.releaseAt
+    ? easeInCubic(rangeProgress(progress, Math.max(0, profile.releaseAt - 0.18), profile.releaseAt))
+    : 0;
+  const release = sharpPulse(progress, profile.releaseAt, 0.075);
+  const settle = dampedSettle(progress, profile.releaseAt, 2.35);
+  const postRelease = Math.sin(rangeProgress(progress, profile.releaseAt, 1) * Math.PI);
+  const direction = profile.axis === "horizontal" ? 1 : 0.35;
+  return {
+    offsetX: (preRelease * profile.travel * direction - postRelease * profile.travel * 0.35) * motionScale,
+    lift: (charge * profile.lift + (profile.axis === "vertical" ? Math.sin(rangeProgress(progress, 0.2, profile.releaseAt) * Math.PI) * profile.lift : 0) - postRelease * profile.lift * 0.25) * motionScale,
+    scaleX: ((profile.axis === "radial" ? charge * profile.preStretch * 0.75 : -charge * profile.preStretch * 0.45) + preRelease * profile.preStretch + release * profile.pulse + settle * 0.02) * motionScale,
+    scaleY: ((profile.axis === "radial" ? charge * profile.preStretch * 0.75 : charge * profile.preStretch * 0.35) - preRelease * profile.preStretch * 0.5 - release * profile.pulse * 0.9 - settle * 0.016) * motionScale,
+    angle: (-charge * profile.angle * 0.45 + preRelease * profile.angle * 0.35 + settle * profile.angle * 0.4) * motionScale,
   };
 }
 
@@ -469,6 +511,8 @@ class WholeSpriteLeader {
   private pipploAnimation: PipploAnimation = "idle";
   private pipploClock = 0;
   private pipploFrame = -1;
+  private pipploPowerId: CastlePowerId | null = null;
+  private pipploPowerClock = 0;
   private generalAction: GeneralAction = "idle";
   private generalActionClock = 0;
   private defeated = false;
@@ -530,6 +574,14 @@ class WholeSpriteLeader {
     this.playPipploAction("devour");
   }
 
+  power(powerId: CastlePowerId, reducedMotion = false): number {
+    if (!this.pipploSprite) return 0;
+    this.pipploPowerId = powerId;
+    this.pipploPowerClock = 0;
+    const profile = PIPPLO_POWER_PROFILES[powerId];
+    return profile.duration * profile.releaseAt * 1_000 * (reducedMotion ? 0.38 : 1);
+  }
+
   defeat(): void {
     this.defeated = true;
     this.defeatClock = 0;
@@ -575,6 +627,12 @@ class WholeSpriteLeader {
     const duration = action === "summon" ? profile.summonDuration
       : action === "special" ? profile.specialDuration : profile.hitDuration;
     this.generalActionClock = duration * clamped;
+  }
+
+  previewPower(powerId: CastlePowerId, progress: number): void {
+    if (!this.pipploSprite) return;
+    this.pipploPowerId = powerId;
+    this.pipploPowerClock = PIPPLO_POWER_PROFILES[powerId].duration * Phaser.Math.Clamp(progress, 0, 0.995);
   }
 
   setVisible(visible: boolean): void {
@@ -650,7 +708,24 @@ class WholeSpriteLeader {
 
       // Each action gets its own anticipation, impact, and recovery curve.
       // The complete authored sprite still moves as one object between frames.
-      const motion = pipploMotion(this.pipploAnimation, actionProgress, this.pipploClock, motionScale);
+      let motion = pipploMotion(this.pipploAnimation, actionProgress, this.pipploClock, motionScale);
+      if (this.pipploPowerId) {
+        const powerProfile = PIPPLO_POWER_PROFILES[this.pipploPowerId];
+        this.pipploPowerClock += deltaSeconds;
+        const powerProgress = Phaser.Math.Clamp(this.pipploPowerClock / powerProfile.duration, 0, 1);
+        const powerMotion = pipploPowerMotion(this.pipploPowerId, powerProgress, motionScale);
+        motion = {
+          offsetX: motion.offsetX + powerMotion.offsetX,
+          lift: motion.lift + powerMotion.lift,
+          scaleX: motion.scaleX + powerMotion.scaleX,
+          scaleY: motion.scaleY + powerMotion.scaleY,
+          angle: motion.angle + powerMotion.angle,
+        };
+        if (powerProgress >= 1) {
+          this.pipploPowerId = null;
+          this.pipploPowerClock = 0;
+        }
+      }
       this.root
         .setPosition(this.homeX + motion.offsetX * facing, GROUND_Y + healthDroop - motion.lift)
         .setScale(
@@ -1125,13 +1200,21 @@ class GooKeepScene extends Phaser.Scene {
     if (!import.meta.env.DEV) return;
     const params = new URLSearchParams(window.location.search);
     const action = params.get("rigAction");
-    if (action !== "hit" && action !== "summon" && action !== "eat" && action !== "defeat" && action !== "special") return;
+    if (action !== "hit" && action !== "summon" && action !== "eat" && action !== "defeat" && action !== "special" && action !== "power") return;
+    const requestedPowerId = params.get("powerId");
+    const powerId: CastlePowerId = requestedPowerId && requestedPowerId in PIPPLO_POWER_PROFILES
+      ? requestedPowerId as CastlePowerId
+      : "slingshot";
     const progressParam = params.get("rigActionProgress");
     const requestedProgress = progressParam === null ? Number.NaN : Number(progressParam);
     if (Number.isFinite(requestedProgress)) {
       const progress = Phaser.Math.Clamp(requestedProgress, 0, 0.995);
-      this.player?.previewAction(action, progress);
-      this.enemy?.previewAction(action, progress);
+      if (action === "power") {
+        this.player?.previewPower(powerId, progress);
+      } else {
+        this.player?.previewAction(action, progress);
+        this.enemy?.previewAction(action, progress);
+      }
       return;
     }
     const beat = Math.floor(time / 1_100);
@@ -1148,6 +1231,8 @@ class GooKeepScene extends Phaser.Scene {
       this.enemy?.defeat();
     } else if (action === "special") {
       this.enemy?.special();
+    } else if (action === "power") {
+      this.player?.power(powerId, this.reducedMotion);
     } else {
       this.player?.devour();
     }
@@ -1303,6 +1388,10 @@ class GooKeepScene extends Phaser.Scene {
       if (this.isGeneralSignatureFx(event)) {
         const releaseDelay = this.enemy?.special() || 0;
         visualDelay = Math.max(visualDelay, Math.round(releaseDelay * (this.reducedMotion ? 0.38 : 1)));
+      }
+      if (event.powerId && event.side === "player") {
+        const releaseDelay = this.player?.power(event.powerId, this.reducedMotion) || 0;
+        visualDelay = Math.max(visualDelay, Math.round(releaseDelay));
       }
       if (visualDelay > 0) this.time.delayedCall(visualDelay, () => this.playFx(event));
       else this.playFx(event);
