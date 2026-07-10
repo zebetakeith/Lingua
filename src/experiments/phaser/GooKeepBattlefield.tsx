@@ -221,8 +221,8 @@ const PIPPLO_ANIMATIONS: Record<PipploAnimation, { frames: number; fps: number; 
   defeat: { frames: 8, fps: 8.7, loop: false },
 };
 
-function pipploTextureKey(animation: PipploAnimation, frame: number): string {
-  return `pipplo-whole-sprite-${animation}-${frame.toString().padStart(2, "0")}`;
+function pipploTextureKey(animation: PipploAnimation): string {
+  return `pipplo-whole-sprite-sheet-${animation}`;
 }
 
 const FRIENDLY_UNIT_KINDS = new Set<CastleUnitKind>(["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]);
@@ -438,8 +438,8 @@ function parseHex(color: string, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-function unitTextureKey(kind: CastleUnitKind, animation: UnitAnimation, frame: number): string {
-  return `goo-unit-${kind}-${animation}-${frame}`;
+function unitTextureKey(kind: CastleUnitKind, animation: UnitAnimation): string {
+  return `goo-unit-sheet-${kind}-${animation}`;
 }
 
 function getLeaderForm(side: CastleSide, region: number, guardianPowerId: CastleGuardianPowerId | null): LeaderForm {
@@ -489,7 +489,7 @@ class WholeSpriteLeader {
   }
 
   private buildWholeSpritePipplo(scene: Phaser.Scene): void {
-    this.pipploSprite = scene.add.image(0, 0, pipploTextureKey("idle", 1)).setOrigin(0.5, 246 / 256).setScale(0.75).setFlipX(true);
+    this.pipploSprite = scene.add.image(0, 0, pipploTextureKey("idle"), 0).setOrigin(0.5, 246 / 256).setScale(0.75).setFlipX(true);
     this.root.add(this.pipploSprite);
   }
 
@@ -602,7 +602,7 @@ class WholeSpriteLeader {
           : Math.min(PIPPLO_ANIMATIONS.defeat.frames, Math.floor(progress * PIPPLO_ANIMATIONS.defeat.frames) + 1);
         if (defeatFrame !== this.pipploFrame) {
           this.pipploFrame = defeatFrame;
-          this.pipploSprite.setTexture(pipploTextureKey("defeat", defeatFrame));
+          this.pipploSprite.setTexture(pipploTextureKey("defeat"), defeatFrame - 1);
         }
       }
       const proceduralStrength = authoredPipploDefeat ? 0 : reducedScale;
@@ -645,7 +645,7 @@ class WholeSpriteLeader {
           : Math.min(activeConfig.frames, Math.floor(this.pipploClock * playbackFps) + 1);
       if (nextFrame !== this.pipploFrame) {
         this.pipploFrame = nextFrame;
-        this.pipploSprite.setTexture(pipploTextureKey(this.pipploAnimation, nextFrame));
+        this.pipploSprite.setTexture(pipploTextureKey(this.pipploAnimation), nextFrame - 1);
       }
 
       // Each action gets its own anticipation, impact, and recovery curve.
@@ -734,10 +734,10 @@ class UnitRig {
     this.y = GROUND_Y + 1;
     this.lastHp = unit.hp;
     const config = UNIT_WHOLE_SPRITE_CONFIGS[unit.kind];
-    const texture = unitTextureKey(unit.kind, "walk", 1);
+    const texture = unitTextureKey(unit.kind, "walk");
     this.shadow = scene.add.ellipse(0, 3, unit.kind === "rootLump" || unit.kind === "bigChonk" ? 58 : 45, 11, 0x163f46, 0.19);
     this.artRoot = scene.add.container(0, 0);
-    this.artSprite = scene.add.image(0, 0, texture).setOrigin(0.5, config.originY).setScale(config.scale);
+    this.artSprite = scene.add.image(0, 0, texture, 0).setOrigin(0.5, config.originY).setScale(config.scale);
     this.artRoot.add(this.artSprite).setScale(unit.side === "enemy" ? -1 : 1, 1);
     this.hpBar = scene.add.graphics();
     this.barY = unit.kind === "rootLump" || unit.kind === "bigChonk" ? -76 : -61;
@@ -775,10 +775,10 @@ class UnitRig {
       : attacking
         ? animationFrameForBeats(attackProgress, profile.frameBeats)
         : Math.floor(this.phase * profile.walkRate) % UNIT_ANIMATION_FRAMES + 1;
-    const nextTexture = unitTextureKey(this.kind, animation, frame);
+    const nextTexture = `${animation}:${frame}`;
     if (nextTexture !== this.textureState) {
       this.textureState = nextTexture;
-      this.artSprite.setTexture(nextTexture);
+      this.artSprite.setTexture(unitTextureKey(this.kind, animation), frame - 1);
     }
 
     const walkPhase = this.phase * profile.walkRate;
@@ -1018,21 +1018,24 @@ class GooKeepScene extends Phaser.Scene {
   }
 
   preload(): void {
-    for (const [kind, path] of Object.entries(UNIT_ASSET_ROOTS) as Array<[CastleUnitKind, string]>) {
+    for (const kind of Object.keys(UNIT_ASSET_ROOTS) as CastleUnitKind[]) {
       for (const animation of ["walk", "attack"] satisfies UnitAnimation[]) {
-        for (let frame = 1; frame <= UNIT_ANIMATION_FRAMES; frame += 1) {
-          this.load.image(unitTextureKey(kind, animation, frame), `${import.meta.env.BASE_URL}assets/goo-keep/${path}/${animation}/0${frame}.png`);
-        }
+        this.load.spritesheet(
+          unitTextureKey(kind, animation),
+          `${import.meta.env.BASE_URL}assets/goo-keep/runtime-sheets/units/${kind}-${animation}.png`,
+          { frameWidth: 160, frameHeight: 160 },
+        );
       }
     }
     for (const [form, path] of Object.entries(GENERAL_TEXTURES) as Array<[Exclude<LeaderForm, "pipplo">, string]>) {
       this.load.image(generalTextureKey(form), `${import.meta.env.BASE_URL}assets/goo-keep/${path}`);
     }
     for (const [animation, config] of Object.entries(PIPPLO_ANIMATIONS) as Array<[PipploAnimation, typeof PIPPLO_ANIMATIONS[PipploAnimation]]>) {
-      for (let frame = 1; frame <= config.frames; frame += 1) {
-        const filename = `${frame.toString().padStart(2, "0")}.png`;
-        this.load.image(pipploTextureKey(animation, frame), `${import.meta.env.BASE_URL}assets/goo-keep/characters/pipplo/whole-sprite-v2/${animation}/${filename}`);
-      }
+      this.load.spritesheet(
+        pipploTextureKey(animation),
+        `${import.meta.env.BASE_URL}assets/goo-keep/runtime-sheets/pipplo/${animation}.png`,
+        { frameWidth: 256, frameHeight: 256, endFrame: config.frames - 1 },
+      );
     }
   }
 

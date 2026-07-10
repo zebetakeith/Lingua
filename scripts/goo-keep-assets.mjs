@@ -25,7 +25,7 @@ assert.ok(battlefieldSource.includes('get("reducedMotion")'), "reduced-motion sp
 assert.ok(battlefieldSource.includes("PIPPLO_ANIMATIONS"), "Pipplo should load the complete whole-sprite animation library");
 assert.ok(battlefieldSource.includes("buildWholeSpritePipplo"), "Pipplo should animate complete authored frames rather than live limb pieces");
 assert.ok(!battlefieldSource.includes("buildRasterPipplo"), "Pipplo must not return to the independent runtime limb puppet");
-assert.ok(battlefieldSource.includes("whole-sprite-v2"), "Pipplo's shipping actions should use the selected leaf-collar whole-sprite frame set");
+assert.ok(battlefieldSource.includes("runtime-sheets/pipplo"), "Pipplo's shipping actions should use packed sheets built from the selected leaf-collar whole-sprite frame set");
 assert.ok(battlefieldSource.includes("setFlipX(true)"), "Pipplo should face inward toward the enemy lane");
 assert.ok(battlefieldSource.includes("reducedMotion && !activeConfig.loop"), "Pipplo actions should avoid large baked displacement in reduced-motion mode");
 assert.ok(battlefieldSource.includes("GENERAL_TEXTURES"), "every enemy general should load a normalized cohesive master sprite");
@@ -33,7 +33,8 @@ assert.ok(battlefieldSource.includes("buildWholeSpriteGeneral"), "enemy generals
 assert.ok(battlefieldSource.includes("UNIT_WHOLE_SPRITE_CONFIGS"), "every active minion should have a whole-sprite scale and anchor");
 assert.ok(battlefieldSource.includes("this.artSprite = scene.add.image"), "minions should render as one complete image instead of moving crop pieces");
 assert.ok(battlefieldSource.includes("UNIT_ASSET_ROOTS"), "every minion should load its complete authored walk and attack poses");
-assert.ok(battlefieldSource.includes("unitTextureKey(this.kind, animation, frame)"), "minions should animate by swapping intact authored frames");
+assert.ok(battlefieldSource.includes("setTexture(unitTextureKey(this.kind, animation), frame - 1)"), "minions should animate by selecting intact authored frames from a runtime sheet");
+assert.ok(battlefieldSource.includes("this.load.spritesheet"), "authored frames should be packed into low-request runtime sheets");
 assert.ok(battlefieldSource.includes("UNIT_MOTION_PROFILES"), "every minion should have a distinct anticipation and impact profile");
 assert.ok(battlefieldSource.includes("spawnDuration"), "every minion should enter through a timed summon performance instead of a generic pop-in tween");
 assert.ok(battlefieldSource.includes("UNIT_DEFEAT_PROFILES"), "every minion family should retire with an identity-preserving defeat instead of a shared pancake tween");
@@ -82,6 +83,15 @@ for (const [animation, frameCount] of Object.entries({ idle: 16, summon: 8, hit:
     expected.set(path.join("characters", "pipplo", "whole-sprite-v2", animation, `${frame.toString().padStart(2, "0")}.png`), 256);
   }
 }
+for (const [animation, dimensions] of Object.entries({
+  idle: [1024, 1024],
+  summon: [1024, 512],
+  hit: [1024, 768],
+  devour: [1024, 1024],
+  defeat: [1024, 512],
+})) {
+  expected.set(path.join("runtime-sheets", "pipplo", `${animation}.png`), dimensions);
+}
 expected.set(path.join("characters", "generals", "clackback", "clackback-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "puffmaestro", "puffmaestro-master-v1.png"), 1254);
 expected.set(path.join("characters", "generals", "thumblestump", "thumblestump-master-v1.png"), 1254);
@@ -95,11 +105,13 @@ expectFrames(path.join("characters", "mallow"), ["idle", "cast", "hurt", "cheer"
 for (const kind of ["piplet", "dartlet", "bubbleBud", "mendlet", "spitlet", "bigChonk"]) {
   expected.set(path.join("units", "friendly", kind, "seed-v1.png"), 160);
   expectFrames(path.join("units", "friendly", kind), ["attack", "walk"], 160);
+  for (const animation of ["attack", "walk"]) expected.set(path.join("runtime-sheets", "units", `${kind}-${animation}.png`), [640, 160]);
 }
 expected.set(path.join("units", "friendly", "bigChonk", "seed-v2.png"), 160);
 for (const kind of ["shellSlime", "nibbleImp", "sporeBud", "boomcap", "echoMoth", "rootLump"]) {
   expected.set(path.join("units", "enemy", kind, "seed-v1.png"), 160);
   expectFrames(path.join("units", "enemy", kind), ["attack", "walk"], 160);
+  for (const animation of ["attack", "walk"]) expected.set(path.join("runtime-sheets", "units", `${kind}-${animation}.png`), [640, 160]);
 }
 expected.set(path.join("units", "enemy", "sporeBud", "seed-v2.png"), 160);
 expected.set(path.join("units", "enemy", "echoMoth", "seed-v2.png"), 160);
