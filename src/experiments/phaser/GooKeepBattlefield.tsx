@@ -513,6 +513,7 @@ class WholeSpriteLeader {
   private pipploFrame = -1;
   private pipploPowerId: CastlePowerId | null = null;
   private pipploPowerClock = 0;
+  private pipploPowerDurationScale = 1;
   private generalAction: GeneralAction = "idle";
   private generalActionClock = 0;
   private defeated = false;
@@ -578,8 +579,9 @@ class WholeSpriteLeader {
     if (!this.pipploSprite) return 0;
     this.pipploPowerId = powerId;
     this.pipploPowerClock = 0;
+    this.pipploPowerDurationScale = reducedMotion ? 0.38 : 1;
     const profile = PIPPLO_POWER_PROFILES[powerId];
-    return profile.duration * profile.releaseAt * 1_000 * (reducedMotion ? 0.38 : 1);
+    return profile.duration * profile.releaseAt * 1_000 * this.pipploPowerDurationScale;
   }
 
   defeat(): void {
@@ -632,6 +634,7 @@ class WholeSpriteLeader {
   previewPower(powerId: CastlePowerId, progress: number): void {
     if (!this.pipploSprite) return;
     this.pipploPowerId = powerId;
+    this.pipploPowerDurationScale = 1;
     this.pipploPowerClock = PIPPLO_POWER_PROFILES[powerId].duration * Phaser.Math.Clamp(progress, 0, 0.995);
   }
 
@@ -712,7 +715,7 @@ class WholeSpriteLeader {
       if (this.pipploPowerId) {
         const powerProfile = PIPPLO_POWER_PROFILES[this.pipploPowerId];
         this.pipploPowerClock += deltaSeconds;
-        const powerProgress = Phaser.Math.Clamp(this.pipploPowerClock / powerProfile.duration, 0, 1);
+        const powerProgress = Phaser.Math.Clamp(this.pipploPowerClock / (powerProfile.duration * this.pipploPowerDurationScale), 0, 1);
         const powerMotion = pipploPowerMotion(this.pipploPowerId, powerProgress, motionScale);
         motion = {
           offsetX: motion.offsetX + powerMotion.offsetX,
@@ -724,6 +727,7 @@ class WholeSpriteLeader {
         if (powerProgress >= 1) {
           this.pipploPowerId = null;
           this.pipploPowerClock = 0;
+          this.pipploPowerDurationScale = 1;
         }
       }
       this.root
